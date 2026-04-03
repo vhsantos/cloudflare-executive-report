@@ -21,6 +21,10 @@ from cloudflare_executive_report.config import (
     save_config,
     template_config,
 )
+from cloudflare_executive_report.fetchers.registry import (
+    default_types_csv,
+    registered_stream_ids,
+)
 from cloudflare_executive_report.logging_config import setup_logging
 from cloudflare_executive_report.sync import SyncMode, SyncOptions, run_clean, run_sync
 from cloudflare_executive_report.zones_api import (
@@ -28,6 +32,35 @@ from cloudflare_executive_report.zones_api import (
     get_zone,
     list_all_zones,
 )
+
+
+def _valid_sync_types() -> frozenset[str]:
+    return frozenset(registered_stream_ids())
+
+
+def _parse_sync_types(raw: str) -> frozenset[str]:
+    valid = _valid_sync_types()
+    allowed = ", ".join(registered_stream_ids())
+    found: set[str] = set()
+    for part in raw.split(","):
+        p = part.strip().lower()
+        if not p:
+            continue
+        if p in valid:
+            found.add(p)
+        else:
+            typer.echo(
+                f"Ignoring unknown type {p!r} (allowed: {allowed})",
+                err=True,
+            )
+    if not found:
+        typer.echo(
+            f"Error: at least one valid type is required ({allowed}).",
+            err=True,
+        )
+        raise typer.Exit(exits.INVALID_PARAMS)
+    return frozenset(found)
+
 
 app = typer.Typer(
     help="Cloudflare Executive Report - multi-zone reporting and cache. All dates are UTC.",
@@ -207,7 +240,19 @@ def cmd_sync(
         None, "--zone", help="Single zone id or name (must be in config)."
     ),
     types: str = typer.Option(
-        "dns", "--types", help="Data types (dns only; other values ignored)."
+        default_types_csv(),
+        "--types",
+        help=f"Comma-separated stream ids (default: {default_types_csv()}).",
+    ),
+    top: int = typer.Option(
+        10,
+        "--top",
+        help="How many items in each ranked list (e.g. top query names, countries).",
+    ),
+    no_config: bool = typer.Option(
+        False,
+        "--no-config",
+        help="Skip zone health REST calls (analytics only).",
     ),
     config: Path | None = typer.Option(None, "--config", help="Override config path."),
 ) -> None:
@@ -216,10 +261,10 @@ def cmd_sync(
     quiet = ctx.obj.get("quiet", False)
     setup_logging(verbose=verbose, quiet=quiet, log_level="info")
 
-    for t in types.split(","):
-        t = t.strip().lower()
-        if t and t != "dns":
-            typer.echo(f"Ignoring type '{t}' (only dns is supported)", err=True)
+    type_set = _parse_sync_types(types)
+    if top < 1:
+        typer.echo("Error: --top must be at least 1.", err=True)
+        raise typer.Exit(exits.INVALID_PARAMS)
 
     if (start is None) != (end is None):
         typer.echo("Error: --start and --end must be used together.", err=True)
@@ -251,6 +296,9 @@ def cmd_sync(
             refresh=refresh,
             include_today=include_today,
             quiet=quiet,
+            types=type_set,
+            top=top,
+            no_config=no_config,
         )
     elif start and end:
         mode = SyncMode.range
@@ -261,6 +309,9 @@ def cmd_sync(
             refresh=refresh,
             include_today=include_today,
             quiet=quiet,
+            types=type_set,
+            top=top,
+            no_config=no_config,
         )
     else:
         opts = SyncOptions(
@@ -268,6 +319,9 @@ def cmd_sync(
             refresh=refresh,
             include_today=include_today,
             quiet=quiet,
+            types=type_set,
+            top=top,
+            no_config=no_config,
         )
 
     try:

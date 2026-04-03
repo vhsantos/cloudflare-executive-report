@@ -96,6 +96,11 @@ class CloudflareClient:
     def __exit__(self, *args: object) -> None:
         self.close()
 
+    @property
+    def sdk(self) -> Cloudflare:
+        """Official SDK client (REST). GraphQL remains on `graphql` / `graphql_query`."""
+        return self._sdk
+
     def _log_graphql_response(self, resp: httpx.Response, label: str, elapsed: float) -> None:
         if not self._verbose:
             return

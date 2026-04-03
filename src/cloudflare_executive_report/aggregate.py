@@ -1,9 +1,12 @@
-"""Build report JSON from cached daily DNS payloads."""
+"""Build report JSON from cached daily payloads."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
+
+import pycountry
 
 from cloudflare_executive_report import __version__
 from cloudflare_executive_report.dates import (
@@ -45,6 +48,54 @@ def _top_pct(
         pct = round(100.0 * c / total, 1)
         out.append({name_key: k, "count": c, "percentage": pct})
     return out
+
+
+def format_bytes_human(n: int) -> str:
+    if n < 0:
+        n = 0
+    units = ("B", "KB", "MB", "GB", "TB")
+    v = float(n)
+    u = 0
+    while v >= 1024 and u < len(units) - 1:
+        v /= 1024.0
+        u += 1
+    if u == 0:
+        return f"{int(v)} B"
+    return f"{v:.1f} {units[u]}"
+
+
+def format_count_human(n: int) -> str:
+    if n < 0:
+        n = 0
+    if n < 1000:
+        return str(n)
+    if n < 1_000_000:
+        v = n / 1000.0
+        s = f"{v:.1f}".rstrip("0").rstrip(".")
+        return f"{s}K"
+    if n < 1_000_000_000:
+        v = n / 1_000_000.0
+        s = f"{v:.1f}".rstrip("0").rstrip(".")
+        return f"{s}M"
+    v = n / 1_000_000_000.0
+    s = f"{v:.1f}".rstrip("0").rstrip(".")
+    return f"{s}B"
+
+
+def _country_label_code(client_country_name: str) -> tuple[str, str]:
+    raw = str(client_country_name).strip()
+    if len(raw) == 2 and raw.isalpha():
+        code = raw.upper()
+        c = pycountry.countries.get(alpha_2=code)
+        return (c.name if c else code), code
+    try:
+        fuzzy = pycountry.countries.search_fuzzy(raw)
+        if fuzzy:
+            c = fuzzy[0]
+            return c.name, c.alpha_2
+    except LookupError:
+        pass
+    return raw, raw[:2].upper() if len(raw) == 2 else "ZZ"
 
 
 def build_dns_section(
@@ -104,6 +155,75 @@ def build_dns_section(
     return dns
 
 
+def build_http_section(
+    daily_api_data: list[dict[str, Any]],
+    *,
+    top: int = 10,
+) -> dict[str, Any]:
+    total_req = sum(int(d.get("requests") or 0) for d in daily_api_data)
+    total_bytes = sum(int(d.get("bytes") or 0) for d in daily_api_data)
+    cached_req = sum(int(d.get("cached_requests") or 0) for d in daily_api_data)
+    cached_bytes = sum(int(d.get("cached_bytes") or 0) for d in daily_api_data)
+    enc_req = sum(int(d.get("encrypted_requests") or 0) for d in daily_api_data)
+    page_views = sum(int(d.get("page_views") or 0) for d in daily_api_data)
+    uniques = sum(int(d.get("uniques") or 0) for d in daily_api_data)
+
+    country_req: dict[str, int] = {}
+    for d in daily_api_data:
+        for row in d.get("country_map") or []:
+            if not isinstance(row, dict):
+                continue
+            name = row.get("clientCountryName")
+            if name is None:
+                continue
+            k = str(name)
+            country_req[k] = country_req.get(k, 0) + int(row.get("requests") or 0)
+
+    cache_hit_ratio = 0.0
+    if total_req > 0:
+        cache_hit_ratio = round(100.0 * cached_req / total_req, 1)
+
+    top_countries: list[dict[str, Any]] = []
+    if total_req > 0 and country_req:
+        items = sorted(country_req.items(), key=lambda x: -x[1])[:top]
+        for k, c in items:
+            cname, code = _country_label_code(k)
+            pct = round(100.0 * c / total_req, 1)
+            top_countries.append(
+                {
+                    "country": cname,
+                    "code": code,
+                    "requests": c,
+                    "percentage": pct,
+                }
+            )
+
+    return {
+        "total_requests": total_req,
+        "total_requests_human": format_count_human(total_req),
+        "total_bandwidth_bytes": total_bytes,
+        "total_bandwidth_human": format_bytes_human(total_bytes),
+        "unique_visitors": uniques,
+        "unique_visitors_human": format_count_human(uniques),
+        "cache_hit_ratio": cache_hit_ratio,
+        "cached_requests": cached_req,
+        "cached_bytes_saved": cached_bytes,
+        "cached_bytes_saved_human": format_bytes_human(cached_bytes),
+        "encrypted_requests": enc_req,
+        "page_views": page_views,
+        "page_views_human": format_count_human(page_views),
+        "top_countries": top_countries,
+    }
+
+
+SectionBuilder = Callable[..., dict[str, Any]]
+
+SECTION_BUILDERS: dict[str, SectionBuilder] = {
+    "dns": build_dns_section,
+    "http": build_http_section,
+}
+
+
 def build_report(
     *,
     zones_out: list[dict[str, Any]],
@@ -135,9 +255,11 @@ def collect_days_payloads(
     zone_name: str,
     start: str,
     end: str,
+    *,
+    label: str = "DNS",
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """
-    Read dns.json per day; return (api_data_list, warnings).
+    Read one cache file per day; return (api data list, warnings).
     Skips error/null days for aggregation (warnings added).
     """
     warnings: list[str] = []
@@ -147,17 +269,17 @@ def collect_days_payloads(
         ds = format_ymd(d)
         raw = cache_read_fn(zone_id, ds)
         if not raw:
-            warnings.append(f"No cache entry for zone {zone_name} on {ds}")
+            warnings.append(f"No {label} cache entry for zone {zone_name} on {ds}")
             continue
         src = raw.get("_source")
         if src == "null":
             warnings.append(
-                f"DNS data for zone {zone_name} on {ds} is unavailable "
-                "(beyond 7-day retention on Free Plan or outside available history)"
+                f"{label} data for zone {zone_name} on {ds} is unavailable "
+                "(outside retention or not exposed for this plan)"
             )
             continue
         if src == "error":
-            warnings.append(f"DNS data for zone {zone_name} on {ds} failed (cached error)")
+            warnings.append(f"{label} data for zone {zone_name} on {ds} failed (cached error)")
             continue
         data = raw.get("data")
         if isinstance(data, dict):

@@ -29,6 +29,14 @@ def day_bounds_utc(d: date) -> tuple[str, str]:
     return start.strftime("%Y-%m-%dT%H:%M:%SZ"), end.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def day_start_iso_z(d: date) -> str:
+    return f"{format_ymd(d)}T00:00:00Z"
+
+
+def utc_now_iso_z() -> str:
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def iter_dates_inclusive(start: date, end: date) -> Iterator[date]:
     if end < start:
         return

@@ -1,10 +1,17 @@
-"""GraphQL dnsAnalyticsAdaptiveGroups (DNS analytics)."""
+"""DNS analytics (GraphQL dnsAnalyticsAdaptiveGroups)."""
 
 from __future__ import annotations
 
-from typing import Any
+from datetime import date
+from typing import Any, ClassVar
 
-from cloudflare_executive_report.cf_client import CloudflareClient
+from cloudflare_executive_report.cf_client import (
+    CloudflareAPIError,
+    CloudflareClient,
+    CloudflareRateLimitError,
+)
+from cloudflare_executive_report.dates import day_bounds_utc, utc_today
+from cloudflare_executive_report.retention import date_outside_dns_retention, dns_retention_days
 
 
 def _groups(data: dict[str, Any] | None) -> list[dict[str, Any]]:
@@ -31,8 +38,6 @@ query DnsTotal($zoneTag: String!, $since: String!, $until: String!) {
 }
 """
 
-# Dimensions are selected on each query (matches Cloudflare GraphQL examples).
-# Note: this API does not expose sum { requests } or processingTimeUs on dnsAnalyticsAdaptiveGroups.
 Q_DIM = """
 query DnsDim%(suffix)s($zoneTag: String!, $since: String!, $until: String!, $limit: Int!) {
   viewer {
@@ -99,24 +104,19 @@ def _fetch_dim(
     return out
 
 
-def fetch_dns_day(
+def fetch_dns_for_bounds(
     client: CloudflareClient,
     zone_id: str,
     since: str,
     until: str,
 ) -> dict[str, Any]:
-    """
-    Fetch one UTC day [since, until) of DNS analytics.
-    since/until must be ISO 8601 Z as required by the API.
-    """
+    """One UTC window [since, until) of DNS analytics (ISO 8601 Z)."""
     total_data = client.graphql(
         Q_TOTAL,
         {"zoneTag": zone_id, "since": since, "until": until},
     )
     groups = _groups(total_data)
     total_queries = sum(int(g.get("count") or 0) for g in groups)
-
-    # No processing-time metric on this GraphQL shape for DNS adaptive groups.
     avg_pt_us: float | None = None
 
     by_query_name = _fetch_dim(client, zone_id, since, until, "queryName")
@@ -136,3 +136,47 @@ def fetch_dns_day(
         "by_protocol": by_protocol,
         "by_ip_version": by_ip_version,
     }
+
+
+class DnsFetcher:
+    stream_id: ClassVar[str] = "dns"
+    cache_filename: ClassVar[str] = "dns.json"
+    collect_label: ClassVar[str] = "DNS"
+
+    def outside_retention(self, day: date, *, plan_legacy_id: str | None) -> bool:
+        return date_outside_dns_retention(day, dns_retention_days(plan_legacy_id))
+
+    def fetch(self, client: CloudflareClient, zone_id: str, day: date) -> dict[str, Any]:
+        ge, lt = day_bounds_utc(day)
+        return fetch_dns_for_bounds(client, zone_id, ge, lt)
+
+    def append_live_today(
+        self,
+        client: CloudflareClient,
+        zone_id: str,
+        zone_name: str,
+        *,
+        plan_legacy_id: str | None,
+    ) -> tuple[list[dict[str, Any]], list[str], bool]:
+        t = utc_today()
+        if date_outside_dns_retention(t, dns_retention_days(plan_legacy_id)):
+            return [], [], False
+        ge, lt = day_bounds_utc(t)
+        try:
+            d = fetch_dns_for_bounds(client, zone_id, ge, lt)
+            return (
+                [d],
+                [
+                    "Report includes today's UTC date; "
+                    "DNS data may be incomplete until the day finishes."
+                ],
+                False,
+            )
+        except CloudflareRateLimitError:
+            return (
+                [],
+                [f"Could not fetch today's DNS data for zone {zone_name} (rate limited)."],
+                True,
+            )
+        except CloudflareAPIError as e:
+            return ([], [f"Could not fetch today's DNS data for zone {zone_name}: {e}"], False)
