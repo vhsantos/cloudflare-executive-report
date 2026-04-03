@@ -1,0 +1,319 @@
+"""cf-report CLI."""
+
+from __future__ import annotations
+
+import getpass
+import sys
+from pathlib import Path
+
+import typer
+
+from cloudflare_executive_report import exits
+from cloudflare_executive_report.cf_client import (
+    CloudflareAPIError,
+    CloudflareAuthError,
+    CloudflareClient,
+)
+from cloudflare_executive_report.config import (
+    ZoneEntry,
+    default_config_path,
+    load_config,
+    save_config,
+    template_config,
+)
+from cloudflare_executive_report.logging_config import setup_logging
+from cloudflare_executive_report.sync import SyncMode, SyncOptions, run_clean, run_sync
+from cloudflare_executive_report.zones_api import (
+    find_zone_by_name,
+    get_zone,
+    list_all_zones,
+)
+
+app = typer.Typer(
+    help="Cloudflare Executive Report - multi-zone reporting and cache. All dates are UTC.",
+    context_settings={"help_option_names": ["-h", "--help"]},
+)
+
+_cli_verbose = False
+_cli_quiet = False
+
+
+def _check_last_argv() -> None:
+    if "--last" not in sys.argv or "sync" not in sys.argv:
+        return
+    i = sys.argv.index("--last")
+    if i + 1 >= len(sys.argv):
+        typer.echo("Error: --last requires a number. Example: --last 7", err=True)
+        raise typer.Exit(exits.INVALID_PARAMS)
+    nxt = sys.argv[i + 1]
+    if nxt.startswith("-") and not nxt.lstrip("-").isdigit():
+        typer.echo("Error: --last requires a number. Example: --last 7", err=True)
+        raise typer.Exit(exits.INVALID_PARAMS)
+
+
+@app.callback()
+def main_callback(
+    ctx: typer.Context,
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Debug logging (requests, timing, headers)."
+    ),
+    quiet: bool = typer.Option(
+        False, "--quiet", "-q", help="Suppress progress output (errors still shown)."
+    ),
+) -> None:
+    """Incremental by default; use --last N or --start/--end for fixed windows."""
+    global _cli_verbose, _cli_quiet
+    ctx.ensure_object(dict)
+    ctx.obj["verbose"] = verbose
+    ctx.obj["quiet"] = quiet
+    _cli_verbose = verbose
+    _cli_quiet = quiet
+
+
+@app.command("init")
+def cmd_init(
+    ctx: typer.Context,
+    config: Path | None = typer.Option(None, "--config", help="Override config file path."),
+) -> None:
+    """Create ~/.cf-report/config.yaml template and prompt for API token."""
+    path = config or default_config_path()
+    if path.exists():
+        typer.echo(f"Config already exists: {path}", err=True)
+        raise typer.Exit(exits.GENERAL_ERROR) from None
+    token = getpass.getpass("Cloudflare API token: ").strip()
+    cfg = template_config()
+    cfg.api_token = token or cfg.api_token
+    save_config(cfg, path)
+    typer.echo(f"Wrote {path}")
+
+
+zones_app = typer.Typer(help="List and manage zones in config.")
+app.add_typer(zones_app, name="zones")
+
+
+@zones_app.command("list")
+def zones_list(ctx: typer.Context) -> None:
+    """List all zones visible to the token (id + name)."""
+    verbose = _cli_verbose
+    quiet = _cli_quiet
+    setup_logging(verbose=verbose, quiet=quiet)
+    try:
+        cfg = load_config()
+    except (FileNotFoundError, ValueError) as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(exits.GENERAL_ERROR) from None
+    try:
+        with CloudflareClient(cfg.api_token, verbose=verbose) as c:
+            zs = list_all_zones(c)
+    except CloudflareAuthError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(exits.AUTH_FAILED) from None
+    except CloudflareAPIError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(exits.GENERAL_ERROR) from None
+    for z in zs:
+        typer.echo(f"{z.get('id')}\t{z.get('name')}")
+
+
+@zones_app.command("add")
+def zones_add(
+    ctx: typer.Context,
+    zone_id: str | None = typer.Option(None, "--id", help="Zone ID"),
+    name: str | None = typer.Option(None, "--name", help="Zone name (hostname)"),
+) -> None:
+    """Add a zone to config (fetch missing id/name via API)."""
+    verbose = _cli_verbose
+    quiet = _cli_quiet
+    setup_logging(verbose=verbose, quiet=quiet)
+    if (zone_id is None) == (name is None):
+        typer.echo("Specify exactly one of --id or --name", err=True)
+        raise typer.Exit(exits.INVALID_PARAMS)
+    try:
+        cfg = load_config()
+    except (FileNotFoundError, ValueError) as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(exits.GENERAL_ERROR) from None
+    try:
+        with CloudflareClient(cfg.api_token, verbose=verbose) as c:
+            if zone_id:
+                z = get_zone(c, zone_id)
+            else:
+                assert name
+                z = find_zone_by_name(c, name)
+                if not z:
+                    typer.echo(f"Zone not found: {name}", err=True)
+                    raise typer.Exit(exits.GENERAL_ERROR) from None
+        entry = ZoneEntry(id=str(z["id"]), name=str(z["name"]))
+        for existing in cfg.zones:
+            if existing.id == entry.id or existing.name == entry.name:
+                typer.echo("Zone already in config", err=True)
+                raise typer.Exit(exits.GENERAL_ERROR) from None
+        cfg.zones.append(entry)
+        save_config(cfg)
+        typer.echo(f"Added {entry.name} ({entry.id})")
+    except CloudflareAuthError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(exits.AUTH_FAILED) from None
+    except CloudflareAPIError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(exits.GENERAL_ERROR) from None
+
+
+@zones_app.command("remove")
+def zones_remove(
+    ctx: typer.Context,
+    zone_id: str | None = typer.Option(None, "--id"),
+    name: str | None = typer.Option(None, "--name"),
+) -> None:
+    """Remove a zone from config."""
+    verbose = _cli_verbose
+    quiet = _cli_quiet
+    setup_logging(verbose=verbose, quiet=quiet)
+    if (zone_id is None) == (name is None):
+        typer.echo("Specify exactly one of --id or --name", err=True)
+        raise typer.Exit(exits.INVALID_PARAMS)
+    try:
+        cfg = load_config()
+    except (FileNotFoundError, ValueError) as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(exits.GENERAL_ERROR) from None
+    key = zone_id or name
+    assert key
+    new_z = [z for z in cfg.zones if z.id != key and z.name != key]
+    if len(new_z) == len(cfg.zones):
+        typer.echo("Zone not in config", err=True)
+        raise typer.Exit(exits.GENERAL_ERROR) from None
+    cfg.zones = new_z
+    save_config(cfg)
+    typer.echo("Removed")
+
+
+@app.command("sync")
+def cmd_sync(
+    ctx: typer.Context,
+    last: int | None = typer.Option(None, "--last", help="Last N complete UTC days (requires N)."),
+    start: str | None = typer.Option(
+        None, "--start", help="Start date YYYY-MM-DD (requires --end)."
+    ),
+    end: str | None = typer.Option(None, "--end", help="End date YYYY-MM-DD (requires --start)."),
+    refresh: bool = typer.Option(
+        False, "--refresh", help="Ignore cache and re-fetch active range."
+    ),
+    include_today: bool = typer.Option(
+        False, "--include-today", help="Include today (not cached; incomplete data)."
+    ),
+    output: Path | None = typer.Option(None, "--output", "-o", help="Write JSON report to path."),
+    zone: str | None = typer.Option(
+        None, "--zone", help="Single zone id or name (must be in config)."
+    ),
+    types: str = typer.Option(
+        "dns", "--types", help="Data types (dns only; other values ignored)."
+    ),
+    config: Path | None = typer.Option(None, "--config", help="Override config path."),
+) -> None:
+    """Incremental sync by default; use --last N or --start/--end for explicit windows."""
+    verbose = ctx.obj.get("verbose", False)
+    quiet = ctx.obj.get("quiet", False)
+    setup_logging(verbose=verbose, quiet=quiet, log_level="info")
+
+    for t in types.split(","):
+        t = t.strip().lower()
+        if t and t != "dns":
+            typer.echo(f"Ignoring type '{t}' (only dns is supported)", err=True)
+
+    if (start is None) != (end is None):
+        typer.echo("Error: --start and --end must be used together.", err=True)
+        raise typer.Exit(exits.INVALID_PARAMS)
+
+    if last is not None and (start is not None or end is not None):
+        typer.echo("Error: use either --last N or --start/--end, not both.", err=True)
+        raise typer.Exit(exits.INVALID_PARAMS)
+
+    if last is not None and last < 1:
+        typer.echo("Error: --last must be at least 1.", err=True)
+        raise typer.Exit(exits.INVALID_PARAMS)
+
+    if start and end:
+        try:
+            from cloudflare_executive_report.dates import parse_ymd
+
+            parse_ymd(start)
+            parse_ymd(end)
+        except ValueError:
+            typer.echo("Invalid --start/--end (use YYYY-MM-DD).", err=True)
+            raise typer.Exit(exits.INVALID_PARAMS) from None
+
+    if last is not None:
+        mode = SyncMode.last_n
+        opts = SyncOptions(
+            mode=mode,
+            last_n=last,
+            refresh=refresh,
+            include_today=include_today,
+            quiet=quiet,
+        )
+    elif start and end:
+        mode = SyncMode.range
+        opts = SyncOptions(
+            mode=mode,
+            start=start,
+            end=end,
+            refresh=refresh,
+            include_today=include_today,
+            quiet=quiet,
+        )
+    else:
+        opts = SyncOptions(
+            mode=SyncMode.incremental,
+            refresh=refresh,
+            include_today=include_today,
+            quiet=quiet,
+        )
+
+    try:
+        cfg = load_config(config)
+    except (FileNotFoundError, ValueError) as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(exits.GENERAL_ERROR) from None
+
+    code = run_sync(
+        cfg,
+        opts,
+        zone_filter=zone,
+        output_path=output,
+        write_stdout=False,
+    )
+    raise typer.Exit(code)
+
+
+@app.command("clean")
+def cmd_clean(
+    ctx: typer.Context,
+    older_than: int | None = typer.Option(
+        None, "--older-than", help="Delete day dirs older than N days."
+    ),
+    delete_all: bool = typer.Option(False, "--all", help="Delete entire cache tree."),
+) -> None:
+    """Prune or wipe the DNS cache directory."""
+    verbose = ctx.obj.get("verbose", False)
+    quiet = ctx.obj.get("quiet", False)
+    setup_logging(verbose=verbose, quiet=quiet)
+    try:
+        cfg = load_config()
+    except (FileNotFoundError, ValueError) as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(exits.GENERAL_ERROR) from None
+    code = run_clean(cfg, older_than=older_than, delete_all=delete_all, quiet=quiet)
+    raise typer.Exit(code)
+
+
+def main() -> None:
+    try:
+        _check_last_argv()
+        app()
+    except KeyboardInterrupt:
+        raise typer.Exit(exits.GENERAL_ERROR) from None
+
+
+if __name__ == "__main__":
+    main()
