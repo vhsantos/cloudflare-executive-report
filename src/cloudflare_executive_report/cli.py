@@ -15,6 +15,7 @@ from cloudflare_executive_report.cf_client import (
     CloudflareClient,
 )
 from cloudflare_executive_report.config import (
+    AppConfig,
     ZoneEntry,
     default_config_path,
     load_config,
@@ -25,7 +26,7 @@ from cloudflare_executive_report.fetchers.registry import (
     default_types_csv,
     registered_stream_ids,
 )
-from cloudflare_executive_report.logging_config import setup_logging
+from cloudflare_executive_report.logging_config import effective_debug_enabled, setup_logging
 from cloudflare_executive_report.sync import SyncMode, SyncOptions, run_clean, run_sync
 from cloudflare_executive_report.zones_api import (
     find_zone_by_name,
@@ -62,6 +63,11 @@ def _parse_sync_types(raw: str) -> frozenset[str]:
     return frozenset(found)
 
 
+def _config_log_level(cfg: AppConfig) -> str:
+    s = (cfg.log_level or "").strip()
+    return s if s else "info"
+
+
 app = typer.Typer(
     help="Cloudflare Executive Report - multi-zone reporting and cache. All dates are UTC.",
     context_settings={"help_option_names": ["-h", "--help"]},
@@ -88,7 +94,10 @@ def _check_last_argv() -> None:
 def main_callback(
     ctx: typer.Context,
     verbose: bool = typer.Option(
-        False, "--verbose", "-v", help="Debug logging (requests, timing, headers)."
+        False,
+        "--verbose",
+        "-v",
+        help="Same as log_level debug for this run (overrides config); includes HTTP traces.",
     ),
     quiet: bool = typer.Option(
         False, "--quiet", "-q", help="Suppress progress output (errors still shown)."
@@ -129,14 +138,14 @@ def zones_list(ctx: typer.Context) -> None:
     """List all zones visible to the token (id + name)."""
     verbose = _cli_verbose
     quiet = _cli_quiet
-    setup_logging(verbose=verbose, quiet=quiet)
     try:
         cfg = load_config()
     except (FileNotFoundError, ValueError) as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.GENERAL_ERROR) from None
+    setup_logging(verbose=verbose, quiet=quiet, log_level=_config_log_level(cfg))
     try:
-        with CloudflareClient(cfg.api_token, verbose=verbose) as c:
+        with CloudflareClient(cfg.api_token, verbose=effective_debug_enabled()) as c:
             zs = list_all_zones(c)
     except CloudflareAuthError as e:
         typer.echo(str(e), err=True)
@@ -157,7 +166,6 @@ def zones_add(
     """Add a zone to config (fetch missing id/name via API)."""
     verbose = _cli_verbose
     quiet = _cli_quiet
-    setup_logging(verbose=verbose, quiet=quiet)
     if (zone_id is None) == (name is None):
         typer.echo("Specify exactly one of --id or --name", err=True)
         raise typer.Exit(exits.INVALID_PARAMS)
@@ -166,8 +174,9 @@ def zones_add(
     except (FileNotFoundError, ValueError) as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.GENERAL_ERROR) from None
+    setup_logging(verbose=verbose, quiet=quiet, log_level=_config_log_level(cfg))
     try:
-        with CloudflareClient(cfg.api_token, verbose=verbose) as c:
+        with CloudflareClient(cfg.api_token, verbose=effective_debug_enabled()) as c:
             if zone_id:
                 z = get_zone(c, zone_id)
             else:
@@ -201,7 +210,6 @@ def zones_remove(
     """Remove a zone from config."""
     verbose = _cli_verbose
     quiet = _cli_quiet
-    setup_logging(verbose=verbose, quiet=quiet)
     if (zone_id is None) == (name is None):
         typer.echo("Specify exactly one of --id or --name", err=True)
         raise typer.Exit(exits.INVALID_PARAMS)
@@ -210,6 +218,7 @@ def zones_remove(
     except (FileNotFoundError, ValueError) as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.GENERAL_ERROR) from None
+    setup_logging(verbose=verbose, quiet=quiet, log_level=_config_log_level(cfg))
     key = zone_id or name
     assert key
     new_z = [z for z in cfg.zones if z.id != key and z.name != key]
@@ -237,7 +246,9 @@ def cmd_sync(
     ),
     output: Path | None = typer.Option(None, "--output", "-o", help="Write JSON report to path."),
     zone: str | None = typer.Option(
-        None, "--zone", help="Single zone id or name (must be in config)."
+        None,
+        "--zone",
+        help="Zone id or name in config; if omitted, uses default_zone from config when set.",
     ),
     types: str = typer.Option(
         default_types_csv(),
@@ -249,17 +260,16 @@ def cmd_sync(
         "--top",
         help="How many items in each ranked list (e.g. top query names, countries).",
     ),
-    no_config: bool = typer.Option(
+    skip_zone_health: bool = typer.Option(
         False,
-        "--no-config",
-        help="Skip zone health REST calls (analytics only).",
+        "--skip-zone-health",
+        help="Omit zone health (REST); report includes analytics streams only.",
     ),
     config: Path | None = typer.Option(None, "--config", help="Override config path."),
 ) -> None:
     """Incremental sync by default; use --last N or --start/--end for explicit windows."""
     verbose = ctx.obj.get("verbose", False)
     quiet = ctx.obj.get("quiet", False)
-    setup_logging(verbose=verbose, quiet=quiet, log_level="info")
 
     type_set = _parse_sync_types(types)
     if top < 1:
@@ -298,7 +308,7 @@ def cmd_sync(
             quiet=quiet,
             types=type_set,
             top=top,
-            no_config=no_config,
+            skip_zone_health=skip_zone_health,
         )
     elif start and end:
         mode = SyncMode.range
@@ -311,7 +321,7 @@ def cmd_sync(
             quiet=quiet,
             types=type_set,
             top=top,
-            no_config=no_config,
+            skip_zone_health=skip_zone_health,
         )
     else:
         opts = SyncOptions(
@@ -321,7 +331,7 @@ def cmd_sync(
             quiet=quiet,
             types=type_set,
             top=top,
-            no_config=no_config,
+            skip_zone_health=skip_zone_health,
         )
 
     try:
@@ -330,10 +340,15 @@ def cmd_sync(
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.GENERAL_ERROR) from None
 
+    setup_logging(verbose=verbose, quiet=quiet, log_level=_config_log_level(cfg))
+
+    zone_effective = (zone.strip() if zone else "") or (cfg.default_zone or "").strip()
+    zone_effective = zone_effective or None
+
     code = run_sync(
         cfg,
         opts,
-        zone_filter=zone,
+        zone_filter=zone_effective,
         output_path=output,
         write_stdout=False,
     )
@@ -351,12 +366,12 @@ def cmd_clean(
     """Prune or wipe the DNS cache directory."""
     verbose = ctx.obj.get("verbose", False)
     quiet = ctx.obj.get("quiet", False)
-    setup_logging(verbose=verbose, quiet=quiet)
     try:
         cfg = load_config()
     except (FileNotFoundError, ValueError) as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.GENERAL_ERROR) from None
+    setup_logging(verbose=verbose, quiet=quiet, log_level=_config_log_level(cfg))
     code = run_clean(cfg, older_than=older_than, delete_all=delete_all, quiet=quiet)
     raise typer.Exit(code)
 

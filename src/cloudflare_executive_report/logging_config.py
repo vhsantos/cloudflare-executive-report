@@ -1,4 +1,4 @@
-"""Logging for --verbose / --quiet."""
+"""Logging: config ``log_level`` and CLI ``--verbose`` / ``--quiet``."""
 
 from __future__ import annotations
 
@@ -7,6 +7,11 @@ import sys
 
 
 def setup_logging(*, verbose: bool, quiet: bool, log_level: str = "info") -> None:
+    """
+    Resolve one effective level: ``--quiet`` > ``--verbose`` > ``log_level`` (config).
+
+    ``--verbose`` is equivalent to ``log_level: debug`` for that run (overrides config).
+    """
     if quiet and verbose:
         verbose = False
     if quiet:
@@ -14,16 +19,21 @@ def setup_logging(*, verbose: bool, quiet: bool, log_level: str = "info") -> Non
     elif verbose:
         level = logging.DEBUG
     else:
-        level = getattr(logging, log_level.upper(), logging.INFO)
-        if level < logging.INFO:
-            level = logging.INFO
+        raw = (log_level or "info").strip().upper()
+        level = getattr(logging, raw, logging.INFO)
     logging.basicConfig(
         level=level,
         format="%(levelname)s %(message)s",
         stream=sys.stderr,
         force=True,
     )
-    # httpx/httpcore log every request at INFO unless capped (noisy for normal CLI use).
-    httpx_level = logging.DEBUG if verbose else logging.WARNING
+    # httpx/httpcore: noisy unless we're in full debug (config or -v).
+    deep = effective_debug_enabled()
+    httpx_level = logging.DEBUG if deep else logging.WARNING
     logging.getLogger("httpx").setLevel(httpx_level)
     logging.getLogger("httpcore").setLevel(httpx_level)
+
+
+def effective_debug_enabled() -> bool:
+    """True when root logging is DEBUG (after ``setup_logging``)."""
+    return logging.getLogger().getEffectiveLevel() <= logging.DEBUG
