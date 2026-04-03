@@ -11,31 +11,26 @@ from pathlib import Path
 
 from cloudflare_executive_report import exits
 from cloudflare_executive_report.aggregate import (
-    build_dns_section,
-    build_http_section,
+    SECTION_BUILDERS,
     build_report,
-    build_security_section,
     collect_days_payloads,
 )
 from cloudflare_executive_report.cache import (
     CacheLockTimeout,
-    CacheStream,
     cache_lock,
-    day_path,
     load_zone_index,
     merge_stream_bounds,
     read_day_file,
     save_zone_index,
+    stream_latest,
 )
 from cloudflare_executive_report.cf_client import (
     CloudflareAPIError,
     CloudflareAuthError,
     CloudflareClient,
-    CloudflareRateLimitError,
 )
 from cloudflare_executive_report.config import AppConfig
 from cloudflare_executive_report.dates import (
-    day_bounds_utc,
     format_ymd,
     iter_dates_inclusive,
     last_n_complete_days,
@@ -43,18 +38,10 @@ from cloudflare_executive_report.dates import (
     utc_today,
     utc_yesterday,
 )
-from cloudflare_executive_report.fetchers import (
-    fetch_dns_for_bounds,
-    fetch_http_for_date,
-    fetch_security_partial_utc_day,
-)
-from cloudflare_executive_report.fetchers.registry import FETCHER_REGISTRY
-from cloudflare_executive_report.retention import (
-    date_outside_dns_retention,
-    date_outside_http_retention,
-    date_outside_security_retention,
-    dns_retention_days,
-    security_retention_days,
+from cloudflare_executive_report.fetchers.registry import (
+    FETCHER_REGISTRY,
+    day_cache_path,
+    registered_stream_ids,
 )
 from cloudflare_executive_report.sync.day_processor import process_day
 from cloudflare_executive_report.sync.options import SyncMode, SyncOptions
@@ -82,20 +69,15 @@ def _dates_incremental(idx_latest: str | None, y: date) -> list[date]:
     return out
 
 
-def _streams_for_types(types: frozenset[str]) -> list[CacheStream]:
-    order = (CacheStream.dns, CacheStream.http, CacheStream.security)
-    return [s for s in order if s.value in types]
+def _streams_for_types(types: frozenset[str]) -> list[str]:
+    return [sid for sid in registered_stream_ids() if sid in types]
 
 
 def _sync_days_for_mode(opts: SyncOptions, idx, y: date) -> list[date]:
     if opts.mode == SyncMode.incremental:
         parts: list[date] = []
-        if "dns" in opts.types:
-            parts.extend(_dates_incremental(idx.dns.latest, y))
-        if "http" in opts.types:
-            parts.extend(_dates_incremental(idx.http.latest, y))
-        if "security" in opts.types:
-            parts.extend(_dates_incremental(idx.security.latest, y))
+        for sid in _streams_for_types(opts.types):
+            parts.extend(_dates_incremental(stream_latest(idx, sid), y))
         return sorted(set(parts))
     if opts.mode == SyncMode.last_n:
         assert opts.last_n is not None
@@ -122,21 +104,14 @@ def _report_bounds_from_indices(
     latests: list[str] = []
     for z in zones:
         ix = load_zone_index(cache_root, z.id, z.name)
-        if "dns" in opts.types:
-            if ix.dns.earliest:
-                earliests.append(ix.dns.earliest)
-            if ix.dns.latest:
-                latests.append(ix.dns.latest)
-        if "http" in opts.types:
-            if ix.http.earliest:
-                earliests.append(ix.http.earliest)
-            if ix.http.latest:
-                latests.append(ix.http.latest)
-        if "security" in opts.types:
-            if ix.security.earliest:
-                earliests.append(ix.security.earliest)
-            if ix.security.latest:
-                latests.append(ix.security.latest)
+        for sid in _streams_for_types(opts.types):
+            st = ix.streams.get(sid)
+            if not st:
+                continue
+            if st.earliest:
+                earliests.append(st.earliest)
+            if st.latest:
+                latests.append(st.latest)
     if not earliests:
         earliests.append(format_ymd(y))
     if not latests:
@@ -223,8 +198,8 @@ def _run_sync_locked(
             days = _sync_days_for_mode(opts, idx, y)
 
             for d in days:
-                for stream in streams:
-                    fetcher = FETCHER_REGISTRY[stream]
+                for sid in streams:
+                    fetcher = FETCHER_REGISTRY[sid]
                     if process_day(
                         fetcher,
                         client,
@@ -243,12 +218,12 @@ def _run_sync_locked(
             new_idx.zone_name = z.name
             if days:
                 s, e = format_ymd(min(days)), format_ymd(max(days))
-                for stream in streams:
-                    new_idx = merge_stream_bounds(new_idx, s, e, stream)
+                for sid in streams:
+                    new_idx = merge_stream_bounds(new_idx, s, e, sid)
                 if opts.mode == SyncMode.incremental:
                     yy = format_ymd(y)
-                    for stream in streams:
-                        new_idx = merge_stream_bounds(new_idx, None, yy, stream)
+                    for sid in streams:
+                        new_idx = merge_stream_bounds(new_idx, None, yy, sid)
             save_zone_index(cache_root, new_idx)
 
         report_start, report_end = _report_bounds_from_indices(zones, cache_root, y, opts)
@@ -270,101 +245,35 @@ def _run_sync_locked(
                 log.error("Zone lookup failed: %s", e)
                 return exits.GENERAL_ERROR
             plan = (zmeta.get("plan") or {}).get("legacy_id")
-            dns_ret = dns_retention_days(plan)
-            sec_ret = security_retention_days(plan)
 
             cache_end = format_ymd(y) if opts.include_today else report_end
             zblock: dict = {"zone_id": z.id, "zone_name": z.name}
 
-            if "dns" in opts.types:
+            for sid in _streams_for_types(opts.types):
+                fetcher = FETCHER_REGISTRY[sid]
+                builder = SECTION_BUILDERS[sid]
 
-                def read_d(zi: str, ds: str) -> dict | None:
-                    return read_day_file(day_path(cache_root, zi, ds, CacheStream.dns))
+                def read_stream(zi: str, ds: str, stream_id: str = sid) -> dict | None:
+                    return read_day_file(day_cache_path(cache_root, zi, ds, stream_id))
 
                 api_days, warns = collect_days_payloads(
-                    read_d, z.id, z.name, report_start, cache_end, label="DNS"
+                    read_stream,
+                    z.id,
+                    z.name,
+                    report_start,
+                    cache_end,
+                    label=fetcher.collect_label,
                 )
                 if opts.include_today:
-                    t = utc_today()
-                    if not date_outside_dns_retention(t, dns_ret):
-                        ge, lt = day_bounds_utc(t)
-                        try:
-                            td = fetch_dns_for_bounds(client, z.id, ge, lt)
-                            api_days = api_days + [td]
-                            warns.append(
-                                "Report includes today's UTC date; "
-                                "DNS data may be incomplete until the day finishes."
-                            )
-                        except CloudflareRateLimitError:
-                            rate_fail = True
-                            warns.append(
-                                "Could not fetch today's DNS data for zone "
-                                f"{z.name} (rate limited)."
-                            )
-                        except CloudflareAPIError as e:
-                            warns.append(f"Could not fetch today's DNS data for zone {z.name}: {e}")
-                zblock["dns"] = build_dns_section(api_days, top=opts.top)
+                    extra, tw, rl = fetcher.append_live_today(
+                        client, z.id, z.name, plan_legacy_id=plan
+                    )
+                    api_days = api_days + extra
+                    warns.extend(tw)
+                    if rl:
+                        rate_fail = True
+                zblock[sid] = builder(api_days, top=opts.top)
                 all_warnings.extend(warns)
-
-            if "http" in opts.types:
-
-                def read_h(zi: str, ds: str) -> dict | None:
-                    return read_day_file(day_path(cache_root, zi, ds, CacheStream.http))
-
-                h_days, hw = collect_days_payloads(
-                    read_h, z.id, z.name, report_start, cache_end, label="HTTP"
-                )
-                if opts.include_today:
-                    t = utc_today()
-                    if not date_outside_http_retention(t):
-                        try:
-                            ht = fetch_http_for_date(client, z.id, format_ymd(t))
-                            h_days = h_days + [ht]
-                            hw.append(
-                                "Report includes today's UTC date; "
-                                "HTTP data may be incomplete until the day finishes."
-                            )
-                        except CloudflareRateLimitError:
-                            rate_fail = True
-                            hw.append(
-                                "Could not fetch today's HTTP data for zone "
-                                f"{z.name} (rate limited)."
-                            )
-                        except CloudflareAPIError as e:
-                            hw.append(f"Could not fetch today's HTTP data for zone {z.name}: {e}")
-                zblock["http"] = build_http_section(h_days, top=opts.top)
-                all_warnings.extend(hw)
-
-            if "security" in opts.types:
-
-                def read_s(zi: str, ds: str) -> dict | None:
-                    return read_day_file(day_path(cache_root, zi, ds, CacheStream.security))
-
-                s_days, sw = collect_days_payloads(
-                    read_s, z.id, z.name, report_start, cache_end, label="Security"
-                )
-                if opts.include_today:
-                    t = utc_today()
-                    if not date_outside_security_retention(t, sec_ret):
-                        try:
-                            st = fetch_security_partial_utc_day(client, z.id, t)
-                            s_days = s_days + [st]
-                            sw.append(
-                                "Report includes today's UTC date; "
-                                "security events may be incomplete until the day finishes."
-                            )
-                        except CloudflareRateLimitError:
-                            rate_fail = True
-                            sw.append(
-                                f"Could not fetch today's security data for zone {z.name} "
-                                "(rate limited)."
-                            )
-                        except CloudflareAPIError as e:
-                            sw.append(
-                                f"Could not fetch today's security data for zone {z.name}: {e}"
-                            )
-                zblock["security"] = build_security_section(s_days)
-                all_warnings.extend(sw)
 
             zh, zw = fetch_zone_health(client, z.id, z.name, skip=opts.no_config)
             zblock["zone_health"] = zh

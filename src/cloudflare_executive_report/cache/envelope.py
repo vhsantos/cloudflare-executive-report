@@ -1,4 +1,4 @@
-"""Read/write one cache envelope file (any stream: dns, http)."""
+"""Read/write one cache envelope file (any stream)."""
 
 from __future__ import annotations
 
