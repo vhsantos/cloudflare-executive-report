@@ -27,4 +27,4 @@ class SyncOptions:
     quiet: bool = False
     types: frozenset[str] = field(default_factory=_default_sync_types)
     top: int = 10
-    no_config: bool = False
+    skip_zone_health: bool = False

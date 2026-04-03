@@ -96,7 +96,7 @@ def fetch_zone_health(
 ) -> tuple[dict[str, Any], list[str]]:
     warnings: list[str] = []
     if skip:
-        warnings.append("Zone health skipped due to --no-config")
+        warnings.append("Zone health skipped due to --skip-zone-health")
         return {
             "zone_status": SKIPPED,
             "ssl_mode": SKIPPED,
