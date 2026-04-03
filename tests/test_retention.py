@@ -4,6 +4,7 @@ from cloudflare_executive_report.retention import (
     date_outside_dns_retention,
     dns_retention_days,
     http_retention_days,
+    security_retention_days,
 )
 
 
@@ -16,6 +17,11 @@ def test_dns_retention_days():
 def test_http_retention_days():
     assert http_retention_days("free") == 30
     assert http_retention_days("enterprise") == 30
+
+
+def test_security_retention_days():
+    assert security_retention_days("free") == 30
+    assert security_retention_days("enterprise") == 30
 
 
 def test_date_outside():

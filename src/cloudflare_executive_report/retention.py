@@ -21,6 +21,12 @@ def http_retention_days(_plan_legacy_id: str | None = None) -> int:
     return 30
 
 
+def security_retention_days(_plan_legacy_id: str | None = None) -> int:
+    """Firewall / security analytics window (aligned with HTTP daily groups in practice)."""
+    _ = _plan_legacy_id
+    return 30
+
+
 def date_outside_dns_retention(day: date, retention_days: int, *, ref: date | None = None) -> bool:
     """True if day is older than retention window (exclusive of boundary)."""
     r = ref if ref is not None else utc_today()
@@ -29,3 +35,7 @@ def date_outside_dns_retention(day: date, retention_days: int, *, ref: date | No
 
 def date_outside_http_retention(day: date, *, ref: date | None = None) -> bool:
     return date_outside_dns_retention(day, http_retention_days(), ref=ref)
+
+
+def date_outside_security_retention(day: date, *, ref: date | None = None) -> bool:
+    return date_outside_dns_retention(day, security_retention_days(), ref=ref)

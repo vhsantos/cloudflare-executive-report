@@ -6,6 +6,11 @@ from cloudflare_executive_report.fetchers.registry import (
     default_types_csv,
     registered_stream_ids,
 )
+from cloudflare_executive_report.fetchers.security import (
+    SecurityFetcher,
+    fetch_security_for_bounds,
+    fetch_security_for_date,
+)
 from cloudflare_executive_report.fetchers.types import Fetcher
 
 __all__ = [
@@ -13,9 +18,12 @@ __all__ = [
     "DnsFetcher",
     "Fetcher",
     "HttpFetcher",
+    "SecurityFetcher",
     "day_cache_path",
     "default_types_csv",
     "fetch_dns_for_bounds",
     "fetch_http_for_date",
+    "fetch_security_for_bounds",
+    "fetch_security_for_date",
     "registered_stream_ids",
 ]

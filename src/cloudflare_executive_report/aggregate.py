@@ -216,11 +216,49 @@ def build_http_section(
     }
 
 
+def _normalize_security_day(d: dict[str, Any]) -> dict[str, Any]:
+    """Support cache rows from grouped API (by_action) or legacy raw events list."""
+    if d.get("by_action"):
+        return d
+    events = d.get("events")
+    if not isinstance(events, list):
+        return {"by_action": []}
+    counts: dict[str, int] = {}
+    for ev in events:
+        if not isinstance(ev, dict):
+            continue
+        act = ev.get("action")
+        if act is None:
+            continue
+        key = str(act)
+        counts[key] = counts.get(key, 0) + 1
+    return {
+        "by_action": [{"value": k, "count": c} for k, c in counts.items()],
+    }
+
+
+def build_security_section(
+    daily_api_data: list[dict[str, Any]],
+    *,
+    top: int = 10,
+) -> dict[str, Any]:
+    """daily_api_data: security.json `data` with by_action or legacy events[]."""
+    normalized = [_normalize_security_day(d) for d in daily_api_data]
+    by_action = _merge_rows(normalized, "by_action")
+    total = sum(by_action.values())
+    return {
+        "total_events": total,
+        "total_events_human": format_count_human(total),
+        "top_actions": _top_pct(by_action, total, top, name_key="action"),
+    }
+
+
 SectionBuilder = Callable[..., dict[str, Any]]
 
 SECTION_BUILDERS: dict[str, SectionBuilder] = {
     "dns": build_dns_section,
     "http": build_http_section,
+    "security": build_security_section,
 }
 
 

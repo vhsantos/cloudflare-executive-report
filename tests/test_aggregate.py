@@ -2,6 +2,7 @@ from cloudflare_executive_report.aggregate import (
     build_dns_section,
     build_http_section,
     build_report,
+    build_security_section,
     format_bytes_human,
     format_count_human,
 )
@@ -75,3 +76,49 @@ def test_build_http_section_top_countries():
 def test_format_helpers():
     assert format_bytes_human(1024) == "1.0 KB"
     assert format_count_human(1500) == "1.5K"
+
+
+def test_build_security_section_by_action():
+    days = [
+        {
+            "by_action": [
+                {"value": "block", "count": 10},
+                {"value": "managed_challenge", "count": 5},
+            ],
+        },
+        {
+            "by_action": [
+                {"value": "block", "count": 2},
+                {"value": "log", "count": 3},
+            ],
+        },
+    ]
+    sec = build_security_section(days, top=10)
+    assert sec["total_events"] == 20
+    assert sec["top_actions"][0]["action"] == "block"
+    assert sec["top_actions"][0]["count"] == 12
+
+
+def test_fetcher_registry_matches_section_builders():
+    from cloudflare_executive_report.aggregate import SECTION_BUILDERS
+    from cloudflare_executive_report.fetchers.registry import FETCHER_REGISTRY
+
+    assert set(FETCHER_REGISTRY.keys()) == set(SECTION_BUILDERS.keys())
+
+
+def test_build_security_section_legacy_events():
+    days = [
+        {
+            "events": [
+                {"action": "block"},
+                {"action": "block"},
+                {"action": "managed_challenge"},
+            ]
+        }
+    ]
+    sec = build_security_section(days, top=5)
+    assert sec["total_events"] == 3
+    assert {r["action"]: r["count"] for r in sec["top_actions"]} == {
+        "block": 2,
+        "managed_challenge": 1,
+    }
