@@ -21,10 +21,9 @@ def http_retention_days(_plan_legacy_id: str | None = None) -> int:
     return 30
 
 
-def security_retention_days(_plan_legacy_id: str | None = None) -> int:
-    """Firewall / security analytics window (aligned with HTTP daily groups in practice)."""
-    _ = _plan_legacy_id
-    return 30
+def security_retention_days(plan_legacy_id: str | None) -> int:
+    """Firewall sampled events window - use same tier grid as DNS (approximate)."""
+    return dns_retention_days(plan_legacy_id)
 
 
 def date_outside_dns_retention(day: date, retention_days: int, *, ref: date | None = None) -> bool:
@@ -37,5 +36,10 @@ def date_outside_http_retention(day: date, *, ref: date | None = None) -> bool:
     return date_outside_dns_retention(day, http_retention_days(), ref=ref)
 
 
-def date_outside_security_retention(day: date, *, ref: date | None = None) -> bool:
-    return date_outside_dns_retention(day, security_retention_days(), ref=ref)
+def date_outside_security_retention(
+    day: date,
+    *,
+    plan_legacy_id: str | None = None,
+    ref: date | None = None,
+) -> bool:
+    return date_outside_dns_retention(day, security_retention_days(plan_legacy_id), ref=ref)

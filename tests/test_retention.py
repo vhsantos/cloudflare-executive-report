@@ -19,9 +19,10 @@ def test_http_retention_days():
     assert http_retention_days("enterprise") == 30
 
 
-def test_security_retention_days():
-    assert security_retention_days("free") == 30
-    assert security_retention_days("enterprise") == 30
+def test_security_retention_days_matches_dns_tiers():
+    assert security_retention_days("free") == dns_retention_days("free") == 7
+    assert security_retention_days("pro") == dns_retention_days("pro") == 31
+    assert security_retention_days("enterprise") == dns_retention_days("enterprise") == 62
 
 
 def test_date_outside():

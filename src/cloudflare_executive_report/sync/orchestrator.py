@@ -43,6 +43,7 @@ from cloudflare_executive_report.fetchers.registry import (
     day_cache_path,
     registered_stream_ids,
 )
+from cloudflare_executive_report.logging_config import effective_debug_enabled
 from cloudflare_executive_report.sync.day_processor import process_day
 from cloudflare_executive_report.sync.options import SyncMode, SyncOptions
 from cloudflare_executive_report.zone_health import fetch_zone_health
@@ -169,7 +170,7 @@ def _run_sync_locked(
     write_stdout: bool,
 ) -> int:
     rate_fail = False
-    verbose_http = log.isEnabledFor(logging.DEBUG)
+    verbose_http = effective_debug_enabled()
     streams = _streams_for_types(opts.types)
 
     with CloudflareClient(cfg.api_token, verbose=verbose_http) as client:
@@ -194,7 +195,8 @@ def _run_sync_locked(
             idx = load_zone_index(cache_root, z.id, z.name)
             idx.zone_name = z.name
 
-            force_fetch = opts.mode in (SyncMode.last_n, SyncMode.range)
+            # Only --refresh forces re-download; --last / --start/--end define the day set.
+            force_fetch = opts.refresh
             days = _sync_days_for_mode(opts, idx, y)
 
             for d in days:
@@ -275,7 +277,7 @@ def _run_sync_locked(
                 zblock[sid] = builder(api_days, top=opts.top)
                 all_warnings.extend(warns)
 
-            zh, zw = fetch_zone_health(client, z.id, z.name, skip=opts.no_config)
+            zh, zw = fetch_zone_health(client, z.id, z.name, skip=opts.skip_zone_health)
             zblock["zone_health"] = zh
             all_warnings.extend(zw)
 
