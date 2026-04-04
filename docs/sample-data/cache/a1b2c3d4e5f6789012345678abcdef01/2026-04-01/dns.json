@@ -1,0 +1,35 @@
+{
+  "_schema_version": 1,
+  "_source": "api",
+  "_source_timestamp": "2026-04-04T12:00:00Z",
+  "data": {
+    "total_queries": 125000,
+    "avg_processing_time_us": 1500.0,
+    "by_query_name": [
+      { "value": "www.example.com", "count": 62000 },
+      { "value": "api.example.com", "count": 41000 },
+      { "value": "example.com", "count": 22000 }
+    ],
+    "by_query_type": [
+      { "value": "A", "count": 80000 },
+      { "value": "AAAA", "count": 40000 },
+      { "value": "TXT", "count": 5000 }
+    ],
+    "by_response_code": [
+      { "value": "NOERROR", "count": 124000 },
+      { "value": "NXDOMAIN", "count": 1000 }
+    ],
+    "by_colo": [
+      { "value": "IAD", "count": 40000 },
+      { "value": "LHR", "count": 35000 }
+    ],
+    "by_protocol": [
+      { "value": "UDP", "count": 124800 },
+      { "value": "TCP", "count": 200 }
+    ],
+    "by_ip_version": [
+      { "value": "4", "count": 70000 },
+      { "value": "6", "count": 55000 }
+    ]
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "report_period": {
+    "start": "2026-04-01",
+    "end": "2026-04-03",
+    "timezone": "UTC",
+    "requested_start": "2026-04-01",
+    "requested_end": "2026-04-03"
+  },
+  "generated_at": "2026-04-04T12:00:00Z",
+  "tool_version": "0.1.0",
+  "zones": [
+    {
+      "zone_id": "a1b2c3d4e5f6789012345678abcdef01",
+      "zone_name": "example.com",
+      "dns": {
+        "total_queries": 375000,
+        "average_qps": 4.34,
+        "top_query_names": [
+          { "name": "www.example.com", "count": 186000, "percentage": 49.6 },
+          { "name": "api.example.com", "count": 123000, "percentage": 32.8 },
+          { "name": "example.com", "count": 66000, "percentage": 17.6 }
+        ],
+        "top_record_types": [
+          { "type": "A", "count": 240000, "percentage": 64.0 },
+          { "type": "AAAA", "count": 120000, "percentage": 32.0 },
+          { "type": "TXT", "count": 15000, "percentage": 4.0 }
+        ],
+        "response_codes": [
+          { "code": "NOERROR", "count": 372000, "percentage": 99.2 },
+          { "code": "NXDOMAIN", "count": 3000, "percentage": 0.8 }
+        ],
+        "top_data_centers": [
+          { "colo": "IAD", "count": 90000, "percentage": 24.0 },
+          { "colo": "LHR", "count": 75000, "percentage": 20.0 },
+          { "colo": "SJC", "count": 60000, "percentage": 16.0 }
+        ],
+        "protocols": [
+          { "protocol": "UDP", "count": 374500, "percentage": 99.9 },
+          { "protocol": "TCP", "count": 500, "percentage": 0.1 }
+        ],
+        "ip_versions": [
+          { "version": "IPv4", "count": 210000, "percentage": 56.0 },
+          { "version": "IPv6", "count": 165000, "percentage": 44.0 }
+        ],
+        "average_processing_time_ms": 1.5
+      },
+      "http": {
+        "total_requests": 135600,
+        "total_requests_human": "135.6K",
+        "total_bandwidth_bytes": 2737037037,
+        "total_bandwidth_human": "2.5 GB",
+        "unique_visitors": 6300,
+        "unique_visitors_human": "6.3K",
+        "cache_hit_ratio": 2.7,
+        "cached_requests": 3600,
+        "cached_bytes_saved": 137037037,
+        "cached_bytes_saved_human": "130.7 MB",
+        "encrypted_requests": 132000,
+        "page_views": 114000,
+        "page_views_human": "114.0K",
+        "top_countries": [
+          { "country": "United States", "code": "US", "requests": 90000, "percentage": 66.4 },
+          { "country": "Germany", "code": "DE", "requests": 24000, "percentage": 17.7 },
+          { "country": "Japan", "code": "JP", "requests": 21600, "percentage": 15.9 }
+        ]
+      },
+      "security": {
+        "total_events": 2460,
+        "total_events_human": "2.5K",
+        "top_actions": [
+          { "action": "managed_challenge", "count": 2100, "percentage": 85.4 },
+          { "action": "block", "count": 300, "percentage": 12.2 },
+          { "action": "log", "count": 60, "percentage": 2.4 }
+        ]
+      },
+      "zone_health": {
+        "zone_status": "active",
+        "ssl_mode": "full",
+        "always_https": "on",
+        "security_level": "medium",
+        "dnssec_status": "disabled",
+        "ddos_protection": "on",
+        "security_rules_active": 2
+      }
+    }
+  ],
+  "warnings": [
+    "Report includes today's UTC date; DNS data may be incomplete until the day finishes."
+  ]
+}

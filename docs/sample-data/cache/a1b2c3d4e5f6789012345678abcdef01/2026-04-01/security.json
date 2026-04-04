@@ -1,0 +1,13 @@
+{
+  "_schema_version": 1,
+  "_source": "api",
+  "_source_timestamp": "2026-04-04T12:00:00Z",
+  "data": {
+    "by_action": [
+      { "value": "managed_challenge", "count": 820 },
+      { "value": "block", "count": 45 },
+      { "value": "log", "count": 12 }
+    ],
+    "total_events": 877
+  }
+}

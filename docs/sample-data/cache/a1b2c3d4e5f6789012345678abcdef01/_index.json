@@ -1,0 +1,16 @@
+{
+  "zone_id": "a1b2c3d4e5f6789012345678abcdef01",
+  "zone_name": "example.com",
+  "dns": {
+    "earliest": "2026-03-29",
+    "latest": "2026-04-02"
+  },
+  "http": {
+    "earliest": "2026-03-29",
+    "latest": "2026-04-02"
+  },
+  "security": {
+    "earliest": "2026-03-29",
+    "latest": "2026-04-02"
+  }
+}

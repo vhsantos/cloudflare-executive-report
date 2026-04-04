@@ -1,54 +1,88 @@
 # cloudflare-executive-report
 
-Python CLI (**`cf-report`**) for the Cloudflare Executive Report - multi-zone reporting, on-disk cache, JSON output, and zone/config commands. All dates and report periods are **UTC**.
+Python CLI (**`cf-report`**) that pulls Cloudflare **DNS**, **HTTP**, and **security (firewall) analytics**, optional **zone health** (REST), caches daily payloads on disk, and writes a **JSON executive report**. All dates are **UTC**.
 
 ## Requirements
 
-- Python 3.11+
-- Cloudflare API token with at least **Zone:Read** and **Analytics:Read** (wording in the dashboard may be **Zone → Read** and **Analytics → Read** under the appropriate resource groups).
+- **Python 3.11+**
+- **API token** - in the dashboard (**My Profile → API Tokens → Create Token**), under **Permissions**, add the **Zone** permission groups below (official names from [API token permissions](https://developers.cloudflare.com/fundamentals/api/reference/permissions/)). Set **Zone Resources** to the same zones you list in config (or all zones on the account, if you use that).
 
-See [Cloudflare API token permissions](https://developers.cloudflare.com/fundamentals/api/reference/permissions/) and match the labels shown when you create the token.
+### Always needed (sync + report)
+
+| Permission (Zone)  | Used for                                                                                                                   |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| **Zone Read**      | `zones.get` / `zones.list` - zone metadata (including `plan` for retention) and `cf-report zones`.                         |
+| **Analytics Read** | [GraphQL Analytics API](https://developers.cloudflare.com/analytics/graphql-api/) - DNS, HTTP, and firewall event queries. |
+
+### Also needed for zone health (default)
+
+Zone health is extra REST calls on each report. Without these, matching fields are `unavailable` and a warning is logged; use **`--skip-zone-health`** to omit zone health entirely.
+
+| Permission (Zone)          | Used for                                                                          |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| **Zone Settings Read**     | Per-setting reads (`ssl`, `always_use_https`, `security_level`, `advanced_ddos`). |
+| **DNS Read**               | DNSSEC status (`dns.dnssec`).                                                     |
+| **Firewall Services Read** | Count of active (unpaused) firewall rules (`firewall.rules`).                     |
+
+**Write** permissions are not required. If Cloudflare adds or renames permission groups, use the live list from the doc above or the [List permission groups](https://developers.cloudflare.com/api/resources/user/subresources/tokens/subresources/permission_groups/methods/list/) API.
 
 ## Install
 
+In the project directory (after cloning or unpacking the sources):
+
 ```bash
-pip install -e ".[dev]"
+pip install .
 ```
 
-Entry point: `cf-report`
+This installs the **`cf-report`** command on your `PATH`.
 
 ## Configuration
 
-Default path: `~/.cf-report/config.yaml` (Windows: `%USERPROFILE%\.cf-report\config.yaml`).
+Default file: **`~/.cf-report/config.yaml`** (Windows: `%USERPROFILE%\.cf-report\config.yaml`).
 
 Example:
 
 ```yaml
 api_token: "cfat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 cache_dir: "~/.cache/cf-report"
-default_zone: "example.com"
-log_level: "info"
+default_zone: "" # optional: used when `sync` is run without `--zone`
+log_level: "info" # e.g. debug, warning (same idea as verbose for logging)
 
 zones:
-  - id: "4b9bc3686111ec5463800e71aca76e1a"
+  - id: "a1b2c3d4e5f6789012345678abcdef01"
     name: "example.com"
 ```
 
-## DNS analytics retention
+- **`default_zone`**: If set and you omit **`--zone`** on **`sync`**, only that zone (by id or name) is processed; if empty, all configured zones run.
 
-Historical DNS analytics depend on the zone plan (approximate):
+## What gets collected
 
-| Plan       | DNS retention (typical) |
-|-----------|-------------------------|
-| Free      | 7 days                  |
-| Pro+      | 31 days                 |
-| Enterprise| 62 days                 |
+| Piece       | Source                                       | Cached per day                |
+| ----------- | -------------------------------------------- | ----------------------------- |
+| DNS         | GraphQL `dnsAnalyticsAdaptiveGroups`         | `dns.json`                    |
+| HTTP        | GraphQL `httpRequests1dGroups`               | `http.json`                   |
+| Security    | GraphQL `firewallEventsAdaptive` (paginated) | `security.json`               |
+| Zone health | REST (settings, DNSSEC, firewall rules)      | Not cached (live each report) |
 
-The tool maps retention from the zone’s plan returned by the Cloudflare API. Dates outside retention are stored in cache as `_source: "null"` **without** calling the API (unless you use `--refresh`, which still cannot retrieve data older than Cloudflare retains).
+Analytics are **sampled** by Cloudflare; totals and rankings are **approximate** and may differ slightly from the dashboard ("based on X% sample" messages are expected).
+
+## Retention (UTC calendar days)
+
+**DNS** and **security** windows follow the zone **plan** (`plan.legacy_id` from the API), using the same tier grid:
+
+| Plan (legacy_id) | Typical window |
+| ---------------- | -------------- |
+| Free (default)   | 7 days         |
+| Pro / Business   | 31 days        |
+| Enterprise       | 62 days        |
+
+**HTTP** daily groups: **30 days** (same for all plans in this tool).
+
+Days outside retention are stored as **`_source: "null"`** in cache without calling the API.
 
 ## Cache layout
 
-Under `cache_dir` (default `~/.cache/cf-report`):
+Under **`cache_dir`** (from config):
 
 ```text
 {cache_dir}/
@@ -56,49 +90,61 @@ Under `cache_dir` (default `~/.cache/cf-report`):
 └── {zone_id}/
     ├── _index.json
     └── {YYYY-MM-DD}/
-        └── dns.json
+        ├── dns.json
+        ├── http.json
+        └── security.json
 ```
 
-Concurrent runs use `.lock`; if the lock is still held after **30 seconds**, the process exits with code **5**.
+**`_index.json`** stores per-stream `earliest` / `latest` dates for incremental sync.
 
-## CLI behavior
+Concurrent runs use **`.lock`**; if it is still held after **30 seconds**, exit code **5**.
 
-- **`cf-report sync`** - **Incremental:** fills missing UTC days from `dns.latest + 1` through **yesterday** (see `_index.json`). On a brand-new cache, `latest` is treated as yesterday, so the first incremental run does **not** backfill history; use `--last` or `--start`/`--end` for that.
-- **`cf-report sync --last 7`** - Fetches the last **7** complete UTC days (through yesterday); **always** refetches those days (ignores cache for that window).
-- **`cf-report sync --last`** - Error: number is required (`Error: --last requires a number. Example: --last 7`).
-- **`cf-report sync --start YYYY-MM-DD --end YYYY-MM-DD`** - Both flags required together; same "always fetch" behavior for that inclusive range. `--end` must not be after yesterday unless you use **`--include-today`**.
-- **`cf-report sync --refresh`** - For the active range, ignore cache and refetch (including days previously `_source: "null"` where the API might now return data).
-- **`cf-report sync --include-today`** - Includes today in the report; today is **not** written to `dns.json` (incomplete day).
-- **`cf-report sync --output PATH`** - Write JSON report (default: `./cf_report_output.json`).
-- **`cf-report sync --zone NAME_OR_ID`** - Single zone from config.
-- **`cf-report sync --types dns`** - Default; other type values are ignored.
+**`--include-today`**: Extends the **report** through today's UTC date and merges **live** partial-day API data into the JSON output. **Today is not written** as a `YYYY-MM-DD/*.json` day file.
 
-Other commands: `cf-report init`, `cf-report zones list|add|remove`, `cf-report clean --older-than N` or `clean --all`.
+Illustrative cache layout and interim JSON report: **[docs/sample-data/](docs/sample-data/)**.
 
-## Logging
+## CLI
 
-- **`--verbose`** - Debug logging (timing, `cf-ray` / `cf-request-id` when present, truncated error bodies).
-- **`--quiet`** - Suppresses progress lines; errors still go to stderr.
+### `cf-report sync`
+
+| Option               | Meaning                                                                                                             |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| *(default)*          | **Incremental:** fetch missing UTC days from index through **yesterday** (respects cache unless missing/error).     |
+| `--last N`           | Restrict work to the last **N** complete UTC days (through yesterday); **still uses cache** unless **`--refresh`**. |
+| `--start` / `--end`  | Fixed inclusive date range; **`--end`** must not be after yesterday unless **`--include-today`**.                   |
+| `--refresh`          | Refetch everything in the active window (ignore good cache).                                                        |
+| `--include-today`    | Include today in the report (live API; not cached as a day file).                                                   |
+| `--output` / `-o`    | Report path (default: `./cf_report_output.json`).                                                                   |
+| `--zone`             | One zone id or name from config; if omitted, **`default_zone`** is used when set.                                   |
+| `--types`            | Comma-separated streams: `dns`, `http`, `security` (default: all registered).                                       |
+| `--top N`            | Length of ranked lists in the report (default: 10).                                                                 |
+| `--skip-zone-health` | Omit zone health REST calls.                                                                                        |
+
+Global: **`--verbose` / `-v`** (debug for this run), **`--quiet` / -q** (errors only). Config **`log_level`** applies when not overridden.
+
+First run with an empty cache: incremental sync does **not** backfill old history; use **`--last N`** or **`--start`/`--end`** once to seed days.
+
+### Other commands
+
+- **`cf-report init`** - create config template and prompt for token.
+- **`cf-report zones list|add|remove`** - manage zones in config.
+- **`cf-report clean --older-than N`** or **`--all`** - prune or wipe cache.
 
 ## Exit codes
 
-| Code | Meaning                          |
-|------|----------------------------------|
-| 0    | Success                          |
-| 1    | General error                    |
-| 2    | Invalid parameters               |
-| 3    | Authentication failed (401/403)  |
-| 4    | Rate limit exceeded after retries|
-| 5    | Cache lock timeout               |
+| Code | Meaning                           |
+| ---- | --------------------------------- |
+| 0    | Success                           |
+| 1    | General error                     |
+| 2    | Invalid parameters                |
+| 3    | Authentication failed             |
+| 4    | Rate limit exceeded after retries |
+| 5    | Cache lock timeout                |
 
-## Development
+## Contributing
 
-```bash
-ruff check src tests
-ruff format src tests
-pytest
-```
+Developer setup, tests, and how to add a new analytics stream: **[CONTRIBUTING.md](CONTRIBUTING.md)**.
 
-## Scope
+## License / scope
 
-This tool collects **DNS** metrics via GraphQL `dnsAnalyticsAdaptiveGroups`.
+This project is a small CLI and JSON reporter; it does **not** ship PDF or email.

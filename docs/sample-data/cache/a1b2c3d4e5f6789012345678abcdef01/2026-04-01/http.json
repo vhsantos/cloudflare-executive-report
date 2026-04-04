@@ -1,0 +1,21 @@
+{
+  "_schema_version": 1,
+  "_source": "api",
+  "_source_timestamp": "2026-04-04T12:00:00Z",
+  "data": {
+    "date": "2026-04-01",
+    "requests": 45200,
+    "bytes": 912345678,
+    "cached_requests": 1200,
+    "cached_bytes": 45678901,
+    "encrypted_requests": 44000,
+    "encrypted_bytes": 900000000,
+    "page_views": 38000,
+    "uniques": 2100,
+    "country_map": [
+      { "clientCountryName": "US", "requests": 30000, "bytes": 600000000 },
+      { "clientCountryName": "DE", "requests": 8000, "bytes": 150000000 },
+      { "clientCountryName": "JP", "requests": 7200, "bytes": 162345678 }
+    ]
+  }
+}
