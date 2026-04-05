@@ -14,7 +14,6 @@ class DnsStreamLayout:
         "colo_table",
         "qnames_rtypes",
         "rcode_proto",
-        "ip_versions",
         "timeseries",
     )
 

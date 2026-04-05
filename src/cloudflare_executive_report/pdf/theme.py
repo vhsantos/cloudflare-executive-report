@@ -36,5 +36,9 @@ class Theme:
     def half_inner_width_in(self) -> float:
         return self.content_width_in() / 2.0 - self.col_gap_in / 2.0
 
+    def third_inner_width_in(self) -> float:
+        """Width per column for a 3-up row (two gutters between three columns)."""
+        return (self.content_width_in() - 2.0 * self.col_gap_in) / 3.0
+
 
 DEFAULT_THEME = Theme()

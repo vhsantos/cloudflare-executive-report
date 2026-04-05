@@ -6,7 +6,7 @@ from datetime import date
 from typing import Any
 
 from reportlab.lib.units import inch
-from reportlab.platypus import Paragraph, Spacer, Table
+from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
 
 from cloudflare_executive_report.pdf.layout_spec import DnsStreamLayout
 from cloudflare_executive_report.pdf.maps import map_height_in_for_width, world_map_from_colos_bytes
@@ -45,6 +45,9 @@ def append_dns_stream(
     w_full = w_content * inch
     w_half = w_full / 2
     half_inner = theme.half_inner_width_in()
+    third_inner = theme.third_inner_width_in()
+    gap_pt = theme.col_gap_in * inch
+    w_cell_triple = third_inner * inch
 
     blocks = set(layout.blocks)
 
@@ -124,28 +127,49 @@ def append_dns_stream(
     ip_v = ranked_rows_from_dicts(list(dns.get("ip_versions") or []), top, "version")
 
     if "rcode_proto" in blocks:
-        bottom_left = table_with_bars(
+        # Card width = column width; spacer columns for gutters (matches page content width).
+        dns_triple_ratios = (0.52, 0.22, 0.26)
+        col_codes = table_with_bars(
             "Response codes",
             rcodes,
             styles,
-            ratios=(0.34, 0.18, 0.48),
-            total_width_in=half_inner,
+            ratios=dns_triple_ratios,
+            total_width_in=third_inner,
             theme=theme,
         )
-        bottom_right = table_with_bars(
+        col_proto = table_with_bars(
             "Protocols",
             proto,
             styles,
-            ratios=(0.28, 0.18, 0.54),
-            total_width_in=half_inner,
+            ratios=dns_triple_ratios,
+            total_width_in=third_inner,
             theme=theme,
         )
-        bottom_row = Table([[bottom_left, bottom_right]], colWidths=[w_half, w_half])
-        bottom_row.setStyle(two_column_gap_style(theme))
-        story.append(bottom_row)
+        col_ip = table_with_bars(
+            "IP versions",
+            ip_v,
+            styles,
+            ratios=dns_triple_ratios,
+            total_width_in=third_inner,
+            theme=theme,
+        )
+        gutter = Spacer(gap_pt, 1)
+        triple = Table(
+            [[col_codes, gutter, col_proto, gutter, col_ip]],
+            colWidths=[w_cell_triple, gap_pt, w_cell_triple, gap_pt, w_cell_triple],
+        )
+        triple.setStyle(
+            TableStyle(
+                [
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ]
+            )
+        )
+        story.append(triple)
         story.append(Spacer(1, 16))
-
-    if "ip_versions" in blocks:
+    elif "ip_versions" in blocks:
         ip_block = table_with_bars(
             "IP versions",
             ip_v,
