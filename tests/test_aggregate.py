@@ -68,9 +68,46 @@ def test_build_http_section_top_countries():
     ]
     h = build_http_section(days, top=2)
     assert h["total_requests"] == 100
+    assert h["cached_requests"] == 10
+    assert h["uncached_requests"] == 90
     assert h["cache_hit_ratio"] == 10.0
+    assert h["encrypted_requests"] == 50
+    assert h["encrypted_requests_human"] == "50"
+    assert h["cached_bandwidth_bytes"] == 100
+    assert h["uncached_bandwidth_bytes"] == 900
+    assert h["max_uniques_single_day"] == 30
+    assert h["max_uniques_single_day_human"] == "30"
     assert len(h["top_countries"]) == 2
     assert h["top_countries"][0]["code"] == "US"
+
+
+def test_build_http_section_max_uniques_across_days():
+    days = [
+        {
+            "requests": 10,
+            "bytes": 100,
+            "cached_requests": 1,
+            "cached_bytes": 10,
+            "encrypted_requests": 5,
+            "page_views": 2,
+            "uniques": 100,
+            "country_map": [],
+        },
+        {
+            "requests": 10,
+            "bytes": 100,
+            "cached_requests": 1,
+            "cached_bytes": 10,
+            "encrypted_requests": 5,
+            "page_views": 2,
+            "uniques": 250,
+            "country_map": [],
+        },
+    ]
+    h = build_http_section(days, top=1)
+    assert h["unique_visitors"] == 350
+    assert h["max_uniques_single_day"] == 250
+    assert h["max_uniques_single_day_human"] == "250"
 
 
 def test_format_helpers():

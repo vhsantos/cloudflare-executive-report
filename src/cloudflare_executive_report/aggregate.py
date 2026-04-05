@@ -164,9 +164,13 @@ def build_http_section(
     total_bytes = sum(int(d.get("bytes") or 0) for d in daily_api_data)
     cached_req = sum(int(d.get("cached_requests") or 0) for d in daily_api_data)
     cached_bytes = sum(int(d.get("cached_bytes") or 0) for d in daily_api_data)
+    uncached_req = max(0, total_req - cached_req)
+    uncached_bytes = max(0, total_bytes - cached_bytes)
     enc_req = sum(int(d.get("encrypted_requests") or 0) for d in daily_api_data)
     page_views = sum(int(d.get("page_views") or 0) for d in daily_api_data)
     uniques = sum(int(d.get("uniques") or 0) for d in daily_api_data)
+    daily_unique_vals = [int(d.get("uniques") or 0) for d in daily_api_data]
+    max_uniques_single_day = max(daily_unique_vals) if daily_unique_vals else 0
 
     country_req: dict[str, int] = {}
     for d in daily_api_data:
@@ -201,15 +205,26 @@ def build_http_section(
     return {
         "total_requests": total_req,
         "total_requests_human": format_count_human(total_req),
+        "cached_requests": cached_req,
+        "cached_requests_human": format_count_human(cached_req),
+        "uncached_requests": uncached_req,
+        "uncached_requests_human": format_count_human(uncached_req),
         "total_bandwidth_bytes": total_bytes,
         "total_bandwidth_human": format_bytes_human(total_bytes),
+        "cached_bandwidth_bytes": cached_bytes,
+        "cached_bandwidth_human": format_bytes_human(cached_bytes),
+        "uncached_bandwidth_bytes": uncached_bytes,
+        "uncached_bandwidth_human": format_bytes_human(uncached_bytes),
         "unique_visitors": uniques,
         "unique_visitors_human": format_count_human(uniques),
+        "max_uniques_single_day": max_uniques_single_day,
+        "max_uniques_single_day_human": format_count_human(max_uniques_single_day),
         "cache_hit_ratio": cache_hit_ratio,
-        "cached_requests": cached_req,
+        # Same as cached_bandwidth_* (dashboard "bytes saved" / cached egress).
         "cached_bytes_saved": cached_bytes,
         "cached_bytes_saved_human": format_bytes_human(cached_bytes),
         "encrypted_requests": enc_req,
+        "encrypted_requests_human": format_count_human(enc_req),
         "page_views": page_views,
         "page_views_human": format_count_human(page_views),
         "top_countries": top_countries,

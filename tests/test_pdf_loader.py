@@ -41,6 +41,12 @@ def test_load_http_single_day() -> None:
     assert r.api_day_count == 1
     assert int(r.rollup.get("total_requests") or 0) == 45200
     assert len(r.daily_requests) == 1
+    assert r.daily_requests[0][1] == 45200
+    assert r.daily_requests_cached[0][1] == 1200
+    assert r.daily_requests_uncached[0][1] == 44000
+    assert r.daily_bytes_cached[0][1] == 45678901
+    assert r.daily_bytes_uncached[0][1] == 912345678 - 45678901
+    assert r.daily_uniques[0][1] == 2100
 
 
 @pytest.mark.skipif(not FIXTURE_CACHE.is_dir(), reason="sample cache fixtures missing")

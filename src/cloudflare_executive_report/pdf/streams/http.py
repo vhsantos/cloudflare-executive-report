@@ -7,6 +7,10 @@ from typing import Any
 
 from reportlab.platypus import Paragraph, Spacer
 
+from cloudflare_executive_report.pdf.charts import (
+    prepare_daily_metric_series,
+    prepare_stacked_daily_metric_series,
+)
 from cloudflare_executive_report.pdf.layout_spec import HttpStreamLayout
 from cloudflare_executive_report.pdf.maps import (
     map_height_in_for_width,
@@ -21,8 +25,8 @@ from cloudflare_executive_report.pdf.primitives import (
 )
 from cloudflare_executive_report.pdf.stream_fragments import (
     append_missing_dates_note,
+    append_png_chart_section,
     append_stream_header,
-    append_timeseries_if_enabled,
 )
 from cloudflare_executive_report.pdf.theme import Theme
 
@@ -39,6 +43,13 @@ def _country_totals_from_rollup(http: dict[str, Any]) -> dict[str, int]:
     return out
 
 
+def _zip_cached_uncached_pairs(
+    cached: list[tuple[date, int | None]],
+    uncached: list[tuple[date, int | None]],
+) -> list[tuple[date, tuple[int | None, int | None]]]:
+    return [(dc[0], (dc[1], du[1])) for dc, du in zip(cached, uncached, strict=True)]
+
+
 def append_http_stream(
     story: list[Any],
     *,
@@ -46,7 +57,11 @@ def append_http_stream(
     period_start: str,
     period_end: str,
     http: dict[str, Any],
-    daily_requests: list[tuple[date, int | None]],
+    daily_requests_cached: list[tuple[date, int | None]],
+    daily_requests_uncached: list[tuple[date, int | None]],
+    daily_bytes_cached: list[tuple[date, int | None]],
+    daily_bytes_uncached: list[tuple[date, int | None]],
+    daily_uniques: list[tuple[date, int | None]],
     missing_dates: list[str],
     layout: HttpStreamLayout,
     theme: Theme,
@@ -69,20 +84,51 @@ def append_http_stream(
     )
     append_missing_dates_note(story, styles, blocks, missing_dates)
 
-    req_h = str(http.get("total_requests_human") or "0")
-    bw_h = str(http.get("total_bandwidth_human") or "0")
+    tr = str(http.get("total_requests_human") or "0")
+    cr = str(http.get("cached_requests_human") or "0")
+    ur = str(http.get("uncached_requests_human") or "0")
     ch = float(http.get("cache_hit_ratio") or 0.0)
+    tb = str(http.get("total_bandwidth_human") or "0")
+    cbw = str(http.get("cached_bandwidth_human") or "0")
+    ubw = str(http.get("uncached_bandwidth_human") or "0")
+    ssl = str(http.get("encrypted_requests_human") or "0")
     uv = str(http.get("unique_visitors_human") or "0")
+    uv_peak = str(http.get("max_uniques_single_day_human") or "0")
     pv = str(http.get("page_views_human") or "0")
-
     if "kpi" in blocks:
         story.append(
             kpi_multi_cell_row(
                 [
-                    ("Total requests", req_h),
-                    ("Bandwidth", bw_h),
+                    ("Total requests", tr),
+                    ("Cached requests", cr),
+                    ("Uncached requests", ur),
                     ("Cache hit ratio", f"{ch:.1f}%"),
-                    ("Unique visitors", uv),
+                ],
+                styles,
+                theme=theme,
+                content_width_in=w_content,
+            )
+        )
+        story.append(Spacer(1, 10))
+        story.append(
+            kpi_multi_cell_row(
+                [
+                    ("Total bandwidth", tb),
+                    ("Cached bandwidth", cbw),
+                    ("Uncached bandwidth", ubw),
+                    ("SSL (HTTPS) requests", ssl),
+                ],
+                styles,
+                theme=theme,
+                content_width_in=w_content,
+            )
+        )
+        story.append(Spacer(1, 10))
+        story.append(
+            kpi_multi_cell_row(
+                [
+                    ("Uniques Visitors (sum)", uv),
+                    ("Peak Uniques Visitors", uv_peak),
                     ("Page views", pv),
                 ],
                 styles,
@@ -127,12 +173,56 @@ def append_http_stream(
             )
             story.append(tbl)
 
-    append_timeseries_if_enabled(
-        story,
-        styles,
-        theme,
-        blocks,
-        daily_requests,
-        chart_title="HTTP requests over period",
-        y_axis_label="Requests",
-    )
+    if "timeseries" in blocks:
+        req_pairs = _zip_cached_uncached_pairs(daily_requests_cached, daily_requests_uncached)
+        png_r, sub_r = prepare_stacked_daily_metric_series(
+            req_pairs,
+            theme,
+            chart_title="HTTP requests over period",
+            bottom_legend="Cached",
+            top_legend="Uncached",
+        )
+        append_png_chart_section(
+            story,
+            styles,
+            theme,
+            blocks,
+            heading="Requests (cached vs uncached)",
+            png=png_r,
+            subtitle=sub_r,
+        )
+
+        bw_pairs = _zip_cached_uncached_pairs(daily_bytes_cached, daily_bytes_uncached)
+        png_b, sub_b = prepare_stacked_daily_metric_series(
+            bw_pairs,
+            theme,
+            chart_title="HTTP bandwidth over period",
+            bottom_legend="Cached",
+            top_legend="Uncached",
+            y_scale="bytes",
+        )
+        append_png_chart_section(
+            story,
+            styles,
+            theme,
+            blocks,
+            heading="Bandwidth (cached vs uncached)",
+            png=png_b,
+            subtitle=sub_b,
+        )
+
+        png_u, sub_u = prepare_daily_metric_series(
+            daily_uniques,
+            theme,
+            chart_title="Unique visitors over period",
+            y_axis_label="Unique visitors",
+        )
+        append_png_chart_section(
+            story,
+            styles,
+            theme,
+            blocks,
+            heading="Unique visitors (per day)",
+            png=png_u,
+            subtitle=sub_u,
+        )

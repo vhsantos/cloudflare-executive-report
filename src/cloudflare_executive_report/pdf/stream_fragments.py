@@ -100,3 +100,26 @@ def append_timeseries_if_enabled(
     tw = min(w_content, 7.1)
     th = tw * 0.38
     story.append(figure_from_bytes(png, width_in=tw, height_in=th))
+
+
+def append_png_chart_section(
+    story: list[Any],
+    styles: Any,
+    theme: Theme,
+    blocks: set[str],
+    *,
+    heading: str,
+    png: bytes,
+    subtitle: str = "",
+) -> None:
+    """Append a titled chart image when ``timeseries`` is enabled and ``png`` is non-empty."""
+    if "timeseries" not in blocks or not png:
+        return
+    w_content = theme.content_width_in()
+    story.append(Spacer(1, 14))
+    story.append(Paragraph(heading, styles["RepSection"]))
+    if subtitle:
+        story.append(Paragraph(f"<i>{subtitle}</i>", styles["RepFootnote"]))
+    tw = min(w_content, 7.1)
+    th = tw * 0.38
+    story.append(figure_from_bytes(png, width_in=tw, height_in=th))
