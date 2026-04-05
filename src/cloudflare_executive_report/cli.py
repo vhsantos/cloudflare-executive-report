@@ -14,6 +14,16 @@ from cloudflare_executive_report.cf_client import (
     CloudflareAuthError,
     CloudflareClient,
 )
+from cloudflare_executive_report.cli_common import (
+    CliConfigError,
+    CliValidationError,
+    cache_has_any_zone_data,
+    load_app_config,
+    resolve_zone_filter,
+    validate_and_build_sync_options,
+    zone_ids_for_report,
+    zones_matching_filter,
+)
 from cloudflare_executive_report.config import (
     AppConfig,
     ZoneEntry,
@@ -27,7 +37,7 @@ from cloudflare_executive_report.fetchers.registry import (
     registered_stream_ids,
 )
 from cloudflare_executive_report.logging_config import effective_debug_enabled, setup_logging
-from cloudflare_executive_report.sync import SyncMode, SyncOptions, run_clean, run_sync
+from cloudflare_executive_report.sync import pdf_report_period_for_options, run_clean, run_sync
 from cloudflare_executive_report.zones_api import (
     find_zone_by_name,
     get_zone,
@@ -68,6 +78,15 @@ def _config_log_level(cfg: AppConfig) -> str:
     return s if s else "info"
 
 
+def _pdf_streams_from_types(type_set: frozenset[str]) -> tuple[str, ...]:
+    """Order follows registry; only streams with PDF sections (dns, http)."""
+    out: list[str] = []
+    for sid in registered_stream_ids():
+        if sid in type_set and sid in ("dns", "http"):
+            out.append(sid)
+    return tuple(out)
+
+
 app = typer.Typer(
     help="Cloudflare Executive Report - multi-zone reporting and cache. All dates are UTC.",
     context_settings={"help_option_names": ["-h", "--help"]},
@@ -78,15 +97,17 @@ _cli_quiet = False
 
 
 def _check_last_argv() -> None:
-    if "--last" not in sys.argv or "sync" not in sys.argv:
+    if "--last" not in sys.argv:
+        return
+    if "sync" not in sys.argv and "report" not in sys.argv:
         return
     i = sys.argv.index("--last")
     if i + 1 >= len(sys.argv):
         typer.echo("Error: --last requires a number. Example: --last 7", err=True)
         raise typer.Exit(exits.INVALID_PARAMS)
     nxt = sys.argv[i + 1]
-    if nxt.startswith("-") and not nxt.lstrip("-").isdigit():
-        typer.echo("Error: --last requires a number. Example: --last 7", err=True)
+    if nxt.startswith("-") or not nxt.isdigit():
+        typer.echo("Error: --last requires a positive integer. Example: --last 7", err=True)
         raise typer.Exit(exits.INVALID_PARAMS)
 
 
@@ -131,6 +152,176 @@ def cmd_init(
 
 zones_app = typer.Typer(help="List and manage zones in config.")
 app.add_typer(zones_app, name="zones")
+
+
+@app.command("report")
+def cmd_report(
+    ctx: typer.Context,
+    last: int | None = typer.Option(None, "--last", help="Last N complete UTC days (requires N)."),
+    start: str | None = typer.Option(
+        None, "--start", help="Start date YYYY-MM-DD (requires --end)."
+    ),
+    end: str | None = typer.Option(None, "--end", help="End date YYYY-MM-DD (requires --start)."),
+    refresh: bool = typer.Option(
+        False, "--refresh", help="Ignore cache and re-fetch active range (during sync step)."
+    ),
+    include_today: bool = typer.Option(
+        False, "--include-today", help="Include today in the report end date (see sync behavior)."
+    ),
+    cache_only: bool = typer.Option(
+        False,
+        "--cache-only",
+        help=(
+            "Skip sync; build PDF from cache only. Date span matches sync JSON "
+            "(indices for --types, or --last / --start/--end when set)."
+        ),
+    ),
+    output: Path | None = typer.Option(
+        None,
+        "-o",
+        "--output",
+        help="Output PDF path.",
+    ),
+    zone: str | None = typer.Option(
+        None,
+        "--zone",
+        help=(
+            "Zone id or name in config; if omitted, uses default_zone when set, "
+            "else all configured zones."
+        ),
+    ),
+    types: str = typer.Option(
+        default_types_csv(),
+        "--types",
+        help=(
+            f"Comma-separated stream ids (default: {default_types_csv()}). "
+            "PDF includes dns and http only."
+        ),
+    ),
+    top: int = typer.Option(
+        10,
+        "--top",
+        help="How many items in each ranked list (e.g. top query names, countries).",
+    ),
+    skip_zone_health: bool = typer.Option(
+        False,
+        "--skip-zone-health",
+        help="Omit zone health (REST); same as sync.",
+    ),
+    config: Path | None = typer.Option(None, "--config", help="Override config path."),
+) -> None:
+    """Sync cache (unless --cache-only) then build a PDF.
+
+    Same date modes as ``cf-report sync``: default is incremental (span from cache
+    indices for selected --types); or use --last N or --start/--end. Omit ``--zone``
+    to include all configured zones.
+    """
+    verbose = ctx.obj.get("verbose", False)
+    quiet = ctx.obj.get("quiet", False)
+
+    if output is None:
+        typer.echo("Error: --output / -o is required.", err=True)
+        raise typer.Exit(exits.INVALID_PARAMS)
+
+    type_set = _parse_sync_types(types)
+    pdf_streams = _pdf_streams_from_types(type_set)
+    if not pdf_streams:
+        typer.echo(
+            "Error: --types must include at least one of dns, http "
+            "(PDF has no section for other streams yet).",
+            err=True,
+        )
+        raise typer.Exit(exits.INVALID_PARAMS)
+
+    try:
+        sync_opts = validate_and_build_sync_options(
+            last=last,
+            start=start,
+            end=end,
+            refresh=refresh,
+            include_today=include_today,
+            quiet=quiet,
+            type_set=type_set,
+            top=top,
+            skip_zone_health=skip_zone_health,
+        )
+    except CliValidationError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(exits.INVALID_PARAMS) from None
+
+    try:
+        cfg = load_app_config(config)
+    except CliConfigError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(exits.GENERAL_ERROR) from None
+
+    setup_logging(verbose=verbose, quiet=quiet, log_level=_config_log_level(cfg))
+
+    zone_effective = resolve_zone_filter(cfg, zone)
+    zone_keys = zone_ids_for_report(cfg, zone_effective)
+    if not zone_keys:
+        typer.echo(
+            "Error: no zones in config. Use `cf-report zones add` or set `zones` / `default_zone`.",
+            err=True,
+        )
+        raise typer.Exit(exits.INVALID_PARAMS)
+
+    scoped_zones = zones_matching_filter(cfg, zone_effective)
+    if cache_only:
+        if zone_effective and not scoped_zones:
+            typer.echo(f"Error: Zone not found in config: {zone_effective!r}.", err=True)
+            raise typer.Exit(exits.INVALID_PARAMS)
+        if not cache_has_any_zone_data(cfg.cache_path(), scoped_zones):
+            typer.echo(
+                "Error: --cache-only requires non-empty cache for the selected zone(s). "
+                "Run `cf-report sync` first (omit --cache-only).",
+                err=True,
+            )
+            raise typer.Exit(exits.INVALID_PARAMS)
+
+    if not cache_only:
+        code = run_sync(
+            cfg,
+            sync_opts,
+            zone_filter=zone_effective,
+            output_path=None,
+            write_stdout=False,
+        )
+        if code != exits.SUCCESS:
+            raise typer.Exit(code)
+
+    try:
+        period_start, period_end = pdf_report_period_for_options(
+            cfg, sync_opts, zone_filter=zone_effective
+        )
+    except ValueError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(exits.INVALID_PARAMS) from None
+
+    try:
+        from cloudflare_executive_report.pdf.layout_spec import ReportSpec
+        from cloudflare_executive_report.pdf.orchestrate import write_report_pdf
+    except ImportError as e:
+        typer.echo("Failed to import PDF report modules.", err=True)
+        typer.echo(str(e), err=True)
+        raise typer.Exit(exits.GENERAL_ERROR) from None
+
+    spec = ReportSpec(
+        zone_ids=zone_keys,
+        start=period_start,
+        end=period_end,
+        streams=pdf_streams,
+        top=top,
+    )
+    try:
+        write_report_pdf(output.resolve(), cfg, spec)
+    except ValueError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(exits.INVALID_PARAMS) from None
+    except Exception as e:
+        typer.echo(f"PDF generation failed: {e}", err=True)
+        raise typer.Exit(exits.GENERAL_ERROR) from None
+    typer.echo(f"Wrote {output.resolve()}")
 
 
 @zones_app.command("list")
@@ -272,78 +463,31 @@ def cmd_sync(
     quiet = ctx.obj.get("quiet", False)
 
     type_set = _parse_sync_types(types)
-    if top < 1:
-        typer.echo("Error: --top must be at least 1.", err=True)
-        raise typer.Exit(exits.INVALID_PARAMS)
-
-    if (start is None) != (end is None):
-        typer.echo("Error: --start and --end must be used together.", err=True)
-        raise typer.Exit(exits.INVALID_PARAMS)
-
-    if last is not None and (start is not None or end is not None):
-        typer.echo("Error: use either --last N or --start/--end, not both.", err=True)
-        raise typer.Exit(exits.INVALID_PARAMS)
-
-    if last is not None and last < 1:
-        typer.echo("Error: --last must be at least 1.", err=True)
-        raise typer.Exit(exits.INVALID_PARAMS)
-
-    if start and end:
-        try:
-            from cloudflare_executive_report.dates import parse_ymd
-
-            parse_ymd(start)
-            parse_ymd(end)
-        except ValueError:
-            typer.echo("Invalid --start/--end (use YYYY-MM-DD).", err=True)
-            raise typer.Exit(exits.INVALID_PARAMS) from None
-
-    if last is not None:
-        mode = SyncMode.last_n
-        opts = SyncOptions(
-            mode=mode,
-            last_n=last,
-            refresh=refresh,
-            include_today=include_today,
-            quiet=quiet,
-            types=type_set,
-            top=top,
-            skip_zone_health=skip_zone_health,
-        )
-    elif start and end:
-        mode = SyncMode.range
-        opts = SyncOptions(
-            mode=mode,
+    try:
+        opts = validate_and_build_sync_options(
+            last=last,
             start=start,
             end=end,
             refresh=refresh,
             include_today=include_today,
             quiet=quiet,
-            types=type_set,
+            type_set=type_set,
             top=top,
             skip_zone_health=skip_zone_health,
         )
-    else:
-        opts = SyncOptions(
-            mode=SyncMode.incremental,
-            refresh=refresh,
-            include_today=include_today,
-            quiet=quiet,
-            types=type_set,
-            top=top,
-            skip_zone_health=skip_zone_health,
-        )
+    except CliValidationError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(exits.INVALID_PARAMS) from None
 
     try:
-        cfg = load_config(config)
-    except (FileNotFoundError, ValueError) as e:
+        cfg = load_app_config(config)
+    except CliConfigError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.GENERAL_ERROR) from None
 
     setup_logging(verbose=verbose, quiet=quiet, log_level=_config_log_level(cfg))
 
-    zone_effective = (zone.strip() if zone else "") or (cfg.default_zone or "").strip()
-    zone_effective = zone_effective or None
+    zone_effective = resolve_zone_filter(cfg, zone)
 
     code = run_sync(
         cfg,
