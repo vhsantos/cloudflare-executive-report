@@ -23,7 +23,8 @@ class Theme:
     bottom_margin_in: float = 0.65
     col_gap_in: float = 0.14
     outer_card_pad_pt: float = 10.0
-    chart_dpi: int = 92
+    # Defaults match ``pdf_image_quality: medium`` (96); PDF build applies preset from config.
+    chart_dpi: int = 96
     map_dpi: int = 96
     title_size: int = 22
     section_size: int = 11

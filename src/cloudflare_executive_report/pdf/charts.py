@@ -40,7 +40,7 @@ def aggregate_values_for_chart(
     if len(dates) > 24:
         dates = dates[-24:]
         vals = vals[-24:]
-        return dates, vals, "Monthly totals — last 24 months shown"
+        return dates, vals, "Monthly totals - last 24 months shown"
     return dates, vals, "Monthly totals (sum per calendar month)"
 
 

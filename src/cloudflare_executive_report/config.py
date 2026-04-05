@@ -9,6 +9,8 @@ from typing import Any
 
 import yaml
 
+from cloudflare_executive_report.pdf.figure_quality import parse_pdf_image_quality
+
 CONFIG_DIR_NAME = ".cf-report"
 CONFIG_FILE_NAME = "config.yaml"
 
@@ -38,6 +40,8 @@ class AppConfig:
     cache_dir: str = "~/.cache/cf-report"
     default_zone: str = ""
     log_level: str = "info"
+    # low | medium | high - matplotlib DPI for PDF maps/charts (smaller file vs sharper plots)
+    pdf_image_quality: str = "medium"
     zones: list[ZoneEntry] = field(default_factory=list)
 
     def cache_path(self) -> Path:
@@ -49,6 +53,7 @@ class AppConfig:
             "cache_dir": self.cache_dir,
             "default_zone": self.default_zone,
             "log_level": self.log_level,
+            "pdf_image_quality": self.pdf_image_quality,
             "zones": [{"id": z.id, "name": z.name} for z in self.zones],
         }
 
@@ -56,11 +61,16 @@ class AppConfig:
     def from_yaml_dict(cls, data: dict[str, Any]) -> AppConfig:
         zones_raw = data.get("zones") or []
         zones = [ZoneEntry(id=str(z["id"]), name=str(z["name"])) for z in zones_raw]
+        pq_raw = data.get("pdf_image_quality")
+        pdf_image_quality = parse_pdf_image_quality(
+            str(pq_raw) if pq_raw is not None else None
+        ).value
         return cls(
             api_token=str(data.get("api_token") or ""),
             cache_dir=str(data.get("cache_dir") or "~/.cache/cf-report"),
             default_zone=str(data.get("default_zone") or ""),
             log_level=str(data.get("log_level") or "info"),
+            pdf_image_quality=pdf_image_quality,
             zones=zones,
         )
 
@@ -96,5 +106,6 @@ def template_config() -> AppConfig:
         cache_dir="~/.cache/cf-report",
         default_zone="",
         log_level="info",
+        pdf_image_quality="medium",
         zones=[],
     )

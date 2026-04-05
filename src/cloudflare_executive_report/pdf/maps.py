@@ -59,7 +59,7 @@ def world_map_from_colos_bytes(
 ) -> bytes:
     w_in = width_in if width_in is not None else theme.content_width_in()
     h_in = map_height_in_for_width(w_in)
-    dpi = min(theme.map_dpi, 110)
+    dpi = theme.map_dpi
     country_totals = dns_queries_by_country(top_colos)
 
     if not top_colos:
@@ -94,7 +94,7 @@ def world_map_from_country_totals_bytes(
 ) -> bytes:
     w_in = width_in if width_in is not None else theme.content_width_in()
     h_in = map_height_in_for_width(w_in)
-    dpi = min(theme.map_dpi, 110)
+    dpi = theme.map_dpi
     if not country_totals:
         return _placeholder_bytes(
             "No geographic breakdown for this period.",

@@ -12,12 +12,16 @@ from reportlab.platypus import PageBreak, Paragraph, Spacer
 from cloudflare_executive_report import __version__
 from cloudflare_executive_report.config import AppConfig
 from cloudflare_executive_report.pdf.document import build_simple_doc, footer_canvas_factory
+from cloudflare_executive_report.pdf.figure_quality import (
+    parse_pdf_image_quality,
+    theme_with_pdf_image_quality,
+)
 from cloudflare_executive_report.pdf.layout_spec import ReportSpec
 from cloudflare_executive_report.pdf.loader import load_dns_for_range, load_http_for_range
 from cloudflare_executive_report.pdf.primitives import make_styles
 from cloudflare_executive_report.pdf.streams.dns import append_dns_stream
 from cloudflare_executive_report.pdf.streams.http import append_http_stream
-from cloudflare_executive_report.pdf.theme import DEFAULT_THEME, Theme
+from cloudflare_executive_report.pdf.theme import Theme
 
 log = logging.getLogger(__name__)
 
@@ -47,7 +51,11 @@ def write_report_pdf(
     *,
     theme: Theme | None = None,
 ) -> None:
-    th = theme or DEFAULT_THEME
+    if theme is not None:
+        th = theme
+    else:
+        q = parse_pdf_image_quality(cfg.pdf_image_quality)
+        th = theme_with_pdf_image_quality(q)
     cache_root = cfg.cache_path()
     styles = make_styles(th)
     story: list[Any] = []
@@ -118,7 +126,7 @@ def write_report_pdf(
                     top=spec.top,
                 )
             else:
-                log.warning("Unknown stream %r — skipped", stream)
+                log.warning("Unknown stream %r - skipped", stream)
 
     if not story:
         msg = "No report content: no cached API data for selected zones and streams."
@@ -126,7 +134,7 @@ def write_report_pdf(
 
     generated = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     zone_label = ", ".join(resolve_zone(cfg, z)[1] for z in spec.zone_ids)
-    footer_left = f"{zone_label} · {spec.start}–{spec.end} (UTC) · Generated {generated}"
+    footer_left = f"{zone_label} · {spec.start}-{spec.end} (UTC) · Generated {generated}"
     footer = footer_canvas_factory(theme=th, left_text=footer_left, tool_version=__version__)
 
     doc = build_simple_doc(str(output_path), theme=th, title="Analytics report")
