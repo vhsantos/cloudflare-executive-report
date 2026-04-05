@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 
 from cloudflare_executive_report.pdf.theme import Theme
@@ -41,6 +41,27 @@ def build_styles(theme: Theme) -> Any:
             leading=13,
             spaceAfter=14,
             textColor=colors.HexColor(theme.muted),
+        )
+    )
+    base.add(
+        ParagraphStyle(
+            name="RepStreamHeadLeft",
+            fontName="Helvetica-Bold",
+            fontSize=theme.title_size,
+            leading=theme.title_size + 4,
+            textColor=colors.HexColor(theme.section_blue),
+            alignment=TA_LEFT,
+            spaceBefore=0,
+            spaceAfter=0,
+        )
+    )
+    base.add(
+        ParagraphStyle(
+            name="RepStreamHeadRight",
+            parent=base["RepSubtitle"],
+            alignment=TA_RIGHT,
+            spaceBefore=0,
+            spaceAfter=0,
         )
     )
     base.add(

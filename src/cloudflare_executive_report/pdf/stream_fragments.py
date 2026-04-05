@@ -6,7 +6,8 @@ from collections.abc import Sequence
 from datetime import date
 from typing import Any
 
-from reportlab.platypus import Paragraph, Spacer
+from reportlab.lib.units import inch
+from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
 
 from cloudflare_executive_report.pdf.charts import prepare_daily_metric_series
 from cloudflare_executive_report.pdf.primitives import figure_from_bytes
@@ -19,25 +20,36 @@ def append_stream_header(
     theme: Theme,
     blocks: set[str],
     *,
-    stream_heading: str,
-    subtitle_lead: str,
+    stream_title: str,
     zone_name: str,
     period_start: str,
     period_end: str,
 ) -> None:
     if "header" not in blocks:
         return
-    story.append(Paragraph("ANALYTICS", styles["RepOverline"]))
-    story.append(Paragraph(stream_heading, styles["RepH1"]))
-    story.append(Spacer(1, 4))
-    story.append(
-        Paragraph(
-            f"<font color='{theme.muted}'>{subtitle_lead} </font>"
-            f"<font color='{theme.primary}'><b>{zone_name}</b></font>"
-            f"<font color='{theme.muted}'> · {period_start} to {period_end} (UTC)</font>",
-            styles["RepSubtitle"],
+    w = theme.content_width_in() * inch
+    left_w = w * 0.38
+    right_w = w * 0.62
+    left_p = Paragraph(stream_title, styles["RepStreamHeadLeft"])
+    right_p = Paragraph(
+        f"<font color='{theme.primary}'><b>{zone_name}</b></font>"
+        f"<font color='{theme.muted}'> · {period_start} to {period_end} (UTC)</font>",
+        styles["RepStreamHeadRight"],
+    )
+    head = Table([[left_p, right_p]], colWidths=[left_w, right_w])
+    head.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]
         )
     )
+    story.append(head)
+    story.append(Spacer(1, 14))
 
 
 def append_missing_dates_note(
