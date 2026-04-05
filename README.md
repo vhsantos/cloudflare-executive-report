@@ -147,4 +147,4 @@ Developer setup, tests, and how to add a new analytics stream: **[CONTRIBUTING.m
 
 ## License / scope
 
-This project is a small CLI and JSON reporter; it does **not** ship PDF or email.
+This project is a CLI for cache sync and **PDF analytics reports** (`cf-report report`); it does not ship email.
