@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 
 from cloudflare_executive_report.pdf.theme import Theme
@@ -85,6 +86,20 @@ def build_styles(theme: Theme) -> Any:
             fontSize=20,
             leading=24,
             textColor=colors.HexColor(theme.slate),
+        )
+    )
+    base.add(
+        ParagraphStyle(
+            name="RepKpiLabelCenter",
+            parent=base["RepKpiLabel"],
+            alignment=TA_CENTER,
+        )
+    )
+    base.add(
+        ParagraphStyle(
+            name="RepKpiValueCenter",
+            parent=base["RepKpiValue"],
+            alignment=TA_CENTER,
         )
     )
     base.add(

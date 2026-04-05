@@ -5,9 +5,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from reportlab.lib import colors
-from reportlab.lib.units import inch
-from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import Paragraph, Spacer
 
 from cloudflare_executive_report.pdf.layout_spec import HttpStreamLayout
 from cloudflare_executive_report.pdf.maps import (
@@ -16,6 +14,7 @@ from cloudflare_executive_report.pdf.maps import (
 )
 from cloudflare_executive_report.pdf.primitives import (
     figure_from_bytes,
+    kpi_multi_cell_row,
     make_styles,
     ranked_rows_from_dicts,
     table_with_bars,
@@ -78,62 +77,18 @@ def append_http_stream(
     pv = str(http.get("page_views_human") or "0")
 
     if "kpi" in blocks:
-        w_full = w_content * inch
-        cell_w = w_full / 2 - 8
-        kpi_data = [
-            [
-                Table(
-                    [
-                        [Paragraph("Total requests", styles["RepKpiLabel"])],
-                        [Paragraph(req_h, styles["RepKpiValue"])],
-                    ],
-                    colWidths=[cell_w],
-                ),
-                Table(
-                    [
-                        [Paragraph("Bandwidth", styles["RepKpiLabel"])],
-                        [Paragraph(bw_h, styles["RepKpiValue"])],
-                    ],
-                    colWidths=[cell_w],
-                ),
-            ],
-            [
-                Table(
-                    [
-                        [Paragraph("Cache hit ratio", styles["RepKpiLabel"])],
-                        [Paragraph(f"{ch:.1f}%", styles["RepKpiValue"])],
-                    ],
-                    colWidths=[cell_w],
-                ),
-                Table(
-                    [
-                        [Paragraph("Unique visitors", styles["RepKpiLabel"])],
-                        [Paragraph(uv, styles["RepKpiValue"])],
-                    ],
-                    colWidths=[cell_w],
-                ),
-            ],
-        ]
-        kpi = Table(kpi_data, colWidths=[w_full / 2, w_full / 2])
-        kpi.setStyle(
-            TableStyle(
-                [
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                    ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(theme.row_alt)),
-                    ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor(theme.border)),
-                    ("LINEBELOW", (0, 0), (-1, -1), 1.5, colors.HexColor(theme.primary)),
-                    ("LEFTPADDING", (0, 0), (-1, -1), 14),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), 14),
-                    ("TOPPADDING", (0, 0), (-1, -1), 12),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 14),
-                ]
-            )
-        )
-        story.append(kpi)
         story.append(
-            Paragraph(
-                f"<font color='{theme.muted}' size='8'>Page views: {pv}</font>",
-                styles["RepFootnote"],
+            kpi_multi_cell_row(
+                [
+                    ("Total requests", req_h),
+                    ("Bandwidth", bw_h),
+                    ("Cache hit ratio", f"{ch:.1f}%"),
+                    ("Unique visitors", uv),
+                    ("Page views", pv),
+                ],
+                styles,
+                theme=theme,
+                content_width_in=w_content,
             )
         )
         story.append(Spacer(1, 18))

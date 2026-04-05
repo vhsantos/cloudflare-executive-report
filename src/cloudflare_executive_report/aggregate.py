@@ -60,8 +60,8 @@ def format_bytes_human(n: int) -> str:
         v /= 1024.0
         u += 1
     if u == 0:
-        return f"{int(v)} B"
-    return f"{v:.1f} {units[u]}"
+        return f"{int(v)}B"
+    return f"{v:.1f}{units[u]}"
 
 
 def format_count_human(n: int) -> str:

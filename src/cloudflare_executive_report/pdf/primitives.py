@@ -7,11 +7,48 @@ from typing import Any
 
 from reportlab.lib import colors
 from reportlab.lib.units import inch
-from reportlab.platypus import Image, Paragraph, Table, TableStyle
+from reportlab.platypus import Flowable, Image, Paragraph, Table, TableStyle
 
 from cloudflare_executive_report.aggregate import format_count_human
 from cloudflare_executive_report.pdf.styles import build_styles
 from cloudflare_executive_report.pdf.theme import Theme
+
+
+class KpiColumnDivider(Flowable):
+    """Thin vertical rule spanning ``span_frac`` of the cell height (centered)."""
+
+    def __init__(
+        self,
+        *,
+        line_color: Any,
+        width_pt: float = 1.25,
+        span_frac: float = 0.8,
+        line_width: float = 0.5,
+    ) -> None:
+        super().__init__()
+        self.line_color = line_color
+        self.width_pt = width_pt
+        self.span_frac = span_frac
+        self.line_width = line_width
+        self._h = 48.0
+
+    def wrap(self, availWidth: float, availHeight: float | None = None) -> tuple[float, float]:
+        ah = float(availHeight) if availHeight else 0.0
+        if ah <= 0.0 or ah > 800.0:
+            ah = 52.0
+        self._h = max(ah, 36.0)
+        return (self.width_pt, self._h)
+
+    def draw(self) -> None:
+        h = self._h
+        margin = h * (1.0 - self.span_frac) / 2.0
+        y0, y1 = margin, h - margin
+        self.canv.saveState()
+        self.canv.setStrokeColor(self.line_color)
+        self.canv.setLineWidth(self.line_width)
+        mid = self.width_pt / 2.0
+        self.canv.line(mid, y0, mid, y1)
+        self.canv.restoreState()
 
 
 def section_title(text: str, styles: Any, theme: Theme) -> Paragraph:
@@ -192,6 +229,82 @@ def colo_table_wrap(
     return wrap
 
 
+def kpi_multi_cell_row(
+    cells: list[tuple[str, str]],
+    styles: Any,
+    *,
+    theme: Theme,
+    content_width_in: float,
+) -> Table:
+    """KPI band: N columns, short vertical dividers, centered text, tighter padding."""
+    if not cells:
+        raise ValueError("kpi_multi_cell_row requires at least one cell")
+    w_full = content_width_in * inch
+    n = len(cells)
+    sep_w = 1.5
+    gap_total = max(0, n - 1) * sep_w
+    cell_w = (w_full - gap_total) / n
+    div_color = colors.HexColor(theme.border)
+
+    row: list[Any] = []
+    col_widths: list[float] = []
+    for i, (label, value) in enumerate(cells):
+        if i > 0:
+            row.append(
+                KpiColumnDivider(
+                    line_color=div_color,
+                    width_pt=sep_w,
+                    span_frac=0.8,
+                )
+            )
+            col_widths.append(sep_w)
+        inner = Table(
+            [
+                [Paragraph(label, styles["RepKpiLabelCenter"])],
+                [Paragraph(value, styles["RepKpiValueCenter"])],
+            ],
+            colWidths=[cell_w],
+        )
+        inner.setStyle(
+            TableStyle(
+                [
+                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 2),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                ]
+            )
+        )
+        row.append(inner)
+        col_widths.append(cell_w)
+
+    summary = Table([row], colWidths=col_widths)
+    style_cmds: list[tuple[Any, ...]] = [
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(theme.row_alt)),
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor(theme.border)),
+        ("LINEBELOW", (0, 0), (-1, -1), 1.5, colors.HexColor(theme.primary)),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 12),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
+    ]
+    for c in range(1, len(col_widths), 2):
+        style_cmds.extend(
+            [
+                ("LEFTPADDING", (c, 0), (c, 0), 0),
+                ("RIGHTPADDING", (c, 0), (c, 0), 0),
+                ("TOPPADDING", (c, 0), (c, 0), 0),
+                ("BOTTOMPADDING", (c, 0), (c, 0), 0),
+            ]
+        )
+    summary.setStyle(TableStyle(style_cmds))
+    return summary
+
+
 def kpi_two_cell_row(
     left_label: str,
     left_value: str,
@@ -202,37 +315,12 @@ def kpi_two_cell_row(
     theme: Theme,
     content_width_in: float,
 ) -> Table:
-    w_full = content_width_in * inch
-    left = Table(
-        [
-            [Paragraph(left_label, styles["RepKpiLabel"])],
-            [Paragraph(left_value, styles["RepKpiValue"])],
-        ],
-        colWidths=[w_full / 2 - 6],
+    return kpi_multi_cell_row(
+        [(left_label, left_value), (right_label, right_value)],
+        styles,
+        theme=theme,
+        content_width_in=content_width_in,
     )
-    right = Table(
-        [
-            [Paragraph(right_label, styles["RepKpiLabel"])],
-            [Paragraph(right_value, styles["RepKpiValue"])],
-        ],
-        colWidths=[w_full / 2 - 6],
-    )
-    summary = Table([[left, right]], colWidths=[w_full / 2, w_full / 2])
-    summary.setStyle(
-        TableStyle(
-            [
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(theme.row_alt)),
-                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor(theme.border)),
-                ("LINEBELOW", (0, 0), (-1, -1), 1.5, colors.HexColor(theme.primary)),
-                ("LEFTPADDING", (0, 0), (-1, -1), 16),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 16),
-                ("TOPPADDING", (0, 0), (-1, -1), 14),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 16),
-            ]
-        )
-    )
-    return summary
 
 
 def make_styles(theme: Theme) -> Any:
