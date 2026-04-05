@@ -4,14 +4,57 @@ from __future__ import annotations
 
 import io
 from typing import Any
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.units import inch
-from reportlab.platypus import Flowable, Image, Paragraph, Table, TableStyle
+from reportlab.platypus import Flowable, Image, KeepInFrame, Paragraph, Table, TableStyle
 
 from cloudflare_executive_report.aggregate import format_count_human
 from cloudflare_executive_report.pdf.styles import build_styles
 from cloudflare_executive_report.pdf.theme import Theme
+
+# ``KeepInFrame`` maxWidth (pt). ``wrap()`` uses ``min(this, cell_availWidth)``; a huge
+# value means the table cell’s inner width (after padding) is always the effective cap,
+# so we do not duplicate column-width math here.
+_KEEP_IN_FRAME_MAX_WIDTH_PT = 1e9
+
+# Max height (pt) for the ranked name-column clip box. ``KeepInFrame.wrap`` uses
+# ``min(maxHeight, availHeight)``; with ``mode="truncate"``, drawing outside that
+# rectangle is clipped so labels do not overlap the count/bar columns. ~11pt matches
+# one line at ``RepRankedLabel`` (9pt / 11 leading); raise if two lines should show.
+_RANKED_LABEL_LINE_PT = 11.0
+
+
+def ranked_table_label_cell(text: str, styles: Any) -> KeepInFrame:
+    """Clip a ranked-table label to its cell (``Table`` has no overflow flag).
+
+    Wraps a ``Paragraph`` in ``KeepInFrame(..., mode="truncate")``. ReportLab clips
+    drawing to a rectangle so long names (e.g. DNS qnames) do not spill into sibling
+    columns.
+
+    ``KeepInFrame(maxWidth, maxHeight, ...)`` are caps; ``wrap()`` intersects them with
+    the parent cell's ``availWidth`` / ``availHeight``:
+
+    * ``maxWidth`` - ``_KEEP_IN_FRAME_MAX_WIDTH_PT`` (``1e9``) so ``min(maxWidth,
+      availWidth)`` is always the cell inner width; avoids duplicating column math.
+    * ``maxHeight`` - ``_RANKED_LABEL_LINE_PT``; extra vertical content is clipped.
+
+    Args:
+        text: Label string; ``&``, ``<``, ``>`` escaped for ReportLab markup.
+        styles: From ``build_styles``; must define ``RepRankedLabel``.
+
+    Returns:
+        Flowable for column 0 of ``table_with_bars`` / ``colo_table_wrap``.
+    """
+    para = Paragraph(escape(str(text).strip()), styles["RepRankedLabel"])
+    return KeepInFrame(
+        _KEEP_IN_FRAME_MAX_WIDTH_PT,
+        _RANKED_LABEL_LINE_PT,
+        [para],
+        mode="truncate",
+        hAlign="LEFT",
+    )
 
 
 class KpiColumnDivider(Flowable):
@@ -138,7 +181,6 @@ def _ranked_inner_table_style(num_rows: int, theme: Theme) -> list:
         return []
     last = num_rows - 1
     styles: list[tuple] = [
-        ("FONT", (0, 0), (0, last), "Helvetica", 9),
         ("FONT", (1, 0), (1, last), "Helvetica", 9),
         ("TEXTCOLOR", (0, 0), (-1, last), colors.HexColor(theme.slate)),
         ("ALIGN", (0, 0), (0, last), "LEFT"),
@@ -171,7 +213,8 @@ def table_with_bars(
     bar_total_pt = col_pt[2]
     data_rows: list[list[Any]] = []
     for label, cnt_s, bar_w in rows:
-        data_rows.append([label, cnt_s, _bar_cell_table(bar_total_pt, bar_w, theme)])
+        bar_cell = _bar_cell_table(bar_total_pt, bar_w, theme)
+        data_rows.append([ranked_table_label_cell(str(label), styles), cnt_s, bar_cell])
     inner = Table(data_rows, colWidths=col_pt)
     inner.setStyle(TableStyle(_ranked_inner_table_style(len(data_rows), theme)))
     title_p = Paragraph(f"<font color='{theme.slate}'>{title}</font>", styles["RepCardTitle"])
@@ -202,6 +245,7 @@ def colo_table_wrap(
     *,
     total_width_in: float,
     theme: Theme,
+    styles: Any,
 ) -> Table:
     inner_w_pt = _inner_grid_width_pt(total_width_in, theme)
     ratios = (0.18, 0.16, 0.66)
@@ -209,7 +253,8 @@ def colo_table_wrap(
     bar_total_pt = col_pt[2]
     data_rows: list[list[Any]] = []
     for label, cnt_s, bar_w in colo_rows:
-        data_rows.append([label, cnt_s, _bar_cell_table(bar_total_pt, bar_w, theme)])
+        bar_cell = _bar_cell_table(bar_total_pt, bar_w, theme)
+        data_rows.append([ranked_table_label_cell(str(label), styles), cnt_s, bar_cell])
     t = Table(data_rows, colWidths=col_pt)
     t.setStyle(TableStyle(_ranked_inner_table_style(len(data_rows), theme)))
     wrap = Table([[t]], colWidths=[total_width_in * inch])

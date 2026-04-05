@@ -89,7 +89,9 @@ def append_dns_stream(
 
     if "colo_table" in blocks:
         colo_rows = ranked_rows_from_dicts(top_colos, top, "colo")
-        story.append(colo_table_wrap(colo_rows, total_width_in=w_content, theme=theme))
+        story.append(
+            colo_table_wrap(colo_rows, total_width_in=w_content, theme=theme, styles=styles)
+        )
         story.append(Spacer(1, 18))
 
     qnames = ranked_rows_from_dicts(list(dns.get("top_query_names") or []), top, "name")

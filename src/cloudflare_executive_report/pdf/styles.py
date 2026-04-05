@@ -143,6 +143,15 @@ def build_styles(theme: Theme) -> Any:
     )
     base.add(
         ParagraphStyle(
+            name="RepRankedLabel",
+            fontName="Helvetica",
+            fontSize=9,
+            leading=11,
+            textColor=colors.HexColor(theme.slate),
+        )
+    )
+    base.add(
+        ParagraphStyle(
             name="RepFootnote",
             fontName="Helvetica",
             fontSize=8,
