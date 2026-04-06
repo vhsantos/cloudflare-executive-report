@@ -44,6 +44,7 @@ def append_security_stream(
     layout: SecurityStreamLayout,
     theme: Theme,
     top: int,
+    cache_stream_in_report: bool = False,
 ) -> None:
     styles = make_styles(theme)
     w_content = theme.content_width_in()
@@ -52,6 +53,8 @@ def append_security_stream(
     half_inner = theme.half_inner_width_in()
 
     blocks = set(layout.blocks)
+    # Same breakdown as the dedicated Cache page (from security aggregate); skip when both run.
+    show_cache_perf = ("cache" in blocks) and not cache_stream_in_report
 
     append_stream_header(
         story,
@@ -294,7 +297,7 @@ def append_security_stream(
         list(security.get("http_methods_breakdown") or []), top, "method"
     )
 
-    if "cache" in blocks and "methods" in blocks and (cache_rows or method_rows):
+    if show_cache_perf and "methods" in blocks and (cache_rows or method_rows):
         left = (
             table_with_bars(
                 "Cache performance",
@@ -324,7 +327,7 @@ def append_security_stream(
         story.append(two_col)
         story.append(Spacer(1, 12))
     else:
-        if "cache" in blocks and cache_rows:
+        if show_cache_perf and cache_rows:
             story.append(
                 table_with_bars(
                     "Cache performance",
