@@ -9,7 +9,6 @@ from typing import Any
 
 from reportlab.platypus import PageBreak, Paragraph, Spacer
 
-from cloudflare_executive_report import __version__
 from cloudflare_executive_report.config import AppConfig
 from cloudflare_executive_report.pdf.document import build_simple_doc, footer_canvas_factory
 from cloudflare_executive_report.pdf.figure_quality import (
@@ -195,10 +194,9 @@ def write_report_pdf(
         msg = "No report content: no cached API data for selected zones and streams."
         raise ValueError(msg)
 
-    generated = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    zone_label = ", ".join(resolve_zone(cfg, z)[1] for z in spec.zone_ids)
-    footer_left = f"{zone_label} · {spec.start}-{spec.end} (UTC) · Generated {generated}"
-    footer = footer_canvas_factory(theme=th, left_text=footer_left, tool_version=__version__)
+    generated = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+    footer_left = f"Generated: {generated}"
+    footer = footer_canvas_factory(theme=th, left_text=footer_left)
 
     doc = build_simple_doc(str(output_path), theme=th, title="Analytics report")
     doc.build(story, onFirstPage=footer, onLaterPages=footer)

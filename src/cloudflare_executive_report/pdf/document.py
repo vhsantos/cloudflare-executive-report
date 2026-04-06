@@ -36,16 +36,11 @@ def draw_report_footer(
     *,
     theme: Theme,
     left_text: str,
-    tool_version: str,
 ) -> None:
     canvas_obj.saveState()
     canvas_obj.setFont("Helvetica", 8)
     canvas_obj.setFillColor(colors.HexColor(theme.muted))
-    parts = [left_text]
-    if tool_version:
-        parts.append(f"v{tool_version}")
-    left = " · ".join(p for p in parts if p)
-    canvas_obj.drawString(theme.margin_in * inch, 0.42 * inch, left)
+    canvas_obj.drawString(theme.margin_in * inch, 0.42 * inch, left_text)
     page_w = doc.pagesize[0]
     canvas_obj.drawRightString(
         page_w - theme.margin_in * inch,
@@ -55,10 +50,9 @@ def draw_report_footer(
     canvas_obj.restoreState()
 
 
-def footer_canvas_factory(*, theme: Theme, left_text: str, tool_version: str):
+def footer_canvas_factory(*, theme: Theme, left_text: str):
     return partial(
         draw_report_footer,
         theme=theme,
         left_text=left_text,
-        tool_version=tool_version,
     )
