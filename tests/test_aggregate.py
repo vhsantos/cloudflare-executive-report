@@ -117,6 +117,21 @@ def test_format_helpers():
     assert format_count_human(1500) == "1.5K"
 
 
+def test_build_security_section_empty_days():
+    sec = build_security_section([], top=10)
+    assert sec["total_events"] == 0
+    assert sec["top_actions"] == []
+    assert sec["timeseries_daily"] == []
+    assert sec["top_attack_sources"] == []
+    assert sec["top_source_countries"] == []
+    assert sec["cache_status_breakdown"] == []
+    assert sec["http_methods_breakdown"] == []
+    assert sec["top_attack_paths"] == []
+    assert sec["top_security_services"] == []
+    assert "http_requests_sampled" not in sec
+    assert "actions_among_mitigated" not in sec
+
+
 def test_build_security_section_by_action():
     days = [
         {
@@ -136,6 +151,82 @@ def test_build_security_section_by_action():
     assert sec["total_events"] == 20
     assert sec["top_actions"][0]["action"] == "block"
     assert sec["top_actions"][0]["count"] == 12
+    assert sec["timeseries_daily"] == []
+
+
+def test_build_security_section_coalesces_http_sampled_from_matrix_totals():
+    """If daily ``http_requests_sampled`` is missing, total is mitigated + served parts."""
+    days = [
+        {
+            "date": "2026-04-01",
+            "by_action": [{"value": "block", "count": 1}],
+            "mitigated_count": 100,
+            "served_cf_count": 0,
+            "served_origin_count": 0,
+        },
+    ]
+    sec = build_security_section(days, top=5)
+    assert sec["http_requests_sampled"] == 100
+    assert sec["mitigation_rate_pct"] == 100.0
+
+
+def test_build_security_section_http_enrichment_merges():
+    days = [
+        {
+            "date": "2026-04-01",
+            "by_action": [{"value": "managed_challenge", "count": 5}],
+            "http_requests_sampled": 1000,
+            "mitigated_count": 50,
+            "served_cf_count": 200,
+            "served_origin_count": 750,
+            "http_by_cache_status": [{"value": "hit", "count": 200}],
+            "by_http_method": [{"value": "GET", "count": 900}],
+        },
+        {
+            "date": "2026-04-02",
+            "by_action": [{"value": "block", "count": 2}],
+            "http_requests_sampled": 1000,
+            "mitigated_count": 10,
+            "served_cf_count": 100,
+            "served_origin_count": 890,
+        },
+    ]
+    sec = build_security_section(days, top=5)
+    assert sec["http_requests_sampled"] == 2000
+    assert sec["mitigated_count"] == 60
+    assert sec["mitigation_rate_pct"] == 3.0
+    assert len(sec["timeseries_daily"]) == 2
+    assert sec["actions_among_mitigated"][0]["action"] == "managed_challenge"
+
+
+def test_build_security_section_merges_attack_buckets_across_days():
+    days = [
+        {
+            "date": "2026-04-01",
+            "by_action": [{"value": "block", "count": 3}],
+            "by_attack_country": [{"value": "US", "count": 2}, {"value": "DE", "count": 1}],
+            "attack_source_buckets": [
+                {"ip": "10.0.0.1", "country": "US", "count": 2},
+                {"ip": "10.0.0.2", "country": "DE", "count": 1},
+            ],
+        },
+        {
+            "date": "2026-04-02",
+            "by_action": [{"value": "block", "count": 5}],
+            "by_attack_country": [{"value": "US", "count": 4}, {"value": "DE", "count": 1}],
+            "attack_source_buckets": [
+                {"ip": "10.0.0.1", "country": "US", "count": 3},
+            ],
+        },
+    ]
+    sec = build_security_section(days, top=10)
+    assert sec["total_events"] == 8
+    tops = {r["ip"]: r["count"] for r in sec["top_attack_sources"]}
+    assert tops["10.0.0.1"] == 5
+    assert tops["10.0.0.2"] == 1
+    cc = {r["code"]: r["requests"] for r in sec["top_source_countries"]}
+    assert cc["US"] == 6
+    assert cc["DE"] == 2
 
 
 def test_fetcher_registry_matches_section_builders():
@@ -143,21 +234,3 @@ def test_fetcher_registry_matches_section_builders():
     from cloudflare_executive_report.fetchers.registry import FETCHER_REGISTRY
 
     assert set(FETCHER_REGISTRY.keys()) == set(SECTION_BUILDERS.keys())
-
-
-def test_build_security_section_legacy_events():
-    days = [
-        {
-            "events": [
-                {"action": "block"},
-                {"action": "block"},
-                {"action": "managed_challenge"},
-            ]
-        }
-    ]
-    sec = build_security_section(days, top=5)
-    assert sec["total_events"] == 3
-    assert {r["action"]: r["count"] for r in sec["top_actions"]} == {
-        "block": 2,
-        "managed_challenge": 1,
-    }

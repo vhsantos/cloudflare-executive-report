@@ -3,11 +3,52 @@
   "_source": "api",
   "_source_timestamp": "2026-04-04T12:00:00Z",
   "data": {
+    "date": "2026-04-01",
+    "payload_kind": "http_security_groups",
     "by_action": [
       { "value": "managed_challenge", "count": 820 },
       { "value": "block", "count": 45 },
-      { "value": "log", "count": 12 }
+      { "value": "js_challenge", "count": 12 }
     ],
-    "total_events": 877
+    "by_source": [
+      { "value": "botFight", "count": 820 },
+      { "value": "waf", "count": 45 }
+    ],
+    "by_attack_country": [
+      { "value": "US", "count": 400 },
+      { "value": "DE", "count": 200 },
+      { "value": "SG", "count": 277 }
+    ],
+    "by_attack_path": [
+      { "value": "/wp-admin", "count": 300 },
+      { "value": "/xmlrpc.php", "count": 150 },
+      { "value": "/api/login", "count": 120 }
+    ],
+    "attack_source_buckets": [
+      {
+        "ip": "198.51.100.10",
+        "country": "US",
+        "count": 120
+      },
+      {
+        "ip": "203.0.113.5",
+        "country": "DE",
+        "count": 45
+      }
+    ],
+    "http_requests_sampled": 45200,
+    "mitigated_count": 865,
+    "served_cf_count": 12000,
+    "served_origin_count": 32335,
+    "http_by_cache_status": [
+      { "value": "dynamic", "count": 30000 },
+      { "value": "hit", "count": 12000 },
+      { "value": "none", "count": 3200 }
+    ],
+    "by_http_method": [
+      { "value": "GET", "count": 40000 },
+      { "value": "POST", "count": 4200 },
+      { "value": "HEAD", "count": 1000 }
+    ]
   }
 }

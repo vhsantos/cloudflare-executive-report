@@ -9,9 +9,12 @@ import pytest
 pytest.importorskip("matplotlib")
 
 from cloudflare_executive_report.pdf.charts import (
+    _triple_to_percent_stack,
     aggregate_stacked_pairs_for_chart,
     prepare_daily_metric_series,
     prepare_stacked_daily_metric_series,
+    prepare_triple_line_daily_metric_series,
+    prepare_triple_stacked_daily_metric_series,
 )
 from cloudflare_executive_report.pdf.theme import DEFAULT_THEME
 
@@ -56,6 +59,66 @@ def test_prepare_daily_metric_series_non_empty() -> None:
         DEFAULT_THEME,
         chart_title="Uniques",
         y_axis_label="UV",
+    )
+    assert len(png) > 500
+
+
+def test_prepare_triple_stacked_daily_metric_series_non_empty() -> None:
+    pts = [
+        (date(2026, 4, 1), (100, 200, 700)),
+        (date(2026, 4, 2), (110, 190, 700)),
+        (date(2026, 4, 3), (90, 210, 700)),
+    ]
+    png, _sub = prepare_triple_stacked_daily_metric_series(
+        pts,
+        DEFAULT_THEME,
+        chart_title="Security triple",
+        legend_bottom="Mitigated",
+        legend_mid="CF",
+        legend_top="Origin",
+    )
+    assert len(png) > 500
+
+
+def test_triple_to_percent_stack_sums_100() -> None:
+    m, cf, o = _triple_to_percent_stack([10.0], [30.0], [60.0])
+    assert m[0] == pytest.approx(10.0)
+    assert cf[0] == pytest.approx(30.0)
+    assert o[0] == pytest.approx(60.0)
+    assert m[0] + cf[0] + o[0] == pytest.approx(100.0)
+
+
+def test_prepare_triple_line_daily_metric_series_non_empty() -> None:
+    pts = [
+        (date(2026, 4, 1), (100, 200, 700)),
+        (date(2026, 4, 2), (110, 190, 700)),
+        (date(2026, 4, 3), (90, 210, 700)),
+    ]
+    png, _sub = prepare_triple_line_daily_metric_series(
+        pts,
+        DEFAULT_THEME,
+        chart_title="Triple lines",
+        legend_mit="Mitigated",
+        legend_cf="CF",
+        legend_or="Origin",
+    )
+    assert len(png) > 500
+
+
+def test_prepare_triple_stacked_daily_metric_series_percent_mode() -> None:
+    pts = [
+        (date(2026, 4, 1), (100, 200, 700)),
+        (date(2026, 4, 2), (110, 190, 700)),
+        (date(2026, 4, 3), (90, 210, 700)),
+    ]
+    png, _sub = prepare_triple_stacked_daily_metric_series(
+        pts,
+        DEFAULT_THEME,
+        chart_title="Security triple %",
+        legend_bottom="Mitigated",
+        legend_mid="CF",
+        legend_top="Origin",
+        stack_mode="percent",
     )
     assert len(png) > 500
 
