@@ -5,6 +5,11 @@ from cloudflare_executive_report.fetchers.cache import (
 )
 from cloudflare_executive_report.fetchers.dns import DnsFetcher, fetch_dns_for_bounds
 from cloudflare_executive_report.fetchers.http import HttpFetcher, fetch_http_for_date
+from cloudflare_executive_report.fetchers.http_adaptive import (
+    HttpAdaptiveFetcher,
+    fetch_http_adaptive_for_bounds,
+    fetch_http_adaptive_for_date,
+)
 from cloudflare_executive_report.fetchers.registry import (
     FETCHER_REGISTRY,
     day_cache_path,
@@ -24,6 +29,7 @@ __all__ = [
     "DnsFetcher",
     "Fetcher",
     "HttpFetcher",
+    "HttpAdaptiveFetcher",
     "SecurityFetcher",
     "day_cache_path",
     "default_types_csv",
@@ -31,6 +37,8 @@ __all__ = [
     "fetch_cache_for_date",
     "fetch_dns_for_bounds",
     "fetch_http_for_date",
+    "fetch_http_adaptive_for_bounds",
+    "fetch_http_adaptive_for_date",
     "fetch_security_for_bounds",
     "fetch_security_for_date",
     "registered_stream_ids",

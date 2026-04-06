@@ -1,6 +1,7 @@
 from cloudflare_executive_report.aggregate import (
     build_cache_section,
     build_dns_section,
+    build_http_adaptive_section,
     build_http_section,
     build_report,
     build_security_section,
@@ -134,6 +135,38 @@ def test_build_http_section_max_uniques_across_days():
     assert h["unique_visitors"] == 350
     assert h["max_uniques_single_day"] == 250
     assert h["max_uniques_single_day_human"] == "250"
+
+
+def test_build_http_adaptive_section_merges_days():
+    days = [
+        {
+            "http_requests_analyzed": 1000,
+            "status_4xx_count": 40,
+            "status_5xx_count": 10,
+            "latency_p50_ms": 120.0,
+            "latency_p95_ms": 550.0,
+            "origin_response_duration_avg_ms": 300.0,
+            "by_edge_status": [{"value": "200", "count": 900}, {"value": "404", "count": 40}],
+        },
+        {
+            "http_requests_analyzed": 500,
+            "status_4xx_count": 30,
+            "status_5xx_count": 20,
+            "latency_p50_ms": 80.0,
+            "latency_p95_ms": 300.0,
+            "origin_response_duration_avg_ms": 180.0,
+            "by_edge_status": [{"value": "200", "count": 450}, {"value": "500", "count": 20}],
+        },
+    ]
+    out = build_http_adaptive_section(days, top=5)
+    assert out["http_requests_analyzed"] == 1500
+    assert out["status_4xx_count"] == 70
+    assert out["status_5xx_count"] == 30
+    assert out["status_4xx_rate_pct"] == 4.7
+    assert out["status_5xx_rate_pct"] == 2.0
+    assert out["latency_p50_ms"] == 106.67
+    assert out["latency_p95_ms"] == 466.67
+    assert out["origin_response_duration_avg_ms"] == 260.0
 
 
 def test_build_cache_section_merges_status_and_paths():

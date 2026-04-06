@@ -86,3 +86,23 @@ def test_build_executive_summary_fallback_threats_from_top_actions():
         warnings=[],
     )
     assert out["kpis"]["security"]["threats_mitigated"] == 7
+
+
+def test_build_executive_summary_uses_adaptive_http_takeaway_when_available():
+    out = build_executive_summary(
+        zone_name="example.com",
+        zone_health={"zone_status": "active"},
+        dns={"total_queries": 100, "average_qps": 0.2},
+        http={"total_requests": 860007},
+        security={"mitigated_count": 10, "mitigation_rate_pct": 1.0},
+        cache={},
+        http_adaptive={
+            "status_4xx_rate_pct": 0.99,
+            "status_5xx_rate_pct": 0.02,
+            "origin_response_duration_avg_ms": 264.2,
+        },
+        warnings=[],
+    )
+    assert "reliability stayed healthy with 5xx at 0.02%" in out["takeaways"][0]
+    assert "Client-side friction was 4xx at 0.99%" in out["takeaways"][0]
+    assert "Origin response averaged 264.2 ms." in out["takeaways"][0]

@@ -12,6 +12,7 @@ from typing import Any
 from cloudflare_executive_report.aggregate import (
     build_cache_section,
     build_dns_section,
+    build_http_adaptive_section,
     build_http_section,
     build_security_section,
 )
@@ -64,6 +65,14 @@ class CacheLoadResult:
     warnings: list[str] = field(default_factory=list)
     api_day_count: int = 0
     http_mime_1d: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
+class HttpAdaptiveLoadResult:
+    rollup: dict[str, Any]
+    missing_dates: list[str]
+    warnings: list[str] = field(default_factory=list)
+    api_day_count: int = 0
 
 
 @dataclass
@@ -306,6 +315,36 @@ def load_http_for_range(
         daily_bytes_uncached=dbu,
         daily_uniques=duv,
         missing_dates=missing2,
+        warnings=warns,
+        api_day_count=n_api,
+    )
+
+
+def load_http_adaptive_for_range(
+    cache_root: Path,
+    zone_id: str,
+    zone_name: str,
+    start: str,
+    end: str,
+    *,
+    top: int,
+) -> HttpAdaptiveLoadResult:
+    scratch = _load_cached_stream_days(
+        cache_root,
+        zone_id,
+        zone_name,
+        start,
+        end,
+        stream_id="http_adaptive",
+        stream_label="HTTP adaptive",
+        metric_key="http_requests_analyzed",
+    )
+    rollup, missing, warns, n_api = _finalize_stream_load(
+        scratch, top=top, build_rollup=build_http_adaptive_section
+    )
+    return HttpAdaptiveLoadResult(
+        rollup=rollup,
+        missing_dates=missing,
         warnings=warns,
         api_day_count=n_api,
     )

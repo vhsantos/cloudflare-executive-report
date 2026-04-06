@@ -83,6 +83,7 @@ def build_executive_summary(
     http: dict[str, Any] | None,
     security: dict[str, Any] | None,
     cache: dict[str, Any] | None,
+    http_adaptive: dict[str, Any] | None = None,
     warnings: list[str] | None = None,
 ) -> dict[str, Any]:
     """Build a compact CTO summary object from existing section rollups."""
@@ -91,6 +92,7 @@ def build_executive_summary(
     h = _as_dict(http)
     s = _as_dict(security)
     c = _as_dict(cache)
+    ha = _as_dict(http_adaptive)
     warn = list(warnings or [])
 
     mitigated = _threats_mitigated(s)
@@ -105,9 +107,24 @@ def build_executive_summary(
     takeaways: list[str] = []
     actions: list[str] = []
 
-    takeaways.append(
-        f"Traffic: {format_count_human(_as_int(h.get('total_requests')))} requests in period."
-    )
+    total_requests_human = format_count_human(_as_int(h.get("total_requests")))
+    r4 = float(ha.get("status_4xx_rate_pct") or 0.0)
+    r5 = float(ha.get("status_5xx_rate_pct") or 0.0)
+    origin_avg = ha.get("origin_response_duration_avg_ms")
+    if ha and (
+        "status_4xx_rate_pct" in ha
+        or "status_5xx_rate_pct" in ha
+        or "origin_response_duration_avg_ms" in ha
+    ):
+        traffic_line = (
+            f"Traffic stable at {total_requests_human} requests; reliability stayed healthy "
+            f"with 5xx at {r5:.2f}%. Client-side friction was 4xx at {r4:.2f}%."
+        )
+        if origin_avg is not None:
+            traffic_line += f" Origin response averaged {float(origin_avg):.1f} ms."
+        takeaways.append(traffic_line)
+    else:
+        takeaways.append(f"Traffic: {total_requests_human} requests in period.")
     mitigation_rate = float(s.get("mitigation_rate_pct") or 0.0)
     takeaways.append(
         f"Security: {format_count_human(mitigated)} threats were blocked or challenged "
@@ -149,6 +166,11 @@ def build_executive_summary(
                 "cache_hit_ratio": float(h.get("cache_hit_ratio") or 0.0),
                 "encrypted_requests": _as_int(h.get("encrypted_requests")),
                 "encrypted_requests_human": str(h.get("encrypted_requests_human") or "0"),
+                "status_4xx_rate_pct": float(ha.get("status_4xx_rate_pct") or 0.0),
+                "status_5xx_rate_pct": float(ha.get("status_5xx_rate_pct") or 0.0),
+                "latency_p50_ms": ha.get("latency_p50_ms"),
+                "latency_p95_ms": ha.get("latency_p95_ms"),
+                "origin_response_duration_avg_ms": ha.get("origin_response_duration_avg_ms"),
             },
             "security": {
                 "mitigated_events": mitigated,

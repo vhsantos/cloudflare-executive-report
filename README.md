@@ -57,13 +57,14 @@ zones:
 
 ## What gets collected
 
-| Piece       | Source                                                  | Cached per day                |
-| ----------- | ------------------------------------------------------- | ----------------------------- |
-| DNS         | GraphQL `dnsAnalyticsAdaptiveGroups`                    | `dns.json`                    |
-| HTTP        | GraphQL `httpRequests1dGroups`                          | `http.json`                   |
-| Security    | GraphQL `httpRequestsAdaptiveGroups` (security-focused) | `security.json`               |
-| Cache       | GraphQL `httpRequestsAdaptiveGroups` (cache-focused)    | `cache.json`                  |
-| Zone health | REST (settings, DNSSEC, firewall rules)                 | Not cached (live each report) |
+| Piece         | Source                                                  | Cached per day                |
+| ------------- | ------------------------------------------------------- | ----------------------------- |
+| DNS           | GraphQL `dnsAnalyticsAdaptiveGroups`                    | `dns.json`                    |
+| HTTP (daily)  | GraphQL `httpRequests1dGroups`                          | `http.json`                   |
+| HTTP adaptive | GraphQL `httpRequestsAdaptiveGroups` (status + latency) | `http_adaptive.json`          |
+| Security      | GraphQL `httpRequestsAdaptiveGroups` (security-focused) | `security.json`               |
+| Cache         | GraphQL `httpRequestsAdaptiveGroups` (cache-focused)    | `cache.json`                  |
+| Zone health   | REST (settings, DNSSEC, firewall rules)                 | Not cached (live each report) |
 
 ## Executive summary (v1)
 
@@ -129,7 +130,7 @@ Illustrative cache layout and interim JSON report: **[docs/sample-data/](docs/sa
 | `--include-today`    | Include today in the report (live API; not cached as a day file).                                                   |
 | `--output` / `-o`    | Report path (default: `./cf_report_output.json`).                                                                   |
 | `--zone`             | One zone id or name from config; if omitted, **`default_zone`** is used when set.                                   |
-| `--types`            | Comma-separated streams: `dns`, `http`, `security`, `cache` (default: all registered).                              |
+| `--types`            | Comma-separated streams: `dns`, `http`, `http_adaptive`, `security`, `cache` (default: all registered).             |
 | `--top N`            | Length of ranked lists in the report (default: 10).                                                                 |
 | `--skip-zone-health` | Omit zone health REST calls.                                                                                        |
 

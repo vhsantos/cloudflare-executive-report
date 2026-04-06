@@ -316,6 +316,7 @@ def _run_sync_locked(
                 http=zblock.get("http"),
                 security=zblock.get("security"),
                 cache=zblock.get("cache"),
+                http_adaptive=zblock.get("http_adaptive"),
                 warnings=zone_warnings,
             )
 

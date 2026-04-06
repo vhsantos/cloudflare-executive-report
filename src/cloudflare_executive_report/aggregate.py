@@ -263,6 +263,66 @@ def build_http_section(
     }
 
 
+def build_http_adaptive_section(
+    daily_api_data: list[dict[str, Any]],
+    *,
+    top: int = 10,
+) -> dict[str, Any]:
+    total = sum(int(d.get("http_requests_analyzed") or 0) for d in daily_api_data)
+    c4 = sum(int(d.get("status_4xx_count") or 0) for d in daily_api_data)
+    c5 = sum(int(d.get("status_5xx_count") or 0) for d in daily_api_data)
+
+    weighted_p50_num = 0.0
+    weighted_p95_num = 0.0
+    weighted_origin_avg_num = 0.0
+    weighted_den_p50 = 0
+    weighted_den_p95 = 0
+    weighted_den_origin_avg = 0
+    by_status: dict[str, int] = {}
+    for d in daily_api_data:
+        n = int(d.get("http_requests_analyzed") or 0)
+        p50 = d.get("latency_p50_ms")
+        p95 = d.get("latency_p95_ms")
+        org_avg = d.get("origin_response_duration_avg_ms")
+        if p50 is not None and n > 0:
+            weighted_p50_num += float(p50) * n
+            weighted_den_p50 += n
+        if p95 is not None and n > 0:
+            weighted_p95_num += float(p95) * n
+            weighted_den_p95 += n
+        if org_avg is not None and n > 0:
+            weighted_origin_avg_num += float(org_avg) * n
+            weighted_den_origin_avg += n
+        for row in d.get("by_edge_status") or []:
+            if not isinstance(row, dict):
+                continue
+            st = str(row.get("value") or "").strip()
+            if not st:
+                continue
+            by_status[st] = by_status.get(st, 0) + int(row.get("count") or 0)
+
+    out: dict[str, Any] = {
+        "http_requests_analyzed": total,
+        "http_requests_analyzed_human": format_count_human(total),
+        "status_4xx_count": c4,
+        "status_4xx_count_human": format_count_human(c4),
+        "status_5xx_count": c5,
+        "status_5xx_count_human": format_count_human(c5),
+        "status_4xx_rate_pct": _pct_of_total(c4, total) if total > 0 else 0.0,
+        "status_5xx_rate_pct": _pct_of_total(c5, total) if total > 0 else 0.0,
+        "by_edge_status": _top_pct(by_status, total, top, name_key="status") if total > 0 else [],
+    }
+    if weighted_den_p50 > 0:
+        out["latency_p50_ms"] = round(weighted_p50_num / weighted_den_p50, 2)
+    if weighted_den_p95 > 0:
+        out["latency_p95_ms"] = round(weighted_p95_num / weighted_den_p95, 2)
+    if weighted_den_origin_avg > 0:
+        out["origin_response_duration_avg_ms"] = round(
+            weighted_origin_avg_num / weighted_den_origin_avg, 2
+        )
+    return out
+
+
 def _norm_cache_status(raw: str) -> str:
     return raw.strip().lower()
 
@@ -565,6 +625,7 @@ SectionBuilder = Callable[..., dict[str, Any]]
 SECTION_BUILDERS: dict[str, SectionBuilder] = {
     "dns": build_dns_section,
     "http": build_http_section,
+    "http_adaptive": build_http_adaptive_section,
     "security": build_security_section,
     "cache": build_cache_section,
 }

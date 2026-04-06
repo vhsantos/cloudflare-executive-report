@@ -21,6 +21,7 @@ from cloudflare_executive_report.pdf.layout_spec import ReportSpec
 from cloudflare_executive_report.pdf.loader import (
     load_cache_for_range,
     load_dns_for_range,
+    load_http_adaptive_for_range,
     load_http_for_range,
     load_security_for_range,
 )
@@ -87,6 +88,7 @@ def write_report_pdf(
 
         loaded_dns = None
         loaded_http = None
+        loaded_http_adaptive = None
         loaded_security = None
         loaded_cache = None
         zone_warnings: list[str] = []
@@ -134,6 +136,17 @@ def write_report_pdf(
                 )
                 zone_warnings.extend(loaded_cache.warnings)
 
+        if spec.include_executive_summary:
+            loaded_http_adaptive = load_http_adaptive_for_range(
+                cache_root,
+                zone_id,
+                zone_name,
+                spec.start,
+                spec.end,
+                top=spec.top,
+            )
+            zone_warnings.extend(loaded_http_adaptive.warnings)
+
         zone_health: dict[str, Any]
         health_warnings: list[str]
         with CloudflareClient(cfg.api_token) as client:
@@ -148,6 +161,7 @@ def write_report_pdf(
                 http=loaded_http.rollup if loaded_http else None,
                 security=loaded_security.rollup if loaded_security else None,
                 cache=loaded_cache.rollup if loaded_cache else None,
+                http_adaptive=loaded_http_adaptive.rollup if loaded_http_adaptive else None,
                 warnings=zone_warnings,
             )
             append_executive_summary(
