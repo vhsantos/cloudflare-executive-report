@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from cloudflare_executive_report.pdf.loader import (
+    load_cache_for_range,
     load_dns_for_range,
     load_http_for_range,
     load_security_for_range,
@@ -51,6 +52,9 @@ def test_load_http_single_day() -> None:
     assert r.daily_bytes_cached[0][1] == 45678901
     assert r.daily_bytes_uncached[0][1] == 912345678 - 45678901
     assert r.daily_uniques[0][1] == 2100
+    top_m = r.rollup.get("top_response_content_types") or []
+    assert len(top_m) >= 1
+    assert top_m[0]["content_type"] == "html"
 
 
 @pytest.mark.skipif(not FIXTURE_CACHE.is_dir(), reason="sample cache fixtures missing")
@@ -68,6 +72,28 @@ def test_load_security_single_day() -> None:
     assert int(r.rollup.get("http_requests_sampled") or 0) == 45200
     assert len(r.daily_security_triple) == 1
     assert r.daily_security_triple[0][1] == (865, 12000, 32335)
+
+
+@pytest.mark.skipif(not FIXTURE_CACHE.is_dir(), reason="sample cache fixtures missing")
+def test_load_cache_single_day() -> None:
+    r = load_cache_for_range(
+        FIXTURE_CACHE,
+        ZONE_ID,
+        "example.com",
+        "2026-04-01",
+        "2026-04-01",
+        top=5,
+    )
+    assert r.api_day_count == 1
+    assert int(r.rollup.get("total_requests_sampled") or 0) == 45200
+    assert int(r.rollup.get("hit_requests") or 0) == 12000
+    assert int(r.rollup.get("served_cf_count") or 0) == 30200
+    assert int(r.rollup.get("served_origin_count") or 0) == 15000
+    assert len(r.daily_cache_cf_origin) == 1
+    assert r.daily_cache_cf_origin[0][1] == (30200, 15000)
+    assert len(r.http_mime_1d) >= 1
+    assert r.http_mime_1d[0]["content_type"] == "html"
+    assert int(r.http_mime_1d[0]["count"] or 0) == 40000
 
 
 @pytest.mark.skipif(not FIXTURE_CACHE.is_dir(), reason="sample cache fixtures missing")

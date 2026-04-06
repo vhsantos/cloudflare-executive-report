@@ -1,4 +1,5 @@
 from cloudflare_executive_report.aggregate import (
+    build_cache_section,
     build_dns_section,
     build_http_section,
     build_report,
@@ -81,6 +82,31 @@ def test_build_http_section_top_countries():
     assert h["top_countries"][0]["code"] == "US"
 
 
+def test_build_http_section_response_content_types():
+    days = [
+        {
+            "requests": 100,
+            "bytes": 1000,
+            "cached_requests": 0,
+            "cached_bytes": 0,
+            "encrypted_requests": 0,
+            "page_views": 0,
+            "uniques": 0,
+            "country_map": [],
+            "response_content_types": [
+                {"edgeResponseContentTypeName": "html", "requests": 70, "bytes": 700},
+                {"edgeResponseContentTypeName": "js", "requests": 30, "bytes": 300},
+            ],
+        }
+    ]
+    h = build_http_section(days, top=5)
+    m = h.get("top_response_content_types") or []
+    assert len(m) == 2
+    assert m[0]["content_type"] == "html"
+    assert m[0]["requests"] == 70
+    assert m[0]["percentage"] == 70.0
+
+
 def test_build_http_section_max_uniques_across_days():
     days = [
         {
@@ -108,6 +134,42 @@ def test_build_http_section_max_uniques_across_days():
     assert h["unique_visitors"] == 350
     assert h["max_uniques_single_day"] == 250
     assert h["max_uniques_single_day_human"] == "250"
+
+
+def test_build_cache_section_merges_status_and_paths():
+    days = [
+        {
+            "by_cache_status": [
+                {"value": "hit", "count": 10, "edgeResponseBytes": 1000},
+                {"value": "miss", "count": 5, "edgeResponseBytes": 2500},
+            ],
+            "top_path_status": [
+                {"path": "/", "cacheStatus": "hit", "count": 7, "edgeResponseBytes": 700},
+                {"path": "/login", "cacheStatus": "miss", "count": 3, "edgeResponseBytes": 1400},
+            ],
+        },
+        {
+            "by_cache_status": [
+                {"value": "hit", "count": 2, "edgeResponseBytes": 500},
+                {"value": "dynamic", "count": 8, "edgeResponseBytes": 3000},
+            ],
+            "top_path_status": [
+                {"path": "/", "cacheStatus": "dynamic", "count": 4, "edgeResponseBytes": 1200},
+            ],
+        },
+    ]
+    c = build_cache_section(days, top=5)
+    assert c["total_requests_sampled"] == 25
+    assert c["total_edge_response_bytes"] == 7000
+    assert c["hit_requests"] == 12
+    assert c["miss_requests"] == 5
+    assert c["dynamic_requests"] == 8
+    assert c["cache_hit_ratio"] == 48.0
+    assert c["served_cf_count"] == 12
+    assert c["served_origin_count"] == 13
+    assert c["by_cache_status"][0]["status"] == "hit"
+    assert c["top_paths"][0]["path"] == "/"
+    assert "top_content_types" not in c
 
 
 def test_format_helpers():

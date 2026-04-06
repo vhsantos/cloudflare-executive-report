@@ -72,3 +72,43 @@ def test_write_report_pdf_smoke(tmp_path: Path) -> None:
     write_report_pdf(out, cfg, spec)
     assert out.is_file()
     assert out.stat().st_size > 1000
+
+
+@pytest.mark.skipif(not FIXTURE_CACHE.is_dir(), reason="sample cache fixtures missing")
+def test_write_report_pdf_security_and_cache_smoke(tmp_path: Path) -> None:
+    cfg = AppConfig(
+        api_token="x",
+        cache_dir=str(FIXTURE_CACHE.resolve()),
+        zones=[ZoneEntry(id=ZONE_ID, name="example.com")],
+    )
+    spec = ReportSpec(
+        zone_ids=[ZONE_ID],
+        start="2026-04-01",
+        end="2026-04-01",
+        streams=("security", "cache"),
+        top=5,
+    )
+    out = tmp_path / "sec_cache.pdf"
+    write_report_pdf(out, cfg, spec)
+    assert out.is_file()
+    assert out.stat().st_size > 1000
+
+
+@pytest.mark.skipif(not FIXTURE_CACHE.is_dir(), reason="sample cache fixtures missing")
+def test_write_report_pdf_cache_smoke(tmp_path: Path) -> None:
+    cfg = AppConfig(
+        api_token="x",
+        cache_dir=str(FIXTURE_CACHE.resolve()),
+        zones=[ZoneEntry(id=ZONE_ID, name="example.com")],
+    )
+    spec = ReportSpec(
+        zone_ids=[ZONE_ID],
+        start="2026-04-01",
+        end="2026-04-01",
+        streams=("cache",),
+        top=5,
+    )
+    out = tmp_path / "cache.pdf"
+    write_report_pdf(out, cfg, spec)
+    assert out.is_file()
+    assert out.stat().st_size > 1000

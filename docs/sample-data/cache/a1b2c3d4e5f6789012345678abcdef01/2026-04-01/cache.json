@@ -1,0 +1,25 @@
+{
+  "_schema_version": 1,
+  "_source": "api",
+  "_source_timestamp": "2026-04-04T12:00:00Z",
+  "data": {
+    "date": "2026-04-01",
+    "payload_kind": "http_cache_groups",
+    "by_cache_status": [
+      { "value": "hit", "count": 12000, "edgeResponseBytes": 45678901 },
+      { "value": "miss", "count": 9000, "edgeResponseBytes": 312345678 },
+      { "value": "dynamic", "count": 6000, "edgeResponseBytes": 198765432 },
+      { "value": "none", "count": 18200, "edgeResponseBytes": 355555555 }
+    ],
+    "top_path_status": [
+      { "path": "/", "cacheStatus": "none", "count": 8000, "edgeResponseBytes": 120000000 },
+      {
+        "path": "/index.php",
+        "cacheStatus": "dynamic",
+        "count": 5000,
+        "edgeResponseBytes": 150000000
+      },
+      { "path": "/assets/app.js", "cacheStatus": "hit", "count": 3000, "edgeResponseBytes": 9000000 }
+    ]
+  }
+}

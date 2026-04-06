@@ -1,6 +1,7 @@
 """Security PDF display label mapping."""
 
 from cloudflare_executive_report.pdf.security_display import (
+    format_cache_content_type_label,
     format_cache_status_label,
     format_security_action_label,
     format_security_source_label,
@@ -24,3 +25,8 @@ def test_cache_status_like_dashboard() -> None:
     assert format_cache_status_label("none") == "None"
     assert format_cache_status_label("hit") == "Hit"
     assert format_cache_status_label("dynamic") == "Dynamic"
+
+
+def test_cache_content_type_id_fallback_label() -> None:
+    assert format_cache_content_type_label("1") == "Type ID 1"
+    assert format_cache_content_type_label("text/html") == "text/html"

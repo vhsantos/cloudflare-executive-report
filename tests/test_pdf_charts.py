@@ -12,6 +12,7 @@ from cloudflare_executive_report.pdf.charts import (
     _triple_to_percent_stack,
     aggregate_stacked_pairs_for_chart,
     prepare_daily_metric_series,
+    prepare_dual_line_daily_metric_series,
     prepare_stacked_daily_metric_series,
     prepare_triple_line_daily_metric_series,
     prepare_triple_stacked_daily_metric_series,
@@ -86,6 +87,22 @@ def test_triple_to_percent_stack_sums_100() -> None:
     assert cf[0] == pytest.approx(30.0)
     assert o[0] == pytest.approx(60.0)
     assert m[0] + cf[0] + o[0] == pytest.approx(100.0)
+
+
+def test_prepare_dual_line_daily_metric_series_non_empty() -> None:
+    pts = [
+        (date(2026, 4, 1), (300, 700)),
+        (date(2026, 4, 2), (310, 690)),
+        (date(2026, 4, 3), (290, 710)),
+    ]
+    png, _sub = prepare_dual_line_daily_metric_series(
+        pts,
+        DEFAULT_THEME,
+        chart_title="CF vs origin",
+        legend_a="Cloudflare",
+        legend_b="Origin",
+    )
+    assert len(png) > 500
 
 
 def test_prepare_triple_line_daily_metric_series_non_empty() -> None:
