@@ -9,7 +9,9 @@ from typing import Any
 
 from reportlab.platypus import PageBreak, Paragraph, Spacer
 
+from cloudflare_executive_report.cf_client import CloudflareClient
 from cloudflare_executive_report.config import AppConfig
+from cloudflare_executive_report.executive_summary import build_executive_summary
 from cloudflare_executive_report.pdf.document import build_simple_doc, footer_canvas_factory
 from cloudflare_executive_report.pdf.figure_quality import (
     parse_pdf_image_quality,
@@ -25,9 +27,11 @@ from cloudflare_executive_report.pdf.loader import (
 from cloudflare_executive_report.pdf.primitives import make_styles
 from cloudflare_executive_report.pdf.streams.cache import append_cache_stream
 from cloudflare_executive_report.pdf.streams.dns import append_dns_stream
+from cloudflare_executive_report.pdf.streams.executive_summary import append_executive_summary
 from cloudflare_executive_report.pdf.streams.http import append_http_stream
 from cloudflare_executive_report.pdf.streams.security import append_security_stream
 from cloudflare_executive_report.pdf.theme import Theme
+from cloudflare_executive_report.zone_health import fetch_zone_health
 
 log = logging.getLogger(__name__)
 
@@ -81,12 +85,16 @@ def write_report_pdf(
         )
         story.append(Spacer(1, 6))
 
-        for si, stream in enumerate(spec.streams):
-            if si > 0:
-                story.append(PageBreak())
+        loaded_dns = None
+        loaded_http = None
+        loaded_security = None
+        loaded_cache = None
+        zone_warnings: list[str] = []
+
+        for stream in spec.streams:
             sid = stream.strip().lower()
             if sid == "dns":
-                loaded = load_dns_for_range(
+                loaded_dns = load_dns_for_range(
                     cache_root,
                     zone_id,
                     zone_name,
@@ -94,6 +102,71 @@ def write_report_pdf(
                     spec.end,
                     top=spec.top,
                 )
+                zone_warnings.extend(loaded_dns.warnings)
+            elif sid == "http":
+                loaded_http = load_http_for_range(
+                    cache_root,
+                    zone_id,
+                    zone_name,
+                    spec.start,
+                    spec.end,
+                    top=spec.top,
+                )
+                zone_warnings.extend(loaded_http.warnings)
+            elif sid == "security":
+                loaded_security = load_security_for_range(
+                    cache_root,
+                    zone_id,
+                    zone_name,
+                    spec.start,
+                    spec.end,
+                    top=spec.top,
+                )
+                zone_warnings.extend(loaded_security.warnings)
+            elif sid == "cache":
+                loaded_cache = load_cache_for_range(
+                    cache_root,
+                    zone_id,
+                    zone_name,
+                    spec.start,
+                    spec.end,
+                    top=spec.top,
+                )
+                zone_warnings.extend(loaded_cache.warnings)
+
+        zone_health: dict[str, Any]
+        health_warnings: list[str]
+        with CloudflareClient(cfg.api_token) as client:
+            zone_health, health_warnings = fetch_zone_health(client, zone_id, zone_name, skip=False)
+        zone_warnings.extend(health_warnings)
+
+        if spec.include_executive_summary:
+            executive_summary = build_executive_summary(
+                zone_name=zone_name,
+                zone_health=zone_health,
+                dns=loaded_dns.rollup if loaded_dns else None,
+                http=loaded_http.rollup if loaded_http else None,
+                security=loaded_security.rollup if loaded_security else None,
+                cache=loaded_cache.rollup if loaded_cache else None,
+                warnings=zone_warnings,
+            )
+            append_executive_summary(
+                story,
+                zone_name=zone_name,
+                period_start=spec.start,
+                period_end=spec.end,
+                summary=executive_summary,
+                theme=th,
+            )
+
+        for si, stream in enumerate(spec.streams):
+            if si > 0 or spec.include_executive_summary:
+                story.append(PageBreak())
+            sid = stream.strip().lower()
+            if sid == "dns":
+                loaded = loaded_dns
+                if loaded is None:
+                    continue
                 if loaded.api_day_count == 0:
                     _warn_skip_no_api_data("DNS", zone_name, spec.start, spec.end)
                     continue
@@ -110,14 +183,9 @@ def write_report_pdf(
                     top=spec.top,
                 )
             elif sid == "http":
-                loaded = load_http_for_range(
-                    cache_root,
-                    zone_id,
-                    zone_name,
-                    spec.start,
-                    spec.end,
-                    top=spec.top,
-                )
+                loaded = loaded_http
+                if loaded is None:
+                    continue
                 if loaded.api_day_count == 0:
                     _warn_skip_no_api_data("HTTP", zone_name, spec.start, spec.end)
                     continue
@@ -138,14 +206,9 @@ def write_report_pdf(
                     top=spec.top,
                 )
             elif sid == "security":
-                loaded = load_security_for_range(
-                    cache_root,
-                    zone_id,
-                    zone_name,
-                    spec.start,
-                    spec.end,
-                    top=spec.top,
-                )
+                loaded = loaded_security
+                if loaded is None:
+                    continue
                 if loaded.api_day_count == 0:
                     _warn_skip_no_api_data("Security", zone_name, spec.start, spec.end)
                     continue
@@ -163,14 +226,9 @@ def write_report_pdf(
                     cache_stream_in_report=cache_stream_in_report,
                 )
             elif sid == "cache":
-                loaded = load_cache_for_range(
-                    cache_root,
-                    zone_id,
-                    zone_name,
-                    spec.start,
-                    spec.end,
-                    top=spec.top,
-                )
+                loaded = loaded_cache
+                if loaded is None:
+                    continue
                 if loaded.api_day_count == 0:
                     _warn_skip_no_api_data("Cache", zone_name, spec.start, spec.end)
                     continue

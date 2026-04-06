@@ -63,6 +63,7 @@ class ReportSpec:
     start: str
     end: str
     streams: tuple[str, ...] = ("dns", "http")
+    include_executive_summary: bool = True
     top: int = 10
     dns_layout: DnsStreamLayout = field(default_factory=DnsStreamLayout)
     http_layout: HttpStreamLayout = field(default_factory=HttpStreamLayout)

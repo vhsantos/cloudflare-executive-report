@@ -38,6 +38,7 @@ from cloudflare_executive_report.dates import (
     utc_today,
     utc_yesterday,
 )
+from cloudflare_executive_report.executive_summary import build_executive_summary
 from cloudflare_executive_report.fetchers.registry import (
     FETCHER_REGISTRY,
     day_cache_path,
@@ -275,6 +276,7 @@ def _run_sync_locked(
 
             cache_end = format_ymd(y) if opts.include_today else report_end
             zblock: dict = {"zone_id": z.id, "zone_name": z.name}
+            zone_warnings: list[str] = []
 
             for sid in _streams_for_types(opts.types):
                 fetcher = FETCHER_REGISTRY[sid]
@@ -301,10 +303,21 @@ def _run_sync_locked(
                         rate_fail = True
                 zblock[sid] = builder(api_days, top=opts.top)
                 all_warnings.extend(warns)
+                zone_warnings.extend(warns)
 
             zh, zw = fetch_zone_health(client, z.id, z.name, skip=opts.skip_zone_health)
             zblock["zone_health"] = zh
             all_warnings.extend(zw)
+            zone_warnings.extend(zw)
+            zblock["executive_summary"] = build_executive_summary(
+                zone_name=z.name,
+                zone_health=zh,
+                dns=zblock.get("dns"),
+                http=zblock.get("http"),
+                security=zblock.get("security"),
+                cache=zblock.get("cache"),
+                warnings=zone_warnings,
+            )
 
             zones_out.append(zblock)
 

@@ -1,6 +1,6 @@
 # cloudflare-executive-report
 
-Python CLI (**`cf-report`**) that pulls Cloudflare **DNS**, **HTTP**, and **security (firewall) analytics**, optional **zone health** (REST), caches daily payloads on disk, and writes a **JSON executive report**. All dates are **UTC**.
+Python CLI (**`cf-report`**) that pulls Cloudflare **DNS**, **HTTP**, **security**, and **cache** analytics, optional **zone health** (REST), caches daily payloads on disk, and writes a JSON report plus PDF. All dates are **UTC**.
 
 ## Requirements
 
@@ -57,12 +57,25 @@ zones:
 
 ## What gets collected
 
-| Piece       | Source                                       | Cached per day                |
-| ----------- | -------------------------------------------- | ----------------------------- |
-| DNS         | GraphQL `dnsAnalyticsAdaptiveGroups`         | `dns.json`                    |
-| HTTP        | GraphQL `httpRequests1dGroups`               | `http.json`                   |
-| Security    | GraphQL `firewallEventsAdaptive` (paginated) | `security.json`               |
-| Zone health | REST (settings, DNSSEC, firewall rules)      | Not cached (live each report) |
+| Piece       | Source                                                  | Cached per day                |
+| ----------- | ------------------------------------------------------- | ----------------------------- |
+| DNS         | GraphQL `dnsAnalyticsAdaptiveGroups`                    | `dns.json`                    |
+| HTTP        | GraphQL `httpRequests1dGroups`                          | `http.json`                   |
+| Security    | GraphQL `httpRequestsAdaptiveGroups` (security-focused) | `security.json`               |
+| Cache       | GraphQL `httpRequestsAdaptiveGroups` (cache-focused)    | `cache.json`                  |
+| Zone health | REST (settings, DNSSEC, firewall rules)                 | Not cached (live each report) |
+
+## Executive summary (v1)
+
+Each zone in `cf_report_output.json` includes `executive_summary`, derived from existing sections (`dns`, `http`, `security`, `cache`, `zone_health`) without extra fetchers.
+
+- Core fields include `verdict`, `verdict_reasons`, `kpis`, `takeaways`, and `actions`.
+- The same shared builder (`build_executive_summary`) is used by both JSON sync output and PDF rendering.
+- Executive security wording is business-facing:
+  - `Threats blocked/challenged`
+  - `Mitigation rate`
+
+PDF reports render this executive summary first (per zone) before stream detail pages.
 
 Analytics are **sampled** by Cloudflare; totals and rankings are **approximate** and may differ slightly from the dashboard ("based on X% sample" messages are expected).
 
@@ -116,7 +129,7 @@ Illustrative cache layout and interim JSON report: **[docs/sample-data/](docs/sa
 | `--include-today`    | Include today in the report (live API; not cached as a day file).                                                   |
 | `--output` / `-o`    | Report path (default: `./cf_report_output.json`).                                                                   |
 | `--zone`             | One zone id or name from config; if omitted, **`default_zone`** is used when set.                                   |
-| `--types`            | Comma-separated streams: `dns`, `http`, `security` (default: all registered).                                       |
+| `--types`            | Comma-separated streams: `dns`, `http`, `security`, `cache` (default: all registered).                              |
 | `--top N`            | Length of ranked lists in the report (default: 10).                                                                 |
 | `--skip-zone-health` | Omit zone health REST calls.                                                                                        |
 
