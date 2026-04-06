@@ -18,9 +18,9 @@ class Theme:
     card_bg: str = "#ffffff"
     section_blue: str = "#1e40af"
     bar_track: str = "#e2e8f0"
-    margin_in: float = 0.65
-    top_margin_in: float = 0.55
-    bottom_margin_in: float = 0.65
+    margin_in: float = 0.5
+    top_margin_in: float = 0.5
+    bottom_margin_in: float = 0.5
     col_gap_in: float = 0.14
     outer_card_pad_pt: float = 10.0
     # Defaults match ``pdf_image_quality: medium`` (96); PDF build applies preset from config.
