@@ -109,3 +109,39 @@ def group_dimension_table(
 def table_rows_to_value_counts(rows: list[dict[str, Any]], value_key: str) -> list[dict[str, Any]]:
     """``[{value_key, count}, ...]`` for value/count tables in cached JSON."""
     return [{"value": r[value_key], "count": r["count"]} for r in rows if value_key in r]
+
+
+def row_sum_int(row: dict[str, Any], sum_field: str) -> int:
+    """Safe int extractor for ``row["sum"][sum_field]`` in GraphQL group rows."""
+    sums = row.get("sum") or {}
+    if not isinstance(sums, dict):
+        return 0
+    return int(sums.get(sum_field) or 0)
+
+
+def marginal_counts_and_sums_for_dimension(
+    rows: list[dict[str, Any]],
+    dimension_field: str,
+    *,
+    sum_field: str,
+    out_sum_key: str,
+) -> list[dict[str, Any]]:
+    """
+    Roll up rows to ``[{"value", "count", out_sum_key}, ...]`` for one dimension.
+    Skips empty dimension values.
+    """
+    counts: dict[str, int] = {}
+    sums: dict[str, int] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        dims = row.get("dimensions") or {}
+        if not isinstance(dims, dict):
+            continue
+        key = str(dims.get(dimension_field) or "").strip()
+        if not key:
+            continue
+        counts[key] = counts.get(key, 0) + int(row.get("count") or 0)
+        sums[key] = sums.get(key, 0) + row_sum_int(row, sum_field)
+    ordered = sorted(counts.items(), key=lambda x: -x[1])
+    return [{"value": k, "count": c, out_sum_key: int(sums.get(k) or 0)} for k, c in ordered]

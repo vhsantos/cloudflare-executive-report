@@ -78,7 +78,9 @@ def process_day(
             error=str(e),
             retry_after=e.retry_after,
         )
+        _progress(f"  {zone_name} {ds} {name} rate-limited", quiet=quiet)
         return True
     except CloudflareAPIError as e:
         write_day_file(path, source="error", data=None, error=str(e))
+        _progress(f"  {zone_name} {ds} {name} error", quiet=quiet)
         return False
