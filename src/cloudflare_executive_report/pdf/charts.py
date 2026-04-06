@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import calendar
 import io
+import math
 from collections.abc import Sequence
 from datetime import date
-from typing import Literal
+from typing import Literal, cast
 
 import matplotlib
 
@@ -14,6 +15,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib import ticker
 from matplotlib.colors import to_rgba
+from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 from cloudflare_executive_report.aggregate import format_bytes_human
@@ -21,9 +23,101 @@ from cloudflare_executive_report.pdf.theme import Theme
 
 ChartTimeGranularity = Literal["day", "week", "month"]
 ChartYScale = Literal["compact_number", "bytes"]
+SecurityTripleStackMode = Literal["absolute", "percent"]
 
 # Bottom + top series for stacked charts (e.g. cached + uncached). ``None`` = missing day.
 StackedPoint = tuple[float | None, float | None]
+StackedTriplePoint = tuple[float | None, float | None, float | None]
+
+
+def _sum_aligned_stack_rows(
+    rows: Sequence[Sequence[float | None]],
+    width: int,
+) -> tuple[float | None, ...]:
+    """Per-series sums when every row has ``width`` finite values; else all ``None``."""
+    acc: list[list[float]] = [[] for _ in range(width)]
+    for tup in rows:
+        if len(tup) != width:
+            continue
+        if not all(x is not None for x in tup):
+            continue
+        for i in range(width):
+            acc[i].append(float(tup[i]))  # type: ignore[arg-type]
+    if not acc[0]:
+        return tuple(None for _ in range(width))
+    return tuple(sum(acc[i]) for i in range(width))
+
+
+def _bucket_weekly_stacked_n(
+    points: Sequence[tuple[date, Sequence[float | None]]],
+    width: int,
+    subtitle: str,
+) -> tuple[list[date], list[tuple[float | None, ...]], str]:
+    chunks: list[list[tuple[date, Sequence[float | None]]]] = []
+    cur: list[tuple[date, Sequence[float | None]]] = []
+    for p in points:
+        cur.append(p)
+        if len(cur) >= 7:
+            chunks.append(cur)
+            cur = []
+    if cur:
+        chunks.append(cur)
+    out_dates: list[date] = []
+    out_vals: list[tuple[float | None, ...]] = []
+    for ch in chunks:
+        out_dates.append(ch[0][0])
+        out_vals.append(_sum_aligned_stack_rows([t for _, t in ch], width))
+    return out_dates, out_vals, subtitle
+
+
+def _bucket_monthly_stacked_n(
+    points: Sequence[tuple[date, Sequence[float | None]]],
+    width: int,
+) -> tuple[list[date], list[tuple[float | None, ...]], str]:
+    buckets: dict[tuple[int, int], list[Sequence[float | None]]] = {}
+    order: list[tuple[int, int]] = []
+    for d, tup in points:
+        key = (d.year, d.month)
+        if key not in buckets:
+            buckets[key] = []
+            order.append(key)
+        buckets[key].append(tup)
+    out_dates: list[date] = []
+    out_vals: list[tuple[float | None, ...]] = []
+    for key in order:
+        y, m = key
+        out_dates.append(date(y, m, 1))
+        out_vals.append(_sum_aligned_stack_rows(buckets[key], width))
+    return out_dates, out_vals, ""
+
+
+def _aggregate_stacked_for_chart(
+    points: Sequence[tuple[date, Sequence[float | None]]],
+    width: int,
+) -> tuple[list[date], list[tuple[float | None, ...]], str, ChartTimeGranularity]:
+    raw_dates = [d for d, _ in points]
+    raw_vals = [tuple(t) for _, t in points]
+    n = len(points)
+    if n == 0:
+        return [], [], "", "day"
+
+    def daily() -> tuple[list[date], list[tuple[float | None, ...]], str, ChartTimeGranularity]:
+        return raw_dates, raw_vals, "", "day"
+
+    if n <= 7:
+        return daily()
+    if n <= 60:
+        return daily()
+    if n <= 365:
+        d, v, s = _bucket_weekly_stacked_n(points, width, "Weekly totals (sum per 7-day bucket)")
+        return d, v, s, "week"
+
+    dates, vals, _ = _bucket_monthly_stacked_n(points, width)
+    if len(dates) > 24:
+        dates = dates[-24:]
+        vals = vals[-24:]
+        return dates, vals, "Monthly totals - last 24 months shown", "month"
+    return dates, vals, "Monthly totals (sum per calendar month)", "month"
 
 
 def aggregate_values_for_chart(
@@ -114,91 +208,22 @@ def aggregate_stacked_pairs_for_chart(
     points: Sequence[tuple[date, StackedPoint]],
 ) -> tuple[list[date], list[StackedPoint], str, ChartTimeGranularity]:
     """Same bucketing rules as ``aggregate_values_for_chart``, for two aligned series."""
-    raw_dates = [d for d, _ in points]
-    raw_pairs = [p for _, p in points]
-    n = len(points)
-    if n == 0:
-        return [], [], "", "day"
-
-    def daily() -> tuple[list[date], list[StackedPoint], str, ChartTimeGranularity]:
-        return raw_dates, list(raw_pairs), "", "day"
-
-    if n <= 7:
-        return daily()
-    if n <= 60:
-        return daily()
-    if n <= 365:
-        d, v, s = _bucket_weekly_stacked(points, "Weekly totals (sum per 7-day bucket)")
-        return d, v, s, "week"
-
-    dates, vals, _ = _bucket_monthly_stacked(points, "")
-    if len(dates) > 24:
-        dates = dates[-24:]
-        vals = vals[-24:]
-        return dates, vals, "Monthly totals - last 24 months shown", "month"
-    return dates, vals, "Monthly totals (sum per calendar month)", "month"
+    d, v, s, g = _aggregate_stacked_for_chart([(d, p) for d, p in points], 2)
+    return d, [cast(StackedPoint, t) for t in v], s, g
 
 
-def _bucket_weekly_stacked(
-    points: Sequence[tuple[date, StackedPoint]],
-    subtitle: str,
-) -> tuple[list[date], list[StackedPoint], str]:
-    chunks: list[list[tuple[date, StackedPoint]]] = []
-    cur: list[tuple[date, StackedPoint]] = []
-    for p in points:
-        cur.append(p)
-        if len(cur) >= 7:
-            chunks.append(cur)
-            cur = []
-    if cur:
-        chunks.append(cur)
-    out_dates: list[date] = []
-    out_vals: list[StackedPoint] = []
-    for ch in chunks:
-        d0 = ch[0][0]
-        bs: list[float] = []
-        us: list[float] = []
-        for _, (bo, up) in ch:
-            if bo is not None and up is not None:
-                bs.append(float(bo))
-                us.append(float(up))
-        if not bs:
-            out_vals.append((None, None))
-        else:
-            out_vals.append((sum(bs), sum(us)))
-        out_dates.append(d0)
-    return out_dates, out_vals, subtitle
+def aggregate_triple_stacked_for_chart(
+    points: Sequence[tuple[date, StackedTriplePoint]],
+) -> tuple[list[date], list[StackedTriplePoint], str, ChartTimeGranularity]:
+    """Same bucketing rules as ``aggregate_stacked_pairs_for_chart``, for three aligned series."""
+    d, v, s, g = _aggregate_stacked_for_chart([(d, p) for d, p in points], 3)
+    return d, [cast(StackedTriplePoint, t) for t in v], s, g
 
 
-def _bucket_monthly_stacked(
-    points: Sequence[tuple[date, StackedPoint]],
-    subtitle: str,
-) -> tuple[list[date], list[StackedPoint], str]:
-    buckets: dict[tuple[int, int], list[StackedPoint]] = {}
-    order: list[tuple[int, int]] = []
-    for d, pair in points:
-        key = (d.year, d.month)
-        if key not in buckets:
-            buckets[key] = []
-            order.append(key)
-        buckets[key].append(pair)
-    out_dates: list[date] = []
-    out_vals: list[StackedPoint] = []
-    for key in order:
-        pairs = buckets[key]
-        bs: list[float] = []
-        us: list[float] = []
-        for bo, up in pairs:
-            if bo is not None and up is not None:
-                bs.append(float(bo))
-                us.append(float(up))
-        if not bs:
-            out_vals.append((None, None))
-        else:
-            out_vals.append((sum(bs), sum(us)))
-        y, m = key
-        out_dates.append(date(y, m, 1))
-    return out_dates, out_vals, subtitle
+def _format_y_tick_percent(value: float, _pos: int | None = None) -> str:
+    if value == int(value):
+        return f"{int(value)}%"
+    return f"{value:.1f}%"
 
 
 def _format_y_tick_cf(value: float, _pos: int | None = None) -> str:
@@ -455,6 +480,395 @@ def stacked_area_chart_bytes(
     plt.close(fig)
     buf.seek(0)
     return buf.read()
+
+
+def _triple_to_percent_stack(
+    mit: list[float],
+    srv_cf: list[float],
+    srv_or: list[float],
+) -> tuple[list[float], list[float], list[float]]:
+    """Per-index shares of ``mit + served_cf + served_origin`` summing to 100."""
+    out_m: list[float] = []
+    out_cf: list[float] = []
+    out_or: list[float] = []
+    for i in range(len(mit)):
+        t = mit[i] + srv_cf[i] + srv_or[i]
+        if t <= 0:
+            out_m.append(0.0)
+            out_cf.append(0.0)
+            out_or.append(0.0)
+        else:
+            out_m.append(100.0 * mit[i] / t)
+            out_cf.append(100.0 * srv_cf[i] / t)
+            out_or.append(100.0 * srv_or[i] / t)
+    return out_m, out_cf, out_or
+
+
+def _stacked_triple_segments(
+    triples: Sequence[StackedTriplePoint],
+) -> list[tuple[list[int], list[float], list[float], list[float]]]:
+    segments: list[tuple[list[int], list[float], list[float], list[float]]] = []
+    cur_x: list[int] = []
+    cur_a: list[float] = []
+    cur_b: list[float] = []
+    cur_c: list[float] = []
+    for i, (a, b, c) in enumerate(triples):
+        if a is not None and b is not None and c is not None:
+            cur_x.append(i)
+            cur_a.append(float(a))
+            cur_b.append(float(b))
+            cur_c.append(float(c))
+            continue
+        if cur_x:
+            segments.append((cur_x, cur_a, cur_b, cur_c))
+            cur_x, cur_a, cur_b, cur_c = [], [], [], []
+    if cur_x:
+        segments.append((cur_x, cur_a, cur_b, cur_c))
+    return segments
+
+
+def stacked_area_chart_triple_bytes(
+    dates: Sequence[date],
+    triples: Sequence[StackedTriplePoint],
+    *,
+    title: str,
+    subtitle: str,
+    legend_bottom: str,
+    legend_mid: str,
+    legend_top: str,
+    theme: Theme,
+    time_granularity: ChartTimeGranularity = "day",
+    y_scale: ChartYScale = "compact_number",
+    stack_mode: SecurityTripleStackMode = "absolute",
+) -> bytes:
+    """Three stacked areas from triple ``(mitigated, served_cf, served_origin)``.
+
+    Drawn bottom→top: **mitigated**, **Served by origin**, **Served by Cloudflare**
+    so the largest pass bucket (usually Cloudflare) sits at the stack top.
+
+    ``stack_mode="percent"``: each day sums to 100% (share of sampled requests).
+    """
+    fig_w = min(theme.content_width_in(), 7.1)
+    fig_h = fig_w * 0.35
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h), facecolor="white")
+    tlist = list(triples)
+    if not dates:
+        ax.text(0.5, 0.5, "No data", ha="center", va="center", color=theme.muted)
+    else:
+        segments = _stacked_triple_segments(tlist)
+        c_mit = theme.section_blue
+        fill_mit = to_rgba(c_mit, 0.45)
+        c_or = theme.muted
+        fill_or = to_rgba(c_or, 0.35)
+        c_cf = theme.primary
+        fill_cf = to_rgba(c_cf, 0.28)
+        ymax = 0.0
+        for cx, mit, srv_cf, srv_or in segments:
+            if stack_mode == "percent":
+                mit, srv_cf, srv_or = _triple_to_percent_stack(mit, srv_cf, srv_or)
+            # mitigated, served_origin, served_cf - stack origin then CF on top.
+            d1 = [mit[i] + srv_or[i] for i in range(len(cx))]
+            d2 = [mit[i] + srv_or[i] + srv_cf[i] for i in range(len(cx))]
+            for i in range(len(cx)):
+                ymax = max(ymax, d2[i])
+            ax.fill_between(cx, 0, mit, color=fill_mit, linewidth=0, interpolate=True)
+            ax.fill_between(cx, mit, d1, color=fill_or, linewidth=0, interpolate=True)
+            ax.fill_between(cx, d1, d2, color=fill_cf, linewidth=0, interpolate=True)
+            ax.plot(cx, mit, color=c_mit, linewidth=1.0, solid_capstyle="round")
+            ax.plot(cx, d1, color=c_or, linewidth=1.15, solid_capstyle="round")
+            ax.plot(cx, d2, color=c_cf, linewidth=1.25, solid_capstyle="round")
+
+        if stack_mode == "percent":
+            ax.set_ylim(0, 100)
+        elif ymax > 0:
+            ax.set_ylim(0, ymax * 1.05)
+
+        tick_idx = _xtick_indices(len(dates))
+        full_labels = _x_axis_labels_cf(dates, time_granularity)
+        ax.set_xticks(tick_idx)
+        ax.set_xticklabels(
+            [full_labels[i] for i in tick_idx],
+            rotation=0,
+            ha="center",
+            fontsize=7,
+            color=theme.muted,
+        )
+        if stack_mode == "percent":
+            y_fmt = _format_y_tick_percent
+        else:
+            y_fmt = _format_y_tick_bytes if y_scale == "bytes" else _format_y_tick_cf
+        ax.yaxis.set_major_formatter(ticker.FuncFormatter(y_fmt))
+        ax.tick_params(axis="y", labelsize=7, colors=theme.muted)
+        ax.grid(axis="both", linestyle="-", alpha=0.2, color=theme.border)
+        ax.set_axisbelow(True)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+        if segments:
+            h_mit = Patch(facecolor=fill_mit, edgecolor=c_mit, linewidth=1.0, label=legend_bottom)
+            h_or = Patch(facecolor=fill_or, edgecolor=c_or, linewidth=1.0, label=legend_top)
+            h_cf = Patch(facecolor=fill_cf, edgecolor=c_cf, linewidth=1.0, label=legend_mid)
+            # Legend top-to-bottom = stack top-to-bottom: Cloudflare, origin, mitigated.
+            ax.legend(
+                handles=[h_cf, h_or, h_mit],
+                loc="upper right",
+                frameon=False,
+                fontsize=7,
+                handlelength=1.1,
+                handletextpad=0.45,
+                borderaxespad=0.5,
+            )
+            leg = ax.get_legend()
+            if leg is not None:
+                for text in leg.get_texts():
+                    text.set_color(theme.slate)
+    ax.set_title(title, fontsize=10, color=theme.slate, pad=8)
+    if subtitle:
+        fig.text(0.5, 0.02, subtitle, ha="center", fontsize=7, color=theme.muted)
+    buf = io.BytesIO()
+    fig.savefig(
+        buf,
+        format="png",
+        dpi=theme.chart_dpi,
+        bbox_inches="tight",
+        facecolor="white",
+        pad_inches=0.15,
+    )
+    plt.close(fig)
+    buf.seek(0)
+    return buf.read()
+
+
+def line_chart_triple_bytes(
+    dates: Sequence[date],
+    triples: Sequence[StackedTriplePoint],
+    *,
+    title: str,
+    subtitle: str,
+    legend_mit: str,
+    legend_cf: str,
+    legend_or: str,
+    theme: Theme,
+    time_granularity: ChartTimeGranularity = "day",
+) -> bytes:
+    """Three lines from ``(mitigated, served_cf, served_origin)`` per time bucket.
+
+    Missing buckets (any ``None``) become NaN so Matplotlib breaks the lines.
+    Semi-transparent fills from zero + small round markers at each point.
+    """
+    _fill_alpha = 0.22
+    _marker_ms = 4.0
+    _marker_edgewidth = 0.55
+    fig_w = min(theme.content_width_in(), 7.1)
+    fig_h = fig_w * 0.35
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h), facecolor="white")
+    if not dates:
+        ax.text(0.5, 0.5, "No data", ha="center", va="center", color=theme.muted)
+    else:
+        x = list(range(len(dates)))
+        y_m: list[float] = []
+        y_cf: list[float] = []
+        y_o: list[float] = []
+        ymax = 0.0
+        for a, b, c in triples:
+            if a is not None and b is not None and c is not None:
+                fa, fb, fc = float(a), float(b), float(c)
+                y_m.append(fa)
+                y_cf.append(fb)
+                y_o.append(fc)
+                ymax = max(ymax, fa, fb, fc)
+            else:
+                y_m.append(float("nan"))
+                y_cf.append(float("nan"))
+                y_o.append(float("nan"))
+
+        c_mit = theme.section_blue
+        c_cf = theme.primary
+        c_or = theme.muted
+        fill_mit = to_rgba(c_mit, _fill_alpha)
+        fill_cf = to_rgba(c_cf, _fill_alpha)
+        fill_or = to_rgba(c_or, _fill_alpha)
+        # Fills first (back to front); lines + markers on top.
+        ax.fill_between(x, 0, y_m, color=fill_mit, linewidth=0, interpolate=True, zorder=1)
+        ax.fill_between(x, 0, y_o, color=fill_or, linewidth=0, interpolate=True, zorder=2)
+        ax.fill_between(x, 0, y_cf, color=fill_cf, linewidth=0, interpolate=True, zorder=3)
+        plot_kw: dict = {
+            "linewidth": 1.35,
+            "solid_capstyle": "round",
+            "marker": "o",
+            "markersize": _marker_ms,
+            "markeredgewidth": _marker_edgewidth,
+            "markeredgecolor": "white",
+            "zorder": 4,
+        }
+        ax.plot(x, y_m, color=c_mit, markerfacecolor=c_mit, label=legend_mit, **plot_kw)
+        ax.plot(x, y_cf, color=c_cf, markerfacecolor=c_cf, label=legend_cf, **plot_kw)
+        ax.plot(x, y_o, color=c_or, markerfacecolor=c_or, label=legend_or, **plot_kw)
+
+        if ymax > 0:
+            ax.set_ylim(0, ymax * 1.08)
+
+        tick_idx = _xtick_indices(len(dates))
+        full_labels = _x_axis_labels_cf(dates, time_granularity)
+        ax.set_xticks(tick_idx)
+        ax.set_xticklabels(
+            [full_labels[i] for i in tick_idx],
+            rotation=0,
+            ha="center",
+            fontsize=7,
+            color=theme.muted,
+        )
+        ax.yaxis.set_major_formatter(ticker.FuncFormatter(_format_y_tick_cf))
+        ax.tick_params(axis="y", labelsize=7, colors=theme.muted)
+        ax.grid(axis="both", linestyle="-", alpha=0.2, color=theme.border)
+        ax.set_axisbelow(True)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+        if any(math.isfinite(v) for v in y_m + y_cf + y_o):
+            h_m = Line2D(
+                [0],
+                [0],
+                color=c_mit,
+                lw=1.35,
+                marker="o",
+                markersize=_marker_ms * 0.9,
+                markerfacecolor=c_mit,
+                markeredgecolor="white",
+                markeredgewidth=_marker_edgewidth,
+                label=legend_mit,
+            )
+            h_cf_l = Line2D(
+                [0],
+                [0],
+                color=c_cf,
+                lw=1.35,
+                marker="o",
+                markersize=_marker_ms * 0.9,
+                markerfacecolor=c_cf,
+                markeredgecolor="white",
+                markeredgewidth=_marker_edgewidth,
+                label=legend_cf,
+            )
+            h_o = Line2D(
+                [0],
+                [0],
+                color=c_or,
+                lw=1.35,
+                marker="o",
+                markersize=_marker_ms * 0.9,
+                markerfacecolor=c_or,
+                markeredgecolor="white",
+                markeredgewidth=_marker_edgewidth,
+                label=legend_or,
+            )
+            ax.legend(
+                handles=[h_m, h_cf_l, h_o],
+                loc="upper right",
+                frameon=False,
+                fontsize=7,
+                handlelength=1.1,
+                handletextpad=0.45,
+                borderaxespad=0.5,
+            )
+            leg = ax.get_legend()
+            if leg is not None:
+                for text in leg.get_texts():
+                    text.set_color(theme.slate)
+    ax.set_title(title, fontsize=10, color=theme.slate, pad=8)
+    if subtitle:
+        fig.text(0.5, 0.02, subtitle, ha="center", fontsize=7, color=theme.muted)
+    buf = io.BytesIO()
+    fig.savefig(
+        buf,
+        format="png",
+        dpi=theme.chart_dpi,
+        bbox_inches="tight",
+        facecolor="white",
+        pad_inches=0.15,
+    )
+    plt.close(fig)
+    buf.seek(0)
+    return buf.read()
+
+
+def prepare_triple_stacked_daily_metric_series(
+    points: Sequence[tuple[date, tuple[int | None, int | None, int | None]]],
+    theme: Theme,
+    *,
+    chart_title: str,
+    legend_bottom: str,
+    legend_mid: str,
+    legend_top: str,
+    y_scale: ChartYScale = "compact_number",
+    stack_mode: SecurityTripleStackMode = "absolute",
+) -> tuple[bytes, str]:
+    as_floats: list[tuple[date, StackedTriplePoint]] = [
+        (
+            d,
+            (
+                float(a) if a is not None else None,
+                float(b) if b is not None else None,
+                float(c) if c is not None else None,
+            ),
+        )
+        for d, (a, b, c) in points
+    ]
+    d, trips, sub, gran = aggregate_triple_stacked_for_chart(as_floats)
+    if len(d) < 2:
+        return b"", sub
+    png = stacked_area_chart_triple_bytes(
+        d,
+        trips,
+        title=chart_title,
+        subtitle=sub,
+        legend_bottom=legend_bottom,
+        legend_mid=legend_mid,
+        legend_top=legend_top,
+        theme=theme,
+        time_granularity=gran,
+        y_scale=y_scale,
+        stack_mode=stack_mode,
+    )
+    return png, sub
+
+
+def prepare_triple_line_daily_metric_series(
+    points: Sequence[tuple[date, tuple[int | None, int | None, int | None]]],
+    theme: Theme,
+    *,
+    chart_title: str,
+    legend_mit: str,
+    legend_cf: str,
+    legend_or: str,
+) -> tuple[bytes, str]:
+    """Same bucketing as stacked triple; renders three absolute-count lines."""
+    as_floats: list[tuple[date, StackedTriplePoint]] = [
+        (
+            d,
+            (
+                float(a) if a is not None else None,
+                float(b) if b is not None else None,
+                float(c) if c is not None else None,
+            ),
+        )
+        for d, (a, b, c) in points
+    ]
+    d, trips, sub, gran = aggregate_triple_stacked_for_chart(as_floats)
+    if len(d) < 2:
+        return b"", sub
+    png = line_chart_triple_bytes(
+        d,
+        trips,
+        title=chart_title,
+        subtitle=sub,
+        legend_mit=legend_mit,
+        legend_cf=legend_cf,
+        legend_or=legend_or,
+        theme=theme,
+        time_granularity=gran,
+    )
+    return png, sub
 
 
 def prepare_stacked_daily_metric_series(
