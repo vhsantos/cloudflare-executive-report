@@ -16,6 +16,11 @@
       { "clientCountryName": "US", "requests": 30000, "bytes": 600000000 },
       { "clientCountryName": "DE", "requests": 8000, "bytes": 150000000 },
       { "clientCountryName": "JP", "requests": 7200, "bytes": 162345678 }
+    ],
+    "response_content_types": [
+      { "edgeResponseContentTypeName": "html", "requests": 40000, "bytes": 800000000 },
+      { "edgeResponseContentTypeName": "js", "requests": 3000, "bytes": 50000000 },
+      { "edgeResponseContentTypeName": "jpeg", "requests": 2200, "bytes": 62345678 }
     ]
   }
 }

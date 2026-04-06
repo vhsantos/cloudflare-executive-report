@@ -14,6 +14,23 @@ from cloudflare_executive_report.dates import format_ymd, utc_today
 from cloudflare_executive_report.retention import date_outside_http_retention
 
 
+def _accumulate_content_type_map(
+    acc: dict[str, tuple[int, int]],
+    rows: list[Any],
+) -> None:
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        raw = row.get("edgeResponseContentTypeName")
+        if raw is None:
+            raw = row.get("edgeResponseContentType")
+        name = str(raw or "").strip() or "unknown"
+        rq = int(row.get("requests") or 0)
+        bt = int(row.get("bytes") or 0)
+        p = acc.get(name, (0, 0))
+        acc[name] = (p[0] + rq, p[1] + bt)
+
+
 def _http_groups(data: dict[str, Any] | None) -> list[dict[str, Any]]:
     if not data:
         return []
@@ -45,6 +62,11 @@ query GetHTTP($zoneTag: String!, $since: String!, $until: String!) {
             requests
             bytes
           }
+          contentTypeMap {
+            edgeResponseContentTypeName
+            requests
+            bytes
+          }
         }
         uniq { uniques }
       }
@@ -73,6 +95,7 @@ def fetch_http_for_date(
     total_page_views = 0
     total_uniques = 0
     country_map: dict[str, dict[str, int]] = {}
+    ctype_acc: dict[str, tuple[int, int]] = {}
 
     for g in groups:
         s = g.get("sum") or {}
@@ -99,10 +122,22 @@ def fetch_http_for_date(
                 country_map[key] = {"requests": 0, "bytes": 0}
             country_map[key]["requests"] += rq
             country_map[key]["bytes"] += bt
+        ct_rows = s.get("contentTypeMap")
+        if isinstance(ct_rows, list):
+            _accumulate_content_type_map(ctype_acc, ct_rows)
 
     country_rows = [
         {"clientCountryName": k, "requests": v["requests"], "bytes": v["bytes"]}
         for k, v in sorted(country_map.items(), key=lambda x: -x[1]["requests"])
+    ]
+
+    response_content_types = [
+        {
+            "edgeResponseContentTypeName": k,
+            "requests": v[0],
+            "bytes": v[1],
+        }
+        for k, v in sorted(ctype_acc.items(), key=lambda x: -x[1][0])
     ]
 
     return {
@@ -116,6 +151,7 @@ def fetch_http_for_date(
         "page_views": total_page_views,
         "uniques": total_uniques,
         "country_map": country_rows,
+        "response_content_types": response_content_types,
     }
 
 
