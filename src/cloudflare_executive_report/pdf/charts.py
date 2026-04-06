@@ -792,6 +792,169 @@ def line_chart_triple_bytes(
     return buf.read()
 
 
+def line_chart_dual_bytes(
+    dates: Sequence[date],
+    pairs: Sequence[StackedPoint],
+    *,
+    title: str,
+    subtitle: str,
+    legend_a: str,
+    legend_b: str,
+    theme: Theme,
+    time_granularity: ChartTimeGranularity = "day",
+) -> bytes:
+    """Two lines: ``legend_a`` (first series) then ``legend_b`` (second)."""
+    _fill_alpha = 0.22
+    _marker_ms = 4.0
+    _marker_edgewidth = 0.55
+    fig_w = min(theme.content_width_in(), 7.1)
+    fig_h = fig_w * 0.35
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h), facecolor="white")
+    if not dates:
+        ax.text(0.5, 0.5, "No data", ha="center", va="center", color=theme.muted)
+    else:
+        x = list(range(len(dates)))
+        y_a: list[float] = []
+        y_b: list[float] = []
+        ymax = 0.0
+        for a, b in pairs:
+            if a is not None and b is not None:
+                fa, fb = float(a), float(b)
+                y_a.append(fa)
+                y_b.append(fb)
+                ymax = max(ymax, fa, fb)
+            else:
+                y_a.append(float("nan"))
+                y_b.append(float("nan"))
+
+        c_a = theme.primary
+        c_b = theme.muted
+        fill_a = to_rgba(c_a, _fill_alpha)
+        fill_b = to_rgba(c_b, _fill_alpha)
+        ax.fill_between(x, 0, y_b, color=fill_b, linewidth=0, interpolate=True, zorder=1)
+        ax.fill_between(x, 0, y_a, color=fill_a, linewidth=0, interpolate=True, zorder=2)
+        plot_kw: dict = {
+            "linewidth": 1.35,
+            "solid_capstyle": "round",
+            "marker": "o",
+            "markersize": _marker_ms,
+            "markeredgewidth": _marker_edgewidth,
+            "markeredgecolor": "white",
+            "zorder": 3,
+        }
+        ax.plot(x, y_b, color=c_b, markerfacecolor=c_b, label=legend_b, **plot_kw)
+        ax.plot(x, y_a, color=c_a, markerfacecolor=c_a, label=legend_a, **plot_kw)
+
+        if ymax > 0:
+            ax.set_ylim(0, ymax * 1.08)
+
+        tick_idx = _xtick_indices(len(dates))
+        full_labels = _x_axis_labels_cf(dates, time_granularity)
+        ax.set_xticks(tick_idx)
+        ax.set_xticklabels(
+            [full_labels[i] for i in tick_idx],
+            rotation=0,
+            ha="center",
+            fontsize=7,
+            color=theme.muted,
+        )
+        ax.yaxis.set_major_formatter(ticker.FuncFormatter(_format_y_tick_cf))
+        ax.tick_params(axis="y", labelsize=7, colors=theme.muted)
+        ax.grid(axis="both", linestyle="-", alpha=0.2, color=theme.border)
+        ax.set_axisbelow(True)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+        if any(math.isfinite(v) for v in y_a + y_b):
+            h_a = Line2D(
+                [0],
+                [0],
+                color=c_a,
+                lw=1.35,
+                marker="o",
+                markersize=_marker_ms * 0.9,
+                markerfacecolor=c_a,
+                markeredgecolor="white",
+                markeredgewidth=_marker_edgewidth,
+                label=legend_a,
+            )
+            h_b = Line2D(
+                [0],
+                [0],
+                color=c_b,
+                lw=1.35,
+                marker="o",
+                markersize=_marker_ms * 0.9,
+                markerfacecolor=c_b,
+                markeredgecolor="white",
+                markeredgewidth=_marker_edgewidth,
+                label=legend_b,
+            )
+            ax.legend(
+                handles=[h_a, h_b],
+                loc="upper right",
+                frameon=False,
+                fontsize=7,
+                handlelength=1.1,
+                handletextpad=0.45,
+                borderaxespad=0.5,
+            )
+            leg = ax.get_legend()
+            if leg is not None:
+                for text in leg.get_texts():
+                    text.set_color(theme.slate)
+    ax.set_title(title, fontsize=10, color=theme.slate, pad=8)
+    if subtitle:
+        fig.text(0.5, 0.02, subtitle, ha="center", fontsize=7, color=theme.muted)
+    buf = io.BytesIO()
+    fig.savefig(
+        buf,
+        format="png",
+        dpi=theme.chart_dpi,
+        bbox_inches="tight",
+        facecolor="white",
+        pad_inches=0.15,
+    )
+    plt.close(fig)
+    buf.seek(0)
+    return buf.read()
+
+
+def prepare_dual_line_daily_metric_series(
+    points: Sequence[tuple[date, tuple[int | None, int | None]]],
+    theme: Theme,
+    *,
+    chart_title: str,
+    legend_a: str,
+    legend_b: str,
+) -> tuple[bytes, str]:
+    """Two absolute-count lines with the same date bucketing as triple-line charts."""
+    as_floats: list[tuple[date, StackedPoint]] = [
+        (
+            d,
+            (
+                float(a) if a is not None else None,
+                float(b) if b is not None else None,
+            ),
+        )
+        for d, (a, b) in points
+    ]
+    d, pairs, sub, gran = aggregate_stacked_pairs_for_chart(as_floats)
+    if len(d) < 2:
+        return b"", sub
+    png = line_chart_dual_bytes(
+        d,
+        pairs,
+        title=chart_title,
+        subtitle=sub,
+        legend_a=legend_a,
+        legend_b=legend_b,
+        theme=theme,
+        time_granularity=gran,
+    )
+    return png, sub
+
+
 def prepare_triple_stacked_daily_metric_series(
     points: Sequence[tuple[date, tuple[int | None, int | None, int | None]]],
     theme: Theme,

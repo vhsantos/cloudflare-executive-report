@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from cloudflare_executive_report.fetchers.cache import CacheFetcher
 from cloudflare_executive_report.fetchers.dns import DnsFetcher
 from cloudflare_executive_report.fetchers.http import HttpFetcher
 from cloudflare_executive_report.fetchers.security import SecurityFetcher
@@ -14,6 +15,7 @@ FETCHER_REGISTRY: dict[str, Fetcher] = {
     "dns": DnsFetcher(),
     "http": HttpFetcher(),
     "security": SecurityFetcher(),
+    "cache": CacheFetcher(),
 }
 
 

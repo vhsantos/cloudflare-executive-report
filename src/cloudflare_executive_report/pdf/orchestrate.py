@@ -18,11 +18,13 @@ from cloudflare_executive_report.pdf.figure_quality import (
 )
 from cloudflare_executive_report.pdf.layout_spec import ReportSpec
 from cloudflare_executive_report.pdf.loader import (
+    load_cache_for_range,
     load_dns_for_range,
     load_http_for_range,
     load_security_for_range,
 )
 from cloudflare_executive_report.pdf.primitives import make_styles
+from cloudflare_executive_report.pdf.streams.cache import append_cache_stream
 from cloudflare_executive_report.pdf.streams.dns import append_dns_stream
 from cloudflare_executive_report.pdf.streams.http import append_http_stream
 from cloudflare_executive_report.pdf.streams.security import append_security_stream
@@ -64,6 +66,8 @@ def write_report_pdf(
     cache_root = cfg.cache_path()
     styles = make_styles(th)
     story: list[Any] = []
+
+    cache_stream_in_report = any(s.strip().lower() == "cache" for s in spec.streams)
 
     for zi, zone_key in enumerate(spec.zone_ids):
         zone_id, zone_name = resolve_zone(cfg, zone_key)
@@ -157,6 +161,32 @@ def write_report_pdf(
                     layout=spec.security_layout,
                     theme=th,
                     top=spec.top,
+                    cache_stream_in_report=cache_stream_in_report,
+                )
+            elif sid == "cache":
+                loaded = load_cache_for_range(
+                    cache_root,
+                    zone_id,
+                    zone_name,
+                    spec.start,
+                    spec.end,
+                    top=spec.top,
+                )
+                if loaded.api_day_count == 0:
+                    _warn_skip_no_api_data("Cache", zone_name, spec.start, spec.end)
+                    continue
+                append_cache_stream(
+                    story,
+                    zone_name=zone_name,
+                    period_start=spec.start,
+                    period_end=spec.end,
+                    cache=loaded.rollup,
+                    daily_cache_cf_origin=loaded.daily_cache_cf_origin,
+                    missing_dates=loaded.missing_dates,
+                    layout=spec.cache_layout,
+                    theme=th,
+                    top=spec.top,
+                    http_mime_1d=loaded.http_mime_1d,
                 )
             else:
                 log.warning("Unknown stream %r - skipped", stream)

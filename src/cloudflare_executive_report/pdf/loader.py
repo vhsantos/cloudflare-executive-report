@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from cloudflare_executive_report.aggregate import (
+    build_cache_section,
     build_dns_section,
     build_http_section,
     build_security_section,
@@ -51,6 +52,18 @@ class SecurityLoadResult:
     missing_dates: list[str]
     warnings: list[str] = field(default_factory=list)
     api_day_count: int = 0
+
+
+@dataclass
+class CacheLoadResult:
+    """Cache stream rollup plus optional HTTP 1d MIME mix (``http_mime_1d``) for the cache PDF."""
+
+    rollup: dict[str, Any]
+    daily_cache_cf_origin: list[tuple[date, tuple[int | None, int | None]]]
+    missing_dates: list[str]
+    warnings: list[str] = field(default_factory=list)
+    api_day_count: int = 0
+    http_mime_1d: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -381,4 +394,142 @@ def load_security_for_range(
         missing_dates=missing2,
         warnings=warns,
         api_day_count=n_api,
+    )
+
+
+def _merge_http_mime_1d_for_range(
+    http_days: list[dict[str, Any]],
+    *,
+    top: int,
+) -> list[dict[str, Any]]:
+    """Merge ``response_content_types`` from HTTP daily payloads (request-weighted bars)."""
+    acc: dict[str, int] = {}
+    for d in http_days:
+        for row in d.get("response_content_types") or []:
+            if not isinstance(row, dict):
+                continue
+            raw = row.get("edgeResponseContentTypeName")
+            if raw is None:
+                raw = row.get("edgeResponseContentType")
+            k = str(raw or "").strip() or "unknown"
+            acc[k] = acc.get(k, 0) + int(row.get("requests") or 0)
+    total = sum(acc.values())
+    if total <= 0:
+        return []
+    items = sorted(acc.items(), key=lambda x: -x[1])[:top]
+    return [
+        {
+            "content_type": name,
+            "count": cnt,
+            "percentage": round(100.0 * cnt / total, 1),
+        }
+        for name, cnt in items
+    ]
+
+
+_CACHE_ORIGIN_FETCH_STATUSES = frozenset({"dynamic", "miss", "bypass"})
+
+
+def _daily_cache_cf_origin_pair(data: dict[str, Any]) -> tuple[int, int]:
+    """Same origin bucket as security eyeball pass (dynamic / miss / bypass)."""
+    total = 0
+    origin = 0
+    for row in data.get("by_cache_status") or []:
+        if not isinstance(row, dict):
+            continue
+        st = str(row.get("value") or "").strip().lower()
+        c = int(row.get("count") or 0)
+        if not st:
+            continue
+        total += c
+        if st in _CACHE_ORIGIN_FETCH_STATUSES:
+            origin += c
+    return max(0, total - origin), origin
+
+
+def _load_cache_days_for_range(
+    cache_root: Path,
+    zone_id: str,
+    zone_name: str,
+    start: str,
+    end: str,
+) -> tuple[
+    list[dict[str, Any]],
+    list[tuple[date, tuple[int | None, int | None]]],
+    list[str],
+    list[str],
+]:
+    warnings: list[str] = []
+    api_days: list[dict[str, Any]] = []
+    daily_pair: list[tuple[date, tuple[int | None, int | None]]] = []
+    missing_dates: list[str] = []
+
+    for d in iter_dates_inclusive(parse_ymd(start), parse_ymd(end)):
+        ds = format_ymd(d)
+        path = day_cache_path(cache_root, zone_id, ds, "cache")
+        raw = read_day_file(path)
+        if not raw:
+            warnings.append(f"No cache data for zone {zone_name} on {ds}")
+            missing_dates.append(ds)
+            daily_pair.append((d, (None, None)))
+            continue
+        src = raw.get("_source")
+        if src == "null":
+            warnings.append(f"Cache for zone {zone_name} on {ds} unavailable (null)")
+            missing_dates.append(ds)
+            daily_pair.append((d, (None, None)))
+            continue
+        if src == "error":
+            warnings.append(f"Cache for zone {zone_name} on {ds} failed (cached error)")
+            missing_dates.append(ds)
+            daily_pair.append((d, (None, None)))
+            continue
+        data = raw.get("data")
+        if not isinstance(data, dict):
+            warnings.append(f"Cache for zone {zone_name} on {ds} has no data object")
+            missing_dates.append(ds)
+            daily_pair.append((d, (None, None)))
+            continue
+
+        api_days.append(data)
+        cf, org = _daily_cache_cf_origin_pair(data)
+        daily_pair.append((d, (cf, org)))
+
+    return api_days, daily_pair, missing_dates, warnings
+
+
+def load_cache_for_range(
+    cache_root: Path,
+    zone_id: str,
+    zone_name: str,
+    start: str,
+    end: str,
+    *,
+    top: int,
+) -> CacheLoadResult:
+    api_days, dtriple, missing, warns = _load_cache_days_for_range(
+        cache_root, zone_id, zone_name, start, end
+    )
+    scratch = _StreamDaysScratch(
+        api_days=api_days,
+        daily_metric=[],
+        missing_dates=missing,
+        warnings=warns,
+    )
+    rollup, missing2, _, n_api = _finalize_stream_load(
+        scratch, top=top, build_rollup=build_cache_section
+    )
+    http_api_days, _, _, _, _, _, _, _, http_warns = _load_http_days_for_range(
+        cache_root, zone_id, zone_name, start, end
+    )
+    for w in http_warns:
+        log.debug("%s", w)
+    http_mime_1d = _merge_http_mime_1d_for_range(http_api_days, top=top)
+    return CacheLoadResult(
+        rollup=rollup,
+        daily_cache_cf_origin=dtriple,
+        missing_dates=missing2,
+        warnings=warns,
+        api_day_count=n_api,
+        http_mime_1d=http_mime_1d,
     )

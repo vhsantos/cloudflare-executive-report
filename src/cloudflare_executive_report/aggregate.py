@@ -190,6 +190,17 @@ def build_http_section(
             k = str(name)
             country_req[k] = country_req.get(k, 0) + int(row.get("requests") or 0)
 
+    ctype_req: dict[str, int] = {}
+    for d in daily_api_data:
+        for row in d.get("response_content_types") or []:
+            if not isinstance(row, dict):
+                continue
+            raw = row.get("edgeResponseContentTypeName")
+            if raw is None:
+                raw = row.get("edgeResponseContentType")
+            k = str(raw or "").strip() or "unknown"
+            ctype_req[k] = ctype_req.get(k, 0) + int(row.get("requests") or 0)
+
     cache_hit_ratio = 0.0
     if total_req > 0:
         cache_hit_ratio = round(100.0 * cached_req / total_req, 1)
@@ -206,6 +217,19 @@ def build_http_section(
                     "code": code,
                     "requests": c,
                     "percentage": pct,
+                }
+            )
+
+    ctype_total = sum(ctype_req.values())
+    top_response_content_types: list[dict[str, Any]] = []
+    if ctype_total > 0 and ctype_req:
+        items = sorted(ctype_req.items(), key=lambda x: -x[1])[:top]
+        for k, c in items:
+            top_response_content_types.append(
+                {
+                    "content_type": k,
+                    "requests": c,
+                    "percentage": _pct_of_total(c, ctype_total),
                 }
             )
 
@@ -235,6 +259,118 @@ def build_http_section(
         "page_views": page_views,
         "page_views_human": format_count_human(page_views),
         "top_countries": top_countries,
+        "top_response_content_types": top_response_content_types,
+    }
+
+
+def _norm_cache_status(raw: str) -> str:
+    return raw.strip().lower()
+
+
+# Same origin bucket as security pass traffic (dynamic / miss / bypass).
+_CACHE_ORIGIN_FETCH_STATUSES = frozenset({"dynamic", "miss", "bypass"})
+
+
+def _cache_served_cf_origin_from_status_rows(day: dict[str, Any]) -> tuple[int, int]:
+    """Return (served_cf_requests, served_origin_requests) from marginal cache status counts."""
+    total = 0
+    origin = 0
+    for row in day.get("by_cache_status") or []:
+        if not isinstance(row, dict):
+            continue
+        st = _norm_cache_status(str(row.get("value") or ""))
+        c = int(row.get("count") or 0)
+        if not st:
+            continue
+        total += c
+        if st in _CACHE_ORIGIN_FETCH_STATUSES:
+            origin += c
+    served_cf = max(0, total - origin)
+    return served_cf, origin
+
+
+def _cache_status_counts(day: dict[str, Any]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for row in day.get("by_cache_status") or []:
+        if not isinstance(row, dict):
+            continue
+        status = _norm_cache_status(str(row.get("value") or ""))
+        if not status:
+            continue
+        out[status] = out.get(status, 0) + int(row.get("count") or 0)
+    return out
+
+
+def build_cache_section(
+    daily_api_data: list[dict[str, Any]],
+    *,
+    top: int = 10,
+) -> dict[str, Any]:
+    status_counts: dict[str, int] = {}
+    status_bytes: dict[str, int] = {}
+    path_counts: dict[str, int] = {}
+    served_cf_total = 0
+    served_origin_total = 0
+
+    for d in daily_api_data:
+        for row in d.get("by_cache_status") or []:
+            if not isinstance(row, dict):
+                continue
+            k = _norm_cache_status(str(row.get("value") or ""))
+            if not k:
+                continue
+            status_counts[k] = status_counts.get(k, 0) + int(row.get("count") or 0)
+            status_bytes[k] = status_bytes.get(k, 0) + int(row.get("edgeResponseBytes") or 0)
+
+        for row in d.get("top_path_status") or []:
+            if not isinstance(row, dict):
+                continue
+            p = str(row.get("path") or "").strip()
+            if p:
+                path_counts[p] = path_counts.get(p, 0) + int(row.get("count") or 0)
+
+        cf_d, org_d = _cache_served_cf_origin_from_status_rows(d)
+        served_cf_total += cf_d
+        served_origin_total += org_d
+
+    total_requests = sum(status_counts.values())
+    total_bytes = sum(status_bytes.values())
+    hit = int(status_counts.get("hit") or 0)
+    miss = int(status_counts.get("miss") or 0)
+    dynamic = int(status_counts.get("dynamic") or 0)
+
+    by_status_items = sorted(status_counts.items(), key=lambda x: -x[1])[:top]
+    by_status: list[dict[str, Any]] = []
+    for k, c in by_status_items:
+        by_status.append(
+            {
+                "status": k,
+                "count": c,
+                "bytes": int(status_bytes.get(k) or 0),
+                "percentage": _pct_of_total(c, total_requests),
+            }
+        )
+
+    return {
+        "total_requests_sampled": total_requests,
+        "total_requests_sampled_human": format_count_human(total_requests),
+        "total_edge_response_bytes": total_bytes,
+        "total_edge_response_bytes_human": format_bytes_human(total_bytes),
+        "hit_requests": hit,
+        "hit_requests_human": format_count_human(hit),
+        "miss_requests": miss,
+        "miss_requests_human": format_count_human(miss),
+        "dynamic_requests": dynamic,
+        "dynamic_requests_human": format_count_human(dynamic),
+        "cache_hit_ratio": _pct_of_total(hit, total_requests),
+        "served_cf_count": served_cf_total,
+        "served_cf_count_human": format_count_human(served_cf_total),
+        "served_origin_count": served_origin_total,
+        "served_origin_count_human": format_count_human(served_origin_total),
+        "by_cache_status": by_status,
+        "top_paths": _top_pct(path_counts, total_requests, top, name_key="path")
+        if total_requests > 0
+        else [],
     }
 
 
@@ -430,6 +566,7 @@ SECTION_BUILDERS: dict[str, SectionBuilder] = {
     "dns": build_dns_section,
     "http": build_http_section,
     "security": build_security_section,
+    "cache": build_cache_section,
 }
 
 

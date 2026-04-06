@@ -79,10 +79,10 @@ def _config_log_level(cfg: AppConfig) -> str:
 
 
 def _pdf_streams_from_types(type_set: frozenset[str]) -> tuple[str, ...]:
-    """Order follows registry; only streams with PDF sections (dns, http, security)."""
+    """Order follows registry; only streams with PDF sections."""
     out: list[str] = []
     for sid in registered_stream_ids():
-        if sid in type_set and sid in ("dns", "http", "security"):
+        if sid in type_set and sid in ("dns", "http", "security", "cache"):
             out.append(sid)
     return tuple(out)
 
@@ -195,7 +195,7 @@ def cmd_report(
         "--types",
         help=(
             f"Comma-separated stream ids (default: {default_types_csv()}). "
-            "PDF includes dns and http only."
+            "PDF includes dns, http, security, and cache."
         ),
     ),
     top: int = typer.Option(
@@ -228,7 +228,7 @@ def cmd_report(
     if not pdf_streams:
         typer.echo(
             "Error: --types must include at least one of dns, http "
-            "(PDF has no section for other streams yet).",
+            "security, cache (PDF has no section for other streams yet).",
             err=True,
         )
         raise typer.Exit(exits.INVALID_PARAMS)

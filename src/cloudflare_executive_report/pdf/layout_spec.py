@@ -45,6 +45,18 @@ class SecurityStreamLayout:
     )
 
 
+@dataclass(frozen=True)
+class CacheStreamLayout:
+    blocks: tuple[str, ...] = (
+        "header",
+        "kpi",
+        "timeseries",
+        "status",
+        "paths",
+        "mime_http_1d",
+    )
+
+
 @dataclass
 class ReportSpec:
     zone_ids: list[str]
@@ -55,3 +67,4 @@ class ReportSpec:
     dns_layout: DnsStreamLayout = field(default_factory=DnsStreamLayout)
     http_layout: HttpStreamLayout = field(default_factory=HttpStreamLayout)
     security_layout: SecurityStreamLayout = field(default_factory=SecurityStreamLayout)
+    cache_layout: CacheStreamLayout = field(default_factory=CacheStreamLayout)
