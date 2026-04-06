@@ -99,6 +99,16 @@ def format_cache_status_label(raw: str) -> str:
     return raw.replace("_", " ").strip().title()
 
 
+def format_cache_content_type_label(raw: str) -> str:
+    """Adaptive cache uses numeric content-type IDs; 1d map uses names like ``html``."""
+    s = str(raw).strip()
+    if not s:
+        return raw
+    if s.isdigit():
+        return f"Type ID {s}"
+    return s
+
+
 def apply_row_label_formatter(
     items: list[dict[str, Any]],
     top: int,
