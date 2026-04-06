@@ -149,18 +149,6 @@ def append_security_stream(
     if "actions" in blocks and "services" in blocks and (rows_top or svc_rows):
         left = (
             table_with_bars(
-                "Security actions",
-                rows_top,
-                styles,
-                ratios=sec_ratios,
-                total_width_in=half_inner,
-                theme=theme,
-            )
-            if rows_top
-            else Spacer(1, 1)
-        )
-        right = (
-            table_with_bars(
                 "Security services",
                 svc_rows,
                 styles,
@@ -169,6 +157,18 @@ def append_security_stream(
                 theme=theme,
             )
             if svc_rows
+            else Spacer(1, 1)
+        )
+        right = (
+            table_with_bars(
+                "Security actions",
+                rows_top,
+                styles,
+                ratios=sec_ratios,
+                total_width_in=half_inner,
+                theme=theme,
+            )
+            if rows_top
             else Spacer(1, 1)
         )
         two_col = Table([[left, right]], colWidths=[w_half, w_half])
