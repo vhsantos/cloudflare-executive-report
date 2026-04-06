@@ -286,6 +286,7 @@ def _security_top_countries(country_counts: dict[str, int], *, top: int) -> list
             {
                 "country": cname,
                 "code": code,
+                "count": c,
                 "requests": c,
                 "percentage": _pct_of_total(c, total),
             }

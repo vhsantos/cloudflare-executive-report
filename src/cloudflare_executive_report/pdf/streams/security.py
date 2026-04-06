@@ -125,18 +125,58 @@ def append_security_stream(
 
     sec_ratios = (0.40, 0.18, 0.42)
 
-    if "actions" in blocks:
-        rows_top = ranked_rows_from_dicts(
-            apply_row_label_formatter(
-                list(security.get("top_actions") or []),
-                top,
-                "action",
-                format_security_action_label,
-            ),
+    rows_top = ranked_rows_from_dicts(
+        apply_row_label_formatter(
+            list(security.get("top_actions") or []),
             top,
             "action",
+            format_security_action_label,
+        ),
+        top,
+        "action",
+    )
+    svc_rows = ranked_rows_from_dicts(
+        apply_row_label_formatter(
+            list(security.get("top_security_services") or []),
+            top,
+            "service",
+            format_security_source_label,
+        ),
+        top,
+        "service",
+    )
+
+    if "actions" in blocks and "services" in blocks and (rows_top or svc_rows):
+        left = (
+            table_with_bars(
+                "Security actions",
+                rows_top,
+                styles,
+                ratios=sec_ratios,
+                total_width_in=half_inner,
+                theme=theme,
+            )
+            if rows_top
+            else Spacer(1, 1)
         )
-        if rows_top:
+        right = (
+            table_with_bars(
+                "Security services",
+                svc_rows,
+                styles,
+                ratios=sec_ratios,
+                total_width_in=half_inner,
+                theme=theme,
+            )
+            if svc_rows
+            else Spacer(1, 1)
+        )
+        two_col = Table([[left, right]], colWidths=[w_half, w_half])
+        two_col.setStyle(two_column_gap_style(theme))
+        story.append(two_col)
+        story.append(Spacer(1, 16))
+    else:
+        if "actions" in blocks and rows_top:
             story.append(
                 table_with_bars(
                     "Security actions",
@@ -148,19 +188,7 @@ def append_security_stream(
                 )
             )
             story.append(Spacer(1, 16))
-
-    if "services" in blocks:
-        svc_rows = ranked_rows_from_dicts(
-            apply_row_label_formatter(
-                list(security.get("top_security_services") or []),
-                top,
-                "service",
-                format_security_source_label,
-            ),
-            top,
-            "service",
-        )
-        if svc_rows:
+        if "services" in blocks and svc_rows:
             story.append(
                 table_with_bars(
                     "Security services",
@@ -234,7 +262,10 @@ def append_security_stream(
 
     if "countries" in blocks:
         c_rows = ranked_rows_from_dicts(
-            list(security.get("top_source_countries") or []), top, "country"
+            list(security.get("top_source_countries") or []),
+            top,
+            "country",
+            value_key="requests",
         )
         if c_rows:
             story.append(
