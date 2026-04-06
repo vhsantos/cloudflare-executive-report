@@ -29,6 +29,22 @@ class HttpStreamLayout:
     )
 
 
+@dataclass(frozen=True)
+class SecurityStreamLayout:
+    blocks: tuple[str, ...] = (
+        "header",
+        "kpi",
+        "timeseries",
+        "actions",
+        "services",
+        "attack_sources",
+        "attack_paths",
+        "countries",
+        "cache",
+        "methods",
+    )
+
+
 @dataclass
 class ReportSpec:
     zone_ids: list[str]
@@ -38,3 +54,4 @@ class ReportSpec:
     top: int = 10
     dns_layout: DnsStreamLayout = field(default_factory=DnsStreamLayout)
     http_layout: HttpStreamLayout = field(default_factory=HttpStreamLayout)
+    security_layout: SecurityStreamLayout = field(default_factory=SecurityStreamLayout)

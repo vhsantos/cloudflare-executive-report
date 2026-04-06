@@ -9,7 +9,11 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from cloudflare_executive_report.aggregate import build_dns_section, build_http_section
+from cloudflare_executive_report.aggregate import (
+    build_dns_section,
+    build_http_section,
+    build_security_section,
+)
 from cloudflare_executive_report.cache.envelope import read_day_file
 from cloudflare_executive_report.dates import format_ymd, iter_dates_inclusive, parse_ymd
 from cloudflare_executive_report.fetchers.registry import day_cache_path
@@ -35,6 +39,15 @@ class HttpLoadResult:
     daily_bytes_cached: list[tuple[date, int | None]]
     daily_bytes_uncached: list[tuple[date, int | None]]
     daily_uniques: list[tuple[date, int | None]]
+    missing_dates: list[str]
+    warnings: list[str] = field(default_factory=list)
+    api_day_count: int = 0
+
+
+@dataclass
+class SecurityLoadResult:
+    rollup: dict[str, Any]
+    daily_security_triple: list[tuple[date, tuple[int | None, int | None, int | None]]]
     missing_dates: list[str]
     warnings: list[str] = field(default_factory=list)
     api_day_count: int = 0
@@ -279,6 +292,92 @@ def load_http_for_range(
         daily_bytes_cached=dbc,
         daily_bytes_uncached=dbu,
         daily_uniques=duv,
+        missing_dates=missing2,
+        warnings=warns,
+        api_day_count=n_api,
+    )
+
+
+def _load_security_days_for_range(
+    cache_root: Path,
+    zone_id: str,
+    zone_name: str,
+    start: str,
+    end: str,
+) -> tuple[
+    list[dict[str, Any]],
+    list[tuple[date, tuple[int | None, int | None, int | None]]],
+    list[str],
+    list[str],
+]:
+    warnings: list[str] = []
+    api_days: list[dict[str, Any]] = []
+    daily_triple: list[tuple[date, tuple[int | None, int | None, int | None]]] = []
+    missing_dates: list[str] = []
+
+    for d in iter_dates_inclusive(parse_ymd(start), parse_ymd(end)):
+        ds = format_ymd(d)
+        path = day_cache_path(cache_root, zone_id, ds, "security")
+        raw = read_day_file(path)
+        if not raw:
+            warnings.append(f"No security cache for zone {zone_name} on {ds}")
+            missing_dates.append(ds)
+            daily_triple.append((d, (None, None, None)))
+            continue
+        src = raw.get("_source")
+        if src == "null":
+            warnings.append(f"Security for zone {zone_name} on {ds} unavailable (null)")
+            missing_dates.append(ds)
+            daily_triple.append((d, (None, None, None)))
+            continue
+        if src == "error":
+            warnings.append(f"Security for zone {zone_name} on {ds} failed (cached error)")
+            missing_dates.append(ds)
+            daily_triple.append((d, (None, None, None)))
+            continue
+        data = raw.get("data")
+        if not isinstance(data, dict):
+            warnings.append(f"Security for zone {zone_name} on {ds} has no data object")
+            missing_dates.append(ds)
+            daily_triple.append((d, (None, None, None)))
+            continue
+
+        api_days.append(data)
+        if "mitigated_count" in data or "served_cf_count" in data:
+            m = int(data.get("mitigated_count") or 0)
+            cf = int(data.get("served_cf_count") or 0)
+            org = int(data.get("served_origin_count") or 0)
+            daily_triple.append((d, (m, cf, org)))
+        else:
+            daily_triple.append((d, (None, None, None)))
+
+    return api_days, daily_triple, missing_dates, warnings
+
+
+def load_security_for_range(
+    cache_root: Path,
+    zone_id: str,
+    zone_name: str,
+    start: str,
+    end: str,
+    *,
+    top: int,
+) -> SecurityLoadResult:
+    api_days, dtriple, missing, warns = _load_security_days_for_range(
+        cache_root, zone_id, zone_name, start, end
+    )
+    scratch = _StreamDaysScratch(
+        api_days=api_days,
+        daily_metric=[],
+        missing_dates=missing,
+        warnings=warns,
+    )
+    rollup, missing2, _, n_api = _finalize_stream_load(
+        scratch, top=top, build_rollup=build_security_section
+    )
+    return SecurityLoadResult(
+        rollup=rollup,
+        daily_security_triple=dtriple,
         missing_dates=missing2,
         warnings=warns,
         api_day_count=n_api,

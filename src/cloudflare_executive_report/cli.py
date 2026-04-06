@@ -79,10 +79,10 @@ def _config_log_level(cfg: AppConfig) -> str:
 
 
 def _pdf_streams_from_types(type_set: frozenset[str]) -> tuple[str, ...]:
-    """Order follows registry; only streams with PDF sections (dns, http)."""
+    """Order follows registry; only streams with PDF sections (dns, http, security)."""
     out: list[str] = []
     for sid in registered_stream_ids():
-        if sid in type_set and sid in ("dns", "http"):
+        if sid in type_set and sid in ("dns", "http", "security"):
             out.append(sid)
     return tuple(out)
 

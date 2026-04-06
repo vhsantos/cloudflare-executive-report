@@ -17,10 +17,15 @@ from cloudflare_executive_report.pdf.figure_quality import (
     theme_with_pdf_image_quality,
 )
 from cloudflare_executive_report.pdf.layout_spec import ReportSpec
-from cloudflare_executive_report.pdf.loader import load_dns_for_range, load_http_for_range
+from cloudflare_executive_report.pdf.loader import (
+    load_dns_for_range,
+    load_http_for_range,
+    load_security_for_range,
+)
 from cloudflare_executive_report.pdf.primitives import make_styles
 from cloudflare_executive_report.pdf.streams.dns import append_dns_stream
 from cloudflare_executive_report.pdf.streams.http import append_http_stream
+from cloudflare_executive_report.pdf.streams.security import append_security_stream
 from cloudflare_executive_report.pdf.theme import Theme
 
 log = logging.getLogger(__name__)
@@ -126,6 +131,30 @@ def write_report_pdf(
                     daily_uniques=loaded.daily_uniques,
                     missing_dates=loaded.missing_dates,
                     layout=spec.http_layout,
+                    theme=th,
+                    top=spec.top,
+                )
+            elif sid == "security":
+                loaded = load_security_for_range(
+                    cache_root,
+                    zone_id,
+                    zone_name,
+                    spec.start,
+                    spec.end,
+                    top=spec.top,
+                )
+                if loaded.api_day_count == 0:
+                    _warn_skip_no_api_data("Security", zone_name, spec.start, spec.end)
+                    continue
+                append_security_stream(
+                    story,
+                    zone_name=zone_name,
+                    period_start=spec.start,
+                    period_end=spec.end,
+                    security=loaded.rollup,
+                    daily_security_triple=loaded.daily_security_triple,
+                    missing_dates=loaded.missing_dates,
+                    layout=spec.security_layout,
                     theme=th,
                     top=spec.top,
                 )

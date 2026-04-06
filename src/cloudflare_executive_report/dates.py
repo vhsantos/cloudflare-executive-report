@@ -30,6 +30,7 @@ def day_bounds_utc(d: date) -> tuple[str, str]:
 
 
 def day_start_iso_z(d: date) -> str:
+    """First instant of a UTC calendar day (midnight)."""
     return f"{format_ymd(d)}T00:00:00Z"
 
 

@@ -1,14 +1,8 @@
-"""Firewall / security events (GraphQL firewallEventsAdaptive).
-
-Note: ``firewallEventsAdaptiveGroups`` is a different GraphQL path and often returns
-"zone does not have access to the path" for the same token that can read
-``firewallEventsAdaptive`` (raw sampled events). We use the adaptive node and fold
-rows into ``by_action`` counts for a compact cache.
-"""
+"""Per-day security cache via ``httpRequestsAdaptiveGroups`` (eyeball + mitigating filters)."""
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import date
 from typing import Any, ClassVar
 
 from cloudflare_executive_report.cf_client import (
@@ -16,23 +10,122 @@ from cloudflare_executive_report.cf_client import (
     CloudflareClient,
     CloudflareRateLimitError,
 )
-from cloudflare_executive_report.dates import day_start_iso_z, format_ymd, utc_now_iso_z, utc_today
+from cloudflare_executive_report.dates import (
+    day_bounds_utc,
+    day_start_iso_z,
+    format_ymd,
+    utc_now_iso_z,
+    utc_today,
+)
+from cloudflare_executive_report.fetchers.graphql_common import (
+    adaptive_groups_rows,
+    counts_to_sorted_value_rows,
+    group_dimension_table,
+    marginal_counts_for_dimension,
+    viewer_first_zone,
+    zone_alias_groups,
+)
 from cloudflare_executive_report.retention import date_outside_security_retention
 
-_SECURITY_PAGE_LIMIT = 10_000
-_MAX_PAGES = 500
+# Matrix fold: only these ``securityAction`` values count as mitigated
+# (match ``securityAction_in`` below).
+EYEBALL_MITIGATING_SECURITY_ACTIONS = frozenset(
+    {"block", "challenge", "js_challenge", "managed_challenge"}
+)
+# Pass traffic: ``cacheStatus`` values treated like Security Analytics "Served by origin"
+# (dynamic / cache miss / cache bypass path). All other pass rows count as "Served by Cloudflare"
+# (edge-handled: cached, none, redirects-as-edge, etc.). See Cloudflare Traffic analysis docs.
+EYEBALL_ORIGIN_FETCH_CACHE_STATUSES = frozenset({"dynamic", "miss", "bypass"})
+# GraphQL ``securityAction_in`` for mitigating-only group queries
+# (same set as matrix mitigated bucket).
+MITIGATING_SECURITY_ACTIONS_GQL = ", ".join(
+    f'"{a}"' for a in sorted(EYEBALL_MITIGATING_SECURITY_ACTIONS)
+)
+# Rollup: omit from ``actions_among_mitigated`` (e.g. AI Labyrinth noise).
+ROLLUP_EXCLUDE_ACTION_PREFIXES = ("link_maze_",)
+# Rollup: treat action name as challenge if lowercased name contains any of these.
+ROLLUP_CHALLENGE_SUBSTRINGS = ("challenge", "captcha")
 
-Q_SECURITY = """
-query GetSecurity($zoneTag: String!, $since: String!, $until: String!) {
+_LIMIT_TOP_IPS = 10
+_LIMIT_TOP_PATHS = 10
+_LIMIT_TOP_COUNTRIES = 10
+_LIMIT_ACTION_SOURCE = 50
+
+
+def _gql_mitigating_groups(
+    operation_name: str, alias: str, limit: int, dimension_fields: str
+) -> str:
+    actions = MITIGATING_SECURITY_ACTIONS_GQL
+    return f"""
+query {operation_name}($zoneTag: String!, $datetime_geq: Time!, $datetime_lt: Time!) {{
+  viewer {{
+    zones(filter: {{zoneTag_in: [$zoneTag]}}) {{
+      {alias}: httpRequestsAdaptiveGroups(
+        limit: {limit}
+        filter: {{
+          datetime_geq: $datetime_geq
+          datetime_lt: $datetime_lt
+          requestSource: "eyeball"
+          securityAction_in: [{actions}]
+        }}
+        orderBy: [count_DESC]
+      ) {{
+        count
+        dimensions {{ {dimension_fields} }}
+      }}
+    }}
+  }}
+}}
+"""
+
+
+Q_SEC_ACTION_SOURCE = _gql_mitigating_groups(
+    "SecHttpActSrc", "asg", _LIMIT_ACTION_SOURCE, "securityAction securitySource"
+)
+Q_SEC_IPS = _gql_mitigating_groups(
+    "SecHttpIps", "ipg", _LIMIT_TOP_IPS, "clientIP clientCountryName"
+)
+Q_SEC_PATHS = _gql_mitigating_groups("SecHttpPaths", "pth", _LIMIT_TOP_PATHS, "clientRequestPath")
+Q_SEC_COUNTRIES = _gql_mitigating_groups(
+    "SecHttpCountries", "geo", _LIMIT_TOP_COUNTRIES, "clientCountryName"
+)
+
+Q_EYEBALL_MATRIX = """
+query SecEyeballMatrix($zoneTag: String!, $datetime_geq: Time!, $datetime_lt: Time!) {
   viewer {
     zones(filter: {zoneTag_in: [$zoneTag]}) {
-      firewallEventsAdaptive(
+      mtx: httpRequestsAdaptiveGroups(
         limit: 10000
-        filter: {datetime_geq: $since, datetime_leq: $until}
-        orderBy: [datetime_ASC]
+        filter: {
+          datetime_geq: $datetime_geq
+          datetime_lt: $datetime_lt
+          requestSource: "eyeball"
+        }
+        orderBy: [count_DESC]
       ) {
-        action
-        datetime
+        count
+        dimensions { securityAction cacheStatus }
+      }
+    }
+  }
+}
+"""
+
+Q_EYEBALL_METHODS = """
+query SecEyeballMethods($zoneTag: String!, $datetime_geq: Time!, $datetime_lt: Time!) {
+  viewer {
+    zones(filter: {zoneTag_in: [$zoneTag]}) {
+      met: httpRequestsAdaptiveGroups(
+        limit: 50
+        filter: {
+          datetime_geq: $datetime_geq
+          datetime_lt: $datetime_lt
+          requestSource: "eyeball"
+        }
+        orderBy: [count_DESC]
+      ) {
+        count
+        dimensions { clientRequestHTTPMethodName }
       }
     }
   }
@@ -40,65 +133,70 @@ query GetSecurity($zoneTag: String!, $since: String!, $until: String!) {
 """
 
 
-def _end_of_utc_calendar_day_iso_z(d: date) -> str:
-    """Inclusive upper bound for ``datetime_leq`` on a stored UTC calendar day."""
-    return f"{format_ymd(d)}T23:59:59Z"
+def _marginals_from_action_source_rows(
+    rows: list[dict[str, Any]],
+) -> tuple[dict[str, int], dict[str, int]]:
+    by_action: dict[str, int] = {}
+    by_source: dict[str, int] = {}
+    for row in rows:
+        act = str(row.get("securityAction") or "").strip()
+        src = str(row.get("securitySource") or "").strip()
+        c = int(row.get("count") or 0)
+        if act:
+            by_action[act] = by_action.get(act, 0) + c
+        if src:
+            by_source[src] = by_source.get(src, 0) + c
+    return by_action, by_source
 
 
-def _security_rows(data: dict[str, Any] | None) -> list[dict[str, Any]]:
-    if not data:
-        return []
-    zones = ((data.get("viewer") or {}).get("zones")) or []
-    if not zones:
-        return []
-    return zones[0].get("firewallEventsAdaptive") or []
+def _ip_rows_allow_missing_country(zone: dict[str, Any], alias: str) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for row in zone_alias_groups(zone, alias):
+        if not isinstance(row, dict):
+            continue
+        dims = row.get("dimensions") or {}
+        if not isinstance(dims, dict):
+            continue
+        ip = dims.get("clientIP")
+        if ip is None or not str(ip).strip():
+            continue
+        co = dims.get("clientCountryName")
+        co_s = str(co).strip() if co is not None else ""
+        out.append(
+            {
+                "clientIP": str(ip).strip(),
+                "clientCountryName": co_s,
+                "count": int(row.get("count") or 0),
+            }
+        )
+    return out
 
 
-def _parse_event_dt(s: str) -> datetime | None:
-    try:
-        s = str(s).strip()
-        if s.endswith("Z"):
-            s = s[:-1] + "+00:00"
-        return datetime.fromisoformat(s)
-    except (TypeError, ValueError):
-        return None
+def _fold_eyeball_matrix(rows: list[dict[str, Any]]) -> tuple[int, int, int]:
+    """Split eyeball matrix into mitigated vs pass, then pass by origin-fetch vs Cloudflare-served.
 
-
-def _next_page_since_iso_z(rows: list[dict[str, Any]]) -> str | None:
-    """Exclusive lower bound for the next page (1s after latest row ``datetime``)."""
-    latest: datetime | None = None
+    Mitigated uses ``EYEBALL_MITIGATING_SECURITY_ACTIONS`` (same as mitigating GraphQL groups).
+    Pass traffic uses ``cacheStatus``: ``EYEBALL_ORIGIN_FETCH_CACHE_STATUSES`` → ``served_origin``;
+    all other pass statuses → ``served_cf`` (aligns with Security Analytics Traffic analysis in
+    practice: origin bucket ≈ dynamic/miss/bypass marginals). Missing ``securityAction`` is pass.
+    """
+    mitigated = served_cf = served_origin = 0
     for row in rows:
         if not isinstance(row, dict):
             continue
-        raw = row.get("datetime")
-        if raw is None:
-            return None
-        dt = _parse_event_dt(str(raw))
-        if dt is None:
-            return None
-        if latest is None or dt > latest:
-            latest = dt
-    if latest is None:
-        return None
-    nxt = (latest.astimezone(UTC) + timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    return nxt
-
-
-def _accumulate_actions(merged: dict[str, int], rows: list[dict[str, Any]]) -> None:
-    for row in rows:
-        if not isinstance(row, dict):
+        c = int(row.get("count") or 0)
+        dims = row.get("dimensions") or {}
+        if not isinstance(dims, dict):
             continue
-        act = row.get("action")
-        if act is None:
-            continue
-        key = str(act)
-        merged[key] = merged.get(key, 0) + 1
-
-
-def _merged_to_payload(merged: dict[str, int]) -> dict[str, Any]:
-    by_action = [{"value": k, "count": c} for k, c in merged.items()]
-    total = sum(merged.values())
-    return {"by_action": by_action, "total_events": total}
+        sa = str(dims.get("securityAction") or "").strip().lower()
+        cs = str(dims.get("cacheStatus") or "").strip().lower()
+        if sa and sa in EYEBALL_MITIGATING_SECURITY_ACTIONS:
+            mitigated += c
+        elif cs in EYEBALL_ORIGIN_FETCH_CACHE_STATUSES:
+            served_origin += c
+        else:
+            served_cf += c
+    return mitigated, served_cf, served_origin
 
 
 def fetch_security_for_bounds(
@@ -107,38 +205,51 @@ def fetch_security_for_bounds(
     since_iso_z: str,
     until_iso_z: str,
 ) -> dict[str, Any]:
-    """
-    Sampled firewall events in [since_iso_z, until_iso_z] per ``datetime_leq`` (inclusive end).
-    Paginates 10k rows at a time until exhausted.
-    """
-    merged: dict[str, int] = {}
-    cursor = since_iso_z
-    until_end = _parse_event_dt(until_iso_z)
-    if until_end is None:
-        until_end = datetime(9999, 12, 31, 23, 59, 59, tzinfo=UTC)
+    """Half-open ``[since_iso_z, until_iso_z)`` as GraphQL ``datetime_geq`` / ``datetime_lt``."""
+    vars_gql = {"zoneTag": zone_id, "datetime_geq": since_iso_z, "datetime_lt": until_iso_z}
 
-    for _ in range(_MAX_PAGES):
-        data = client.graphql(
-            Q_SECURITY,
-            {"zoneTag": zone_id, "since": cursor, "until": until_iso_z},
-        )
-        rows = _security_rows(data)
-        if not rows:
-            break
-        _accumulate_actions(merged, rows)
-        if len(rows) < _SECURITY_PAGE_LIMIT:
-            break
-        nxt = _next_page_since_iso_z(rows)
-        if nxt is None:
-            break
-        nxt_dt = _parse_event_dt(nxt)
-        if nxt_dt is None or nxt_dt > until_end:
-            break
-        if nxt == cursor:
-            break
-        cursor = nxt
+    matrix_rows = adaptive_groups_rows(client.graphql(Q_EYEBALL_MATRIX, vars_gql), "mtx")
+    mitigated, served_cf, served_origin = _fold_eyeball_matrix(matrix_rows)
+    sampled_total = mitigated + served_cf + served_origin
 
-    return _merged_to_payload(merged)
+    method_rows = adaptive_groups_rows(client.graphql(Q_EYEBALL_METHODS, vars_gql), "met")
+    act_src = group_dimension_table(
+        viewer_first_zone(client.graphql(Q_SEC_ACTION_SOURCE, vars_gql)),
+        "asg",
+        ("securityAction", "securitySource"),
+    )
+    ba, bs = _marginals_from_action_source_rows(act_src)
+
+    ip_rows = _ip_rows_allow_missing_country(
+        viewer_first_zone(client.graphql(Q_SEC_IPS, vars_gql)),
+        "ipg",
+    )
+    path_rows = adaptive_groups_rows(client.graphql(Q_SEC_PATHS, vars_gql), "pth")
+    geo_rows = adaptive_groups_rows(client.graphql(Q_SEC_COUNTRIES, vars_gql), "geo")
+
+    return {
+        "http_requests_sampled": sampled_total,
+        "mitigated_count": mitigated,
+        "served_cf_count": served_cf,
+        "served_origin_count": served_origin,
+        "http_by_cache_status": marginal_counts_for_dimension(matrix_rows, "cacheStatus"),
+        "by_http_method": marginal_counts_for_dimension(method_rows, "clientRequestHTTPMethodName")
+        if method_rows
+        else [],
+        "by_action": counts_to_sorted_value_rows(ba),
+        "by_source": counts_to_sorted_value_rows(bs),
+        "attack_source_buckets": [
+            {
+                "ip": r["clientIP"],
+                "country": r["clientCountryName"],
+                "count": int(r["count"] or 0),
+            }
+            for r in ip_rows
+        ],
+        "by_attack_path": marginal_counts_for_dimension(path_rows, "clientRequestPath"),
+        "by_attack_country": marginal_counts_for_dimension(geo_rows, "clientCountryName"),
+        "payload_kind": "http_security_groups",
+    }
 
 
 def fetch_security_for_date(
@@ -146,12 +257,10 @@ def fetch_security_for_date(
     zone_id: str,
     day: date,
 ) -> dict[str, Any]:
-    return fetch_security_for_bounds(
-        client,
-        zone_id,
-        day_start_iso_z(day),
-        _end_of_utc_calendar_day_iso_z(day),
-    )
+    geq, lt = day_bounds_utc(day)
+    payload = fetch_security_for_bounds(client, zone_id, geq, lt)
+    payload["date"] = format_ymd(day)
+    return payload
 
 
 class SecurityFetcher:
@@ -183,11 +292,12 @@ class SecurityFetcher:
                 day_start_iso_z(t),
                 utc_now_iso_z(),
             )
+            payload["date"] = format_ymd(t)
             return (
                 [payload],
                 [
                     "Report includes today's UTC date; "
-                    "security event data may be incomplete until the day finishes."
+                    "security analytics may be incomplete until the day finishes."
                 ],
                 False,
             )

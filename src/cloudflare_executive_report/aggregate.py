@@ -14,6 +14,10 @@ from cloudflare_executive_report.dates import (
     iter_dates_inclusive,
     parse_ymd,
 )
+from cloudflare_executive_report.fetchers.security import (
+    ROLLUP_CHALLENGE_SUBSTRINGS,
+    ROLLUP_EXCLUDE_ACTION_PREFIXES,
+)
 
 
 def _merge_rows(
@@ -33,6 +37,10 @@ def _merge_rows(
     return counts
 
 
+def _pct_of_total(count: int, total: int) -> float:
+    return round(100.0 * count / total, 1) if total > 0 else 0.0
+
+
 def _top_pct(
     counts: dict[str, int],
     total: int,
@@ -45,8 +53,7 @@ def _top_pct(
     items = sorted(counts.items(), key=lambda x: -x[1])[:top]
     out: list[dict[str, Any]] = []
     for k, c in items:
-        pct = round(100.0 * c / total, 1)
-        out.append({name_key: k, "count": c, "percentage": pct})
+        out.append({name_key: k, "count": c, "percentage": _pct_of_total(c, total)})
     return out
 
 
@@ -192,7 +199,7 @@ def build_http_section(
         items = sorted(country_req.items(), key=lambda x: -x[1])[:top]
         for k, c in items:
             cname, code = _country_label_code(k)
-            pct = round(100.0 * c / total_req, 1)
+            pct = _pct_of_total(c, total_req)
             top_countries.append(
                 {
                     "country": cname,
@@ -231,25 +238,114 @@ def build_http_section(
     }
 
 
-def _normalize_security_day(d: dict[str, Any]) -> dict[str, Any]:
-    """Support cache rows from grouped API (by_action) or legacy raw events list."""
-    if d.get("by_action"):
-        return d
-    events = d.get("events")
-    if not isinstance(events, list):
-        return {"by_action": []}
-    counts: dict[str, int] = {}
-    for ev in events:
-        if not isinstance(ev, dict):
+def _security_normalize_day(d: dict[str, Any]) -> dict[str, Any]:
+    out = dict(d)
+    if out.get("by_action") is None:
+        out["by_action"] = []
+    return out
+
+
+def _security_merge_ip_buckets(days: list[dict[str, Any]], *, top: int) -> list[dict[str, Any]]:
+    m: dict[tuple[str, str], int] = {}
+    for d in days:
+        rows = d.get("attack_source_buckets")
+        if not isinstance(rows, list):
             continue
-        act = ev.get("action")
-        if act is None:
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            ip = str(row.get("ip") or "").strip()
+            if not ip:
+                continue
+            key = (ip, str(row.get("country") or "").strip())
+            m[key] = m.get(key, 0) + int(row.get("count") or 0)
+    if not m:
+        return []
+    tot = sum(m.values())
+    items = sorted(m.items(), key=lambda x: -x[1])[:top]
+    return [
+        {
+            "ip": k[0],
+            "country": k[1],
+            "count": c,
+            "percentage": _pct_of_total(c, tot),
+        }
+        for k, c in items
+    ]
+
+
+def _security_top_countries(country_counts: dict[str, int], *, top: int) -> list[dict[str, Any]]:
+    if not country_counts:
+        return []
+    total = sum(country_counts.values())
+    items = sorted(country_counts.items(), key=lambda x: -x[1])[:top]
+    out: list[dict[str, Any]] = []
+    for k, c in items:
+        cname, code = _country_label_code(k)
+        out.append(
+            {
+                "country": cname,
+                "code": code,
+                "requests": c,
+                "percentage": _pct_of_total(c, total),
+            }
+        )
+    return out
+
+
+def _security_among_mitigated(by_action: dict[str, int]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for k, c in by_action.items():
+        kl = k.lower()
+        if kl == "log":
             continue
-        key = str(act)
-        counts[key] = counts.get(key, 0) + 1
-    return {
-        "by_action": [{"value": k, "count": c} for k, c in counts.items()],
-    }
+        if any(k.startswith(p) for p in ROLLUP_EXCLUDE_ACTION_PREFIXES):
+            continue
+        out[k] = c
+    return out
+
+
+def _security_challenge_and_block(by_action: dict[str, int]) -> tuple[int, int]:
+    ch = blk = 0
+    for k, c in by_action.items():
+        kl = k.lower()
+        if kl == "block":
+            blk += c
+        elif any(s in kl for s in ROLLUP_CHALLENGE_SUBSTRINGS):
+            ch += c
+    return ch, blk
+
+
+def _security_timeseries(days: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for d in days:
+        ds = d.get("date")
+        if not ds:
+            continue
+        rows.append(
+            {
+                "date": str(ds),
+                "http_requests_sampled": int(d.get("http_requests_sampled") or 0),
+                "mitigated_count": int(d.get("mitigated_count") or 0),
+                "served_cf_count": int(d.get("served_cf_count") or 0),
+                "served_origin_count": int(d.get("served_origin_count") or 0),
+            }
+        )
+    return rows
+
+
+def _security_coalesce_http_sampled(
+    days: list[dict[str, Any]],
+    mitigated: int,
+    served_cf: int,
+    served_origin: int,
+) -> int:
+    """Prefer summed daily ``http_requests_sampled``; if absent/zero, use matrix components."""
+    http_sampled = sum(int(d.get("http_requests_sampled") or 0) for d in days)
+    if http_sampled > 0:
+        return http_sampled
+    inferred = mitigated + served_cf + served_origin
+    return inferred if inferred > 0 else 0
 
 
 def build_security_section(
@@ -257,15 +353,74 @@ def build_security_section(
     *,
     top: int = 10,
 ) -> dict[str, Any]:
-    """daily_api_data: security.json `data` with by_action or legacy events[]."""
-    normalized = [_normalize_security_day(d) for d in daily_api_data]
-    by_action = _merge_rows(normalized, "by_action")
-    total = sum(by_action.values())
-    return {
-        "total_events": total,
-        "total_events_human": format_count_human(total),
-        "top_actions": _top_pct(by_action, total, top, name_key="action"),
+    """Roll up ``security.json`` ``data`` objects (same shape as DNS/HTTP daily lists)."""
+    days = [_security_normalize_day(d) for d in daily_api_data]
+    by_action = _merge_rows(days, "by_action")
+    action_total = sum(by_action.values())
+
+    mitigated = sum(int(d.get("mitigated_count") or 0) for d in days)
+    served_cf = sum(int(d.get("served_cf_count") or 0) for d in days)
+    served_origin = sum(int(d.get("served_origin_count") or 0) for d in days)
+    http_sampled = _security_coalesce_http_sampled(days, mitigated, served_cf, served_origin)
+    not_mitigated = served_cf + served_origin
+
+    among = _security_among_mitigated(by_action)
+    among_total = sum(among.values())
+    ch_n, blk_n = _security_challenge_and_block(by_action)
+
+    by_source = _merge_rows(days, "by_source")
+    src_total = sum(by_source.values())
+    ip_top = max(top, 20)
+
+    cache_merged = _merge_rows(days, "http_by_cache_status")
+    cache_total = sum(cache_merged.values())
+    method_merged = _merge_rows(days, "by_http_method")
+    method_total = sum(method_merged.values())
+    path_merged = _merge_rows(days, "by_attack_path")
+    path_total = sum(path_merged.values())
+    country_merged = _merge_rows(days, "by_attack_country")
+
+    mitigation_rate = _pct_of_total(mitigated, http_sampled) if http_sampled else 0.0
+
+    out: dict[str, Any] = {
+        "total_events": action_total,
+        "total_events_human": format_count_human(action_total),
+        "top_actions": _top_pct(by_action, action_total, top, name_key="action"),
+        "timeseries_daily": _security_timeseries(days),
+        "top_attack_sources": _security_merge_ip_buckets(days, top=ip_top),
+        "top_source_countries": _security_top_countries(country_merged, top=ip_top),
+        "cache_status_breakdown": _top_pct(cache_merged, cache_total, top, name_key="status")
+        if cache_total > 0
+        else [],
+        "http_methods_breakdown": _top_pct(method_merged, method_total, top, name_key="method")
+        if method_total > 0
+        else [],
+        "top_attack_paths": _top_pct(path_merged, path_total, top, name_key="path")
+        if path_total > 0
+        else [],
     }
+    if http_sampled > 0:
+        out["http_requests_sampled"] = http_sampled
+        out["http_requests_sampled_human"] = format_count_human(http_sampled)
+        out["mitigated_count"] = mitigated
+        out["mitigated_count_human"] = format_count_human(mitigated)
+        out["not_mitigated_sampled"] = not_mitigated
+        out["not_mitigated_sampled_human"] = format_count_human(not_mitigated)
+        out["mitigation_rate_pct"] = mitigation_rate
+        out["served_cf_count"] = served_cf
+        out["served_cf_count_human"] = format_count_human(served_cf)
+        out["served_origin_count"] = served_origin
+        out["served_origin_count_human"] = format_count_human(served_origin)
+        out["challenge_events_sampled"] = ch_n
+        out["challenge_events_sampled_human"] = format_count_human(ch_n)
+        out["block_events_sampled"] = blk_n
+        out["block_events_sampled_human"] = format_count_human(blk_n)
+    if among_total > 0:
+        out["actions_among_mitigated"] = _top_pct(among, among_total, top, name_key="action")
+    out["top_security_services"] = (
+        _top_pct(by_source, src_total, top, name_key="service") if src_total > 0 else []
+    )
+    return out
 
 
 SectionBuilder = Callable[..., dict[str, Any]]
