@@ -13,6 +13,7 @@ from cloudflare_executive_report.cf_client import CloudflareClient
 from cloudflare_executive_report.config import AppConfig
 from cloudflare_executive_report.dates import parse_ymd
 from cloudflare_executive_report.executive_summary import build_executive_summary
+from cloudflare_executive_report.pdf.cover import append_cover_page
 from cloudflare_executive_report.pdf.document import build_simple_doc, footer_canvas_factory
 from cloudflare_executive_report.pdf.figure_quality import (
     parse_pdf_image_quality,
@@ -74,6 +75,7 @@ def write_report_pdf(
     cache_root = cfg.cache_path()
     styles = make_styles(th)
     story: list[Any] = []
+    append_cover_page(story, cover=cfg.cover, spec=spec, styles=styles, theme=th)
 
     cache_stream_in_report = any(s.strip().lower() == "cache" for s in spec.streams)
 

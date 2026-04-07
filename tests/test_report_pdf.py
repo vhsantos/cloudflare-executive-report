@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from cloudflare_executive_report.config import AppConfig, ZoneEntry
+from cloudflare_executive_report.config import AppConfig, CoverConfig, ZoneEntry
 from cloudflare_executive_report.pdf.layout_spec import ReportSpec
 
 pytest.importorskip("reportlab")
@@ -109,6 +109,36 @@ def test_write_report_pdf_cache_smoke(tmp_path: Path) -> None:
         top=5,
     )
     out = tmp_path / "cache.pdf"
+    write_report_pdf(out, cfg, spec)
+    assert out.is_file()
+    assert out.stat().st_size > 1000
+
+
+@pytest.mark.skipif(not FIXTURE_CACHE.is_dir(), reason="sample cache fixtures missing")
+def test_write_report_pdf_cover_config_smoke(tmp_path: Path) -> None:
+    cfg = AppConfig(
+        api_token="x",
+        cache_dir=str(FIXTURE_CACHE.resolve()),
+        zones=[ZoneEntry(id=ZONE_ID, name="example.com")],
+        cover=CoverConfig(
+            enabled=True,
+            company_name="Turismo Lago Grey",
+            logo_path="/tmp/does-not-exist.png",
+            title="Cloudflare Executive Report",
+            subtitle="Security & Performance Overview",
+            notes="All metrics from Cloudflare Analytics API",
+            prepared_for="CTO Office",
+            classification="Internal Use Only",
+        ),
+    )
+    spec = ReportSpec(
+        zone_ids=[ZONE_ID],
+        start="2026-04-01",
+        end="2026-04-01",
+        streams=("dns",),
+        top=5,
+    )
+    out = tmp_path / "cover.pdf"
     write_report_pdf(out, cfg, spec)
     assert out.is_file()
     assert out.stat().st_size > 1000
