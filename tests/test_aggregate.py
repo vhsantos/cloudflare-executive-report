@@ -1,5 +1,8 @@
 from cloudflare_executive_report.aggregate import (
+    build_audit_section,
     build_cache_section,
+    build_certificates_section,
+    build_dns_records_section,
     build_dns_section,
     build_http_adaptive_section,
     build_http_section,
@@ -167,6 +170,67 @@ def test_build_http_adaptive_section_merges_days():
     assert out["latency_p50_ms"] == 106.67
     assert out["latency_p95_ms"] == 466.67
     assert out["origin_response_duration_avg_ms"] == 260.0
+    assert out["origin_response_duration_avg_ms_daily_mean"] == 240.0
+
+
+def test_build_audit_section_sums_events_across_days():
+    days = [
+        {
+            "date": "2026-04-01",
+            "total_events": 10,
+            "top_actions": [{"value": "update", "count": 8}],
+        },
+        {
+            "date": "2026-04-02",
+            "total_events": 17,
+            "top_actions": [{"value": "update", "count": 16}, {"value": "create", "count": 1}],
+        },
+    ]
+    out = build_audit_section(days, top=5)
+    assert out["total_events"] == 27
+    assert out["top_actions"][0]["value"] == "update"
+    assert out["top_actions"][0]["count"] == 24
+
+
+def test_build_dns_records_section_latest_snapshot():
+    days = [
+        {"date": "2026-04-01", "total_records": 10, "proxied_records": 6, "dns_only_records": 4},
+        {
+            "date": "2026-04-02",
+            "total_records": 12,
+            "proxied_records": 8,
+            "dns_only_records": 4,
+            "apex_unproxied_a_aaaa": 1,
+            "record_types": [{"value": "A", "count": 5}],
+        },
+    ]
+    out = build_dns_records_section(days)
+    assert out["total_records"] == 12
+    assert out["apex_unproxied_a_aaaa"] == 1
+
+
+def test_build_audit_section_unavailable():
+    out = build_audit_section(
+        [{"date": "2026-04-01", "unavailable": True, "reason": "permission_denied"}]
+    )
+    assert out["unavailable"] is True
+    assert out["reason"] == "permission_denied"
+
+
+def test_build_certificates_section_basic():
+    out = build_certificates_section(
+        [
+            {
+                "date": "2026-04-01",
+                "total_certificate_packs": 2,
+                "expiring_in_30_days": 1,
+                "soonest_expiry": "2026-04-20T00:00:00Z",
+                "status_breakdown": [{"value": "active", "count": 2}],
+            }
+        ]
+    )
+    assert out["total_certificate_packs"] == 2
+    assert out["expiring_in_30_days"] == 1
 
 
 def test_build_cache_section_merges_status_and_paths():

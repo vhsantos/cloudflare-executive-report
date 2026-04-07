@@ -148,6 +148,52 @@ class CloudflareClient:
             raise
         return None
 
+    def list_account_audit_logs(
+        self, account_id: str, *, since: str, before: str, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        """List account audit logs via SDK."""
+        if self._verbose:
+            log.debug(
+                "SDK audit_logs.list account_id=%s since=%s before=%s limit=%s",
+                account_id,
+                since,
+                before,
+                limit,
+            )
+        try:
+            page = self._sdk.audit_logs.list(
+                account_id=account_id,
+                since=since,
+                before=before,
+                per_page=limit,
+            )
+            return [item.model_dump() for item in page]
+        except Exception as e:
+            _map_sdk_exception(e)
+            raise
+
+    def list_dns_records(self, zone_id: str, *, per_page: int = 100) -> list[dict[str, Any]]:
+        """List all DNS records for a zone via SDK pagination."""
+        if self._verbose:
+            log.debug("SDK dns.records.list zone_id=%s per_page=%s", zone_id, per_page)
+        try:
+            page = self._sdk.dns.records.list(zone_id=zone_id, per_page=per_page)
+            return [item.model_dump() for item in page]
+        except Exception as e:
+            _map_sdk_exception(e)
+            raise
+
+    def list_zone_certificate_packs(self, zone_id: str) -> list[dict[str, Any]]:
+        """List zone certificate packs via SDK."""
+        if self._verbose:
+            log.debug("SDK ssl.certificate_packs.list zone_id=%s", zone_id)
+        try:
+            page = self._sdk.ssl.certificate_packs.list(zone_id=zone_id, status="all")
+            return page.result  # Already a list
+        except Exception as e:
+            _map_sdk_exception(e)
+            raise
+
     def graphql(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
         """POST Analytics GraphQL only (manual HTTP; not available on SDK)."""
         return self.graphql_query(query, variables)

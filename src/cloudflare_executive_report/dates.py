@@ -38,6 +38,33 @@ def utc_now_iso_z() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def parse_iso_datetime_z(value: object) -> datetime | None:
+    """Parse ISO datetime strings, accepting both Z and offset forms."""
+    s = str(value or "").strip()
+    if not s:
+        return None
+    try:
+        if s.endswith("Z"):
+            return datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return datetime.fromisoformat(s)
+    except ValueError:
+        return None
+
+
+def format_date_with_days_from_iso(iso_value: object, *, as_of: date) -> str:
+    """Format ISO datetime as YYYY-MM-DD plus day delta from as_of."""
+    dt = parse_iso_datetime_z(iso_value)
+    if dt is None:
+        return "-"
+    exp = dt.astimezone(UTC).date()
+    days = (exp - as_of).days
+    if days < 0:
+        return f"{exp.isoformat()} ({abs(days)} days ago)"
+    if days == 0:
+        return f"{exp.isoformat()} (today)"
+    return f"{exp.isoformat()} ({days} days)"
+
+
 def iter_dates_inclusive(start: date, end: date) -> Iterator[date]:
     if end < start:
         return

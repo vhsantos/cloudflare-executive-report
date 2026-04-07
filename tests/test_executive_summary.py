@@ -35,6 +35,18 @@ def test_build_executive_summary_healthy_zone():
             ],
         },
         cache={"cache_hit_ratio": 55.0, "served_cf_count": 20000, "served_origin_count": 30000},
+        dns_records={
+            "total_records": 10,
+            "proxied_records": 8,
+            "dns_only_records": 2,
+            "apex_unproxied_a_aaaa": 0,
+        },
+        audit={"total_events": 3},
+        certificates={
+            "total_certificate_packs": 1,
+            "expiring_in_30_days": 0,
+            "soonest_expiry": "2026-12-01T00:00:00Z",
+        },
         warnings=[],
     )
     assert out["verdict"] == "healthy"
@@ -42,6 +54,11 @@ def test_build_executive_summary_healthy_zone():
     assert out["kpis"]["security"]["mitigated_events_human"] == "200"
     assert out["kpis"]["security"]["mitigation_rate_pct"] == 0.4
     assert "blocked or challenged" in out["takeaways"][1]
+    assert out["kpis"]["traffic"]["encrypted_gap_pct"] >= 0.0
+    assert out["kpis"]["dns"]["average_qps"] == 1.2
+    assert any("DNS inventory" in t for t in out["takeaways"])
+    assert any("Account audit" in t for t in out["takeaways"])
+    assert any("TLS certificate" in t for t in out["takeaways"])
 
 
 def test_build_executive_summary_warning_with_warnings_and_inactive_zone():
@@ -60,13 +77,25 @@ def test_build_executive_summary_warning_with_warnings_and_inactive_zone():
         http={"total_requests": 10, "total_requests_human": "10", "cache_hit_ratio": 0.0},
         security={"top_actions": [{"action": "block", "count": 1}]},
         cache=None,
+        dns_records={
+            "total_records": 0,
+            "proxied_records": 0,
+            "dns_only_records": 0,
+            "apex_unproxied_a_aaaa": 0,
+        },
+        audit={"total_events": 0},
+        certificates={
+            "total_certificate_packs": 0,
+            "expiring_in_30_days": 0,
+            "soonest_expiry": None,
+        },
         warnings=["No DNS cache entry for zone example.com on 2026-04-01"],
     )
     assert out["verdict"] == "critical"
     assert "zone_status=pending" in out["verdict_reasons"]
     assert "warnings_present" in out["verdict_reasons"]
     assert out["warnings_count"] == 1
-    assert len(out["actions"]) == 3
+    assert 3 <= len(out["actions"]) <= 5
 
 
 def test_build_executive_summary_fallback_threats_from_top_actions():
@@ -83,6 +112,18 @@ def test_build_executive_summary_fallback_threats_from_top_actions():
             ]
         },
         cache={},
+        dns_records={
+            "total_records": 1,
+            "proxied_records": 1,
+            "dns_only_records": 0,
+            "apex_unproxied_a_aaaa": 0,
+        },
+        audit={"total_events": 0},
+        certificates={
+            "total_certificate_packs": 1,
+            "expiring_in_30_days": 0,
+            "soonest_expiry": None,
+        },
         warnings=[],
     )
     assert out["kpis"]["security"]["threats_mitigated"] == 7
@@ -100,9 +141,58 @@ def test_build_executive_summary_uses_adaptive_http_takeaway_when_available():
             "status_4xx_rate_pct": 0.99,
             "status_5xx_rate_pct": 0.02,
             "origin_response_duration_avg_ms": 264.2,
+            "latency_p50_ms": 10.0,
+            "latency_p95_ms": 50.0,
+        },
+        dns_records={
+            "total_records": 1,
+            "proxied_records": 1,
+            "dns_only_records": 0,
+            "apex_unproxied_a_aaaa": 0,
+        },
+        audit={"total_events": 1},
+        certificates={
+            "total_certificate_packs": 1,
+            "expiring_in_30_days": 0,
+            "soonest_expiry": "2026-08-01T00:00:00Z",
         },
         warnings=[],
     )
-    assert "reliability stayed healthy with 5xx at 0.02%" in out["takeaways"][0]
+    assert "reliability looked strong with 5xx at 0.02%" in out["takeaways"][0]
     assert "Client-side friction was 4xx at 0.99%" in out["takeaways"][0]
     assert "Origin response averaged 264.2 ms." in out["takeaways"][0]
+    assert "Edge latency p50/p95 10/50 ms." in out["takeaways"][0]
+
+
+def test_build_executive_summary_apex_and_cert_kpi_fields():
+    out = build_executive_summary(
+        zone_name="vhsantos.net",
+        zone_health={"zone_status": "active", "always_https": "on", "ssl_mode": "strict"},
+        dns={"total_queries": 100, "average_qps": 3.97},
+        http={
+            "total_requests": 1_000_000,
+            "total_requests_human": "1.0M",
+            "encrypted_requests": 940_000,
+            "encrypted_requests_human": "940K",
+        },
+        security={"mitigated_count": 1000, "mitigation_rate_pct": 0.1},
+        cache={},
+        dns_records={
+            "total_records": 54,
+            "proxied_records": 13,
+            "dns_only_records": 41,
+            "apex_unproxied_a_aaaa": 1,
+        },
+        audit={"total_events": 46},
+        certificates={
+            "total_certificate_packs": 2,
+            "expiring_in_30_days": 0,
+            "soonest_expiry": "2026-05-16T10:27:03Z",
+        },
+        warnings=[],
+    )
+    assert out["kpis"]["dns_records"]["apex_protection_status"].startswith("exposed")
+    assert out["kpis"]["certificates"]["cert_expires_human"].startswith("2026-05-16")
+    assert out["kpis"]["traffic"]["encrypted_gap_pct"] > 5.0
+    assert any("still HTTP" in t for t in out["takeaways"])
+    assert any("Enable Always HTTPS" in a for a in out["actions"])

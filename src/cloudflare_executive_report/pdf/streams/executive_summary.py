@@ -38,6 +38,9 @@ def append_executive_summary(
     traffic = kpis.get("traffic") or {}
     security = kpis.get("security") or {}
     dns = kpis.get("dns") or {}
+    dns_records = kpis.get("dns_records") or {}
+    audit_k = kpis.get("audit") or {}
+    certificates_k = kpis.get("certificates") or {}
 
     story.append(
         kpi_multi_cell_row(
@@ -57,8 +60,9 @@ def append_executive_summary(
         kpi_multi_cell_row(
             [
                 ("Requests", str(traffic.get("total_requests_human") or "0")),
+                ("Encrypted requests", str(traffic.get("encrypted_requests_human") or "0")),
                 ("Cache hit ratio", f"{float(traffic.get('cache_hit_ratio') or 0.0):.1f}%"),
-                ("Threats blocked/challenged", str(security.get("mitigated_events_human") or "0")),
+                ("Blocked/Challenged", str(security.get("mitigated_events_human") or "0")),
                 ("Mitigation rate", f"{float(security.get('mitigation_rate_pct') or 0.0):.1f}%"),
             ],
             styles,
@@ -67,12 +71,71 @@ def append_executive_summary(
         )
     )
     story.append(Spacer(1, 10))
+    p50 = traffic.get("latency_p50_ms")
+    p95 = traffic.get("latency_p95_ms")
+    lat_txt = (
+        f"{float(p50):.0f}/{float(p95):.0f} ms" if p50 is not None and p95 is not None else "-"
+    )
+    origin_ms = traffic.get("origin_response_duration_avg_ms")
+    origin_txt = f"{round(float(origin_ms))} ms" if origin_ms is not None else "-"
+    story.append(
+        kpi_multi_cell_row(
+            [
+                ("4xx rate", f"{float(traffic.get('status_4xx_rate_pct') or 0.0):.2f}%"),
+                ("5xx rate", f"{float(traffic.get('status_5xx_rate_pct') or 0.0):.2f}%"),
+                ("Edge p50/p95", lat_txt),
+                ("Origin response", origin_txt),
+            ],
+            styles,
+            theme=theme,
+            content_width_in=w_content,
+        )
+    )
+    story.append(Spacer(1, 10))
+    dr_un = bool(dns_records.get("unavailable"))
+    au_un = bool(audit_k.get("unavailable"))
+    ce_un = bool(certificates_k.get("unavailable"))
     story.append(
         kpi_multi_cell_row(
             [
                 ("DNS queries", str(dns.get("total_queries_human") or "0")),
-                ("Avg DNS QPS", f"{float(dns.get('average_qps') or 0.0):.3f}"),
-                ("Encrypted requests", str(traffic.get("encrypted_requests_human") or "0")),
+                ("Avg DNS QPS", f"{float(dns.get('average_qps') or 0.0):.1f}"),
+                (
+                    "DNS records",
+                    "unavailable" if dr_un else str(dns_records.get("total_records") or "0"),
+                ),
+                ("Proxied", "-" if dr_un else str(dns_records.get("proxied_records") or "0")),
+                ("DNS-only", "-" if dr_un else str(dns_records.get("dns_only_records") or "0")),
+            ],
+            styles,
+            theme=theme,
+            content_width_in=w_content,
+        )
+    )
+    story.append(Spacer(1, 10))
+    cert_human = str(certificates_k.get("cert_expires_human") or "-")
+    cert_exp30 = int(certificates_k.get("expiring_in_30_days") or 0)
+    if cert_human != "-" and "(" in cert_human and ")" in cert_human:
+        cert_days = cert_human.split("(", 1)[1].split(")", 1)[0].strip()
+    else:
+        cert_days = cert_human
+    cert_label = "unavailable" if ce_un else cert_days
+    if not ce_un and cert_exp30 > 0 and cert_label != "-":
+        cert_label = f"expiring soon: {cert_label}"
+    cert_packs_v = (
+        "unavailable" if ce_un else str(certificates_k.get("total_certificate_packs") or "0")
+    )
+    cert_exp30_v = "unavailable" if ce_un else str(certificates_k.get("expiring_in_30_days") or "0")
+    apex_status = "-" if dr_un else str(dns_records.get("apex_protection_status") or "-")
+    audit_events = "unavailable" if au_un else str(audit_k.get("total_events") or "0")
+    story.append(
+        kpi_multi_cell_row(
+            [
+                ("Audit events", audit_events),
+                ("Cert packs", cert_packs_v),
+                ("Expiring ≤30d", cert_exp30_v),
+                ("Cert expires", cert_label),
+                ("Apex protection", apex_status),
             ],
             styles,
             theme=theme,
@@ -85,10 +148,10 @@ def append_executive_summary(
     actions = [str(x) for x in (summary.get("actions") or []) if str(x).strip()]
     if takeaways:
         story.append(Paragraph("Takeaways", styles["RepSection"]))
-        for row in takeaways[:3]:
+        for row in takeaways[:8]:
             story.append(Paragraph(f"- {row}", styles["RepTableCell"]))
         story.append(Spacer(1, 10))
     if actions:
         story.append(Paragraph("Actions", styles["RepSection"]))
-        for row in actions[:3]:
+        for row in actions[:5]:
             story.append(Paragraph(f"- {row}", styles["RepTableCell"]))

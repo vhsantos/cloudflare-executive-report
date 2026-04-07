@@ -317,7 +317,11 @@ def _run_sync_locked(
                 security=zblock.get("security"),
                 cache=zblock.get("cache"),
                 http_adaptive=zblock.get("http_adaptive"),
+                dns_records=zblock.get("dns_records"),
+                audit=zblock.get("audit"),
+                certificates=zblock.get("certificates"),
                 warnings=zone_warnings,
+                as_of_date=parse_ymd(report_end),
             )
 
             zones_out.append(zblock)

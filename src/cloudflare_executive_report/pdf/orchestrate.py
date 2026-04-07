@@ -11,6 +11,7 @@ from reportlab.platypus import PageBreak, Paragraph, Spacer
 
 from cloudflare_executive_report.cf_client import CloudflareClient
 from cloudflare_executive_report.config import AppConfig
+from cloudflare_executive_report.dates import parse_ymd
 from cloudflare_executive_report.executive_summary import build_executive_summary
 from cloudflare_executive_report.pdf.document import build_simple_doc, footer_canvas_factory
 from cloudflare_executive_report.pdf.figure_quality import (
@@ -19,8 +20,11 @@ from cloudflare_executive_report.pdf.figure_quality import (
 )
 from cloudflare_executive_report.pdf.layout_spec import ReportSpec
 from cloudflare_executive_report.pdf.loader import (
+    load_audit_for_range,
     load_cache_for_range,
+    load_certificates_for_range,
     load_dns_for_range,
+    load_dns_records_for_range,
     load_http_adaptive_for_range,
     load_http_for_range,
     load_security_for_range,
@@ -89,6 +93,9 @@ def write_report_pdf(
         loaded_dns = None
         loaded_http = None
         loaded_http_adaptive = None
+        loaded_dns_records = None
+        loaded_audit = None
+        loaded_certificates = None
         loaded_security = None
         loaded_cache = None
         zone_warnings: list[str] = []
@@ -146,6 +153,33 @@ def write_report_pdf(
                 top=spec.top,
             )
             zone_warnings.extend(loaded_http_adaptive.warnings)
+            loaded_dns_records = load_dns_records_for_range(
+                cache_root,
+                zone_id,
+                zone_name,
+                spec.start,
+                spec.end,
+                top=spec.top,
+            )
+            zone_warnings.extend(loaded_dns_records.warnings)
+            loaded_audit = load_audit_for_range(
+                cache_root,
+                zone_id,
+                zone_name,
+                spec.start,
+                spec.end,
+                top=spec.top,
+            )
+            zone_warnings.extend(loaded_audit.warnings)
+            loaded_certificates = load_certificates_for_range(
+                cache_root,
+                zone_id,
+                zone_name,
+                spec.start,
+                spec.end,
+                top=spec.top,
+            )
+            zone_warnings.extend(loaded_certificates.warnings)
 
         zone_health: dict[str, Any]
         health_warnings: list[str]
@@ -162,7 +196,11 @@ def write_report_pdf(
                 security=loaded_security.rollup if loaded_security else None,
                 cache=loaded_cache.rollup if loaded_cache else None,
                 http_adaptive=loaded_http_adaptive.rollup if loaded_http_adaptive else None,
+                dns_records=loaded_dns_records.rollup if loaded_dns_records else None,
+                audit=loaded_audit.rollup if loaded_audit else None,
+                certificates=loaded_certificates.rollup if loaded_certificates else None,
                 warnings=zone_warnings,
+                as_of_date=parse_ymd(spec.end),
             )
             append_executive_summary(
                 story,

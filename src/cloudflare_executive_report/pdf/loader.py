@@ -10,7 +10,10 @@ from pathlib import Path
 from typing import Any
 
 from cloudflare_executive_report.aggregate import (
+    build_audit_section,
     build_cache_section,
+    build_certificates_section,
+    build_dns_records_section,
     build_dns_section,
     build_http_adaptive_section,
     build_http_section,
@@ -69,6 +72,16 @@ class CacheLoadResult:
 
 @dataclass
 class HttpAdaptiveLoadResult:
+    rollup: dict[str, Any]
+    missing_dates: list[str]
+    warnings: list[str] = field(default_factory=list)
+    api_day_count: int = 0
+
+
+@dataclass
+class SnapshotStreamLoadResult:
+    """Per-day snapshot streams (DNS records, audit, certificates) rolled up for reporting."""
+
     rollup: dict[str, Any]
     missing_dates: list[str]
     warnings: list[str] = field(default_factory=list)
@@ -343,6 +356,96 @@ def load_http_adaptive_for_range(
         scratch, top=top, build_rollup=build_http_adaptive_section
     )
     return HttpAdaptiveLoadResult(
+        rollup=rollup,
+        missing_dates=missing,
+        warnings=warns,
+        api_day_count=n_api,
+    )
+
+
+def load_dns_records_for_range(
+    cache_root: Path,
+    zone_id: str,
+    zone_name: str,
+    start: str,
+    end: str,
+    *,
+    top: int,
+) -> SnapshotStreamLoadResult:
+    scratch = _load_cached_stream_days(
+        cache_root,
+        zone_id,
+        zone_name,
+        start,
+        end,
+        stream_id="dns_records",
+        stream_label="DNS records",
+        metric_key="total_records",
+    )
+    rollup, missing, warns, n_api = _finalize_stream_load(
+        scratch, top=top, build_rollup=build_dns_records_section
+    )
+    return SnapshotStreamLoadResult(
+        rollup=rollup,
+        missing_dates=missing,
+        warnings=warns,
+        api_day_count=n_api,
+    )
+
+
+def load_audit_for_range(
+    cache_root: Path,
+    zone_id: str,
+    zone_name: str,
+    start: str,
+    end: str,
+    *,
+    top: int,
+) -> SnapshotStreamLoadResult:
+    scratch = _load_cached_stream_days(
+        cache_root,
+        zone_id,
+        zone_name,
+        start,
+        end,
+        stream_id="audit",
+        stream_label="Audit",
+        metric_key="total_events",
+    )
+    rollup, missing, warns, n_api = _finalize_stream_load(
+        scratch, top=top, build_rollup=build_audit_section
+    )
+    return SnapshotStreamLoadResult(
+        rollup=rollup,
+        missing_dates=missing,
+        warnings=warns,
+        api_day_count=n_api,
+    )
+
+
+def load_certificates_for_range(
+    cache_root: Path,
+    zone_id: str,
+    zone_name: str,
+    start: str,
+    end: str,
+    *,
+    top: int,
+) -> SnapshotStreamLoadResult:
+    scratch = _load_cached_stream_days(
+        cache_root,
+        zone_id,
+        zone_name,
+        start,
+        end,
+        stream_id="certificates",
+        stream_label="Certificates",
+        metric_key="total_certificate_packs",
+    )
+    rollup, missing, warns, n_api = _finalize_stream_load(
+        scratch, top=top, build_rollup=build_certificates_section
+    )
+    return SnapshotStreamLoadResult(
         rollup=rollup,
         missing_dates=missing,
         warnings=warns,

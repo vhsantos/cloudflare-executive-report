@@ -320,7 +320,114 @@ def build_http_adaptive_section(
         out["origin_response_duration_avg_ms"] = round(
             weighted_origin_avg_num / weighted_den_origin_avg, 2
         )
+        # Unweighted mean of per-day averages (differs when daily traffic volume varies).
+        daily_avgs = [
+            float(d["origin_response_duration_avg_ms"])
+            for d in daily_api_data
+            if d.get("origin_response_duration_avg_ms") is not None
+        ]
+        if daily_avgs:
+            out["origin_response_duration_avg_ms_daily_mean"] = round(
+                sum(daily_avgs) / len(daily_avgs), 2
+            )
     return out
+
+
+def _latest_snapshot_day(
+    daily_api_data: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    latest: tuple[str, dict[str, Any]] | None = None
+    for d in daily_api_data:
+        ds = str(d.get("date") or "")
+        if not ds:
+            continue
+        if latest is None or ds > latest[0]:
+            latest = (ds, d)
+    return latest[1] if latest else (daily_api_data[-1] if daily_api_data else None)
+
+
+def build_dns_records_section(
+    daily_api_data: list[dict[str, Any]],
+    *,
+    top: int = 10,
+) -> dict[str, Any]:
+    snap = _latest_snapshot_day(daily_api_data)
+    if not isinstance(snap, dict):
+        return {}
+    if snap.get("unavailable"):
+        return {
+            "unavailable": True,
+            "reason": str(snap.get("reason") or "unknown"),
+        }
+    rows = list(snap.get("record_types") or [])[:top]
+    return {
+        "total_records": int(snap.get("total_records") or 0),
+        "proxied_records": int(snap.get("proxied_records") or 0),
+        "dns_only_records": int(snap.get("dns_only_records") or 0),
+        "apex_unproxied_a_aaaa": int(snap.get("apex_unproxied_a_aaaa") or 0),
+        "record_types": rows,
+    }
+
+
+def _merge_value_count_rows(
+    days: list[dict[str, Any]], key: str, *, top: int
+) -> list[dict[str, Any]]:
+    acc: dict[str, int] = {}
+    for d in days:
+        if not isinstance(d, dict) or d.get("unavailable"):
+            continue
+        for row in d.get(key) or []:
+            if not isinstance(row, dict):
+                continue
+            v = str(row.get("value") or "").strip()
+            if not v:
+                continue
+            acc[v] = acc.get(v, 0) + int(row.get("count") or 0)
+    ranked = sorted(acc.items(), key=lambda x: -x[1])[:top]
+    return [{"value": k, "count": c} for k, c in ranked]
+
+
+def build_audit_section(
+    daily_api_data: list[dict[str, Any]],
+    *,
+    top: int = 10,
+) -> dict[str, Any]:
+    if not daily_api_data:
+        return {}
+    days_ok = [d for d in daily_api_data if isinstance(d, dict) and not d.get("unavailable")]
+    days_un = [d for d in daily_api_data if isinstance(d, dict) and d.get("unavailable")]
+    if not days_ok and days_un:
+        return {
+            "unavailable": True,
+            "reason": str(days_un[0].get("reason") or "unknown"),
+        }
+    total_events = sum(int(d.get("total_events") or 0) for d in days_ok)
+    return {
+        "total_events": total_events,
+        "top_actions": _merge_value_count_rows(daily_api_data, "top_actions", top=top),
+        "top_actors": _merge_value_count_rows(daily_api_data, "top_actors", top=top),
+    }
+
+
+def build_certificates_section(
+    daily_api_data: list[dict[str, Any]],
+    *,
+    top: int = 10,
+) -> dict[str, Any]:
+    snap = _latest_snapshot_day(daily_api_data)
+    if not isinstance(snap, dict):
+        return {}
+    if snap.get("unavailable"):
+        return {
+            "unavailable": True,
+            "reason": str(snap.get("reason") or "unknown"),
+        }
+    return {
+        "total_certificate_packs": int(snap.get("total_certificate_packs") or 0),
+        "expiring_in_30_days": int(snap.get("expiring_in_30_days") or 0),
+        "soonest_expiry": snap.get("soonest_expiry"),
+        "status_breakdown": list(snap.get("status_breakdown") or [])[:top],
+    }
 
 
 def _norm_cache_status(raw: str) -> str:
@@ -628,6 +735,9 @@ SECTION_BUILDERS: dict[str, SectionBuilder] = {
     "http_adaptive": build_http_adaptive_section,
     "security": build_security_section,
     "cache": build_cache_section,
+    "dns_records": build_dns_records_section,
+    "audit": build_audit_section,
+    "certificates": build_certificates_section,
 }
 
 

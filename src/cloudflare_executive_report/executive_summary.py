@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from cloudflare_executive_report.aggregate import format_count_human
+from cloudflare_executive_report.dates import format_date_with_days_from_iso, utc_today
+from cloudflare_executive_report.executive_summary_constants import (
+    RELIABILITY_5XX_HEALTHY_MAX,
+    RELIABILITY_5XX_WARNING_MAX,
+)
 
 _DEFENSIVE_ACTIONS = frozenset(
     {
@@ -31,6 +37,18 @@ def _as_int(v: Any) -> int:
         return int(v or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def _format_cert_expiry_human(soonest: Any, *, as_of: date) -> str:
+    return format_date_with_days_from_iso(soonest, as_of=as_of)
+
+
+def _reliability_phrase_for_5xx(rate_pct: float) -> str:
+    if rate_pct <= RELIABILITY_5XX_HEALTHY_MAX:
+        return "reliability looked strong"
+    if rate_pct <= RELIABILITY_5XX_WARNING_MAX:
+        return "reliability deserved attention"
+    return "reliability was elevated (elevated server errors)"
 
 
 def _actions_mitigated_from_top_actions(security: dict[str, Any]) -> int:
@@ -84,7 +102,11 @@ def build_executive_summary(
     security: dict[str, Any] | None,
     cache: dict[str, Any] | None,
     http_adaptive: dict[str, Any] | None = None,
+    dns_records: dict[str, Any] | None = None,
+    audit: dict[str, Any] | None = None,
+    certificates: dict[str, Any] | None = None,
     warnings: list[str] | None = None,
+    as_of_date: date | None = None,
 ) -> dict[str, Any]:
     """Build a compact CTO summary object from existing section rollups."""
     zh = _as_dict(zone_health)
@@ -93,7 +115,11 @@ def build_executive_summary(
     s = _as_dict(security)
     c = _as_dict(cache)
     ha = _as_dict(http_adaptive)
+    dr = _as_dict(dns_records)
+    au = _as_dict(audit)
+    ce = _as_dict(certificates)
     warn = list(warnings or [])
+    as_of = as_of_date if as_of_date is not None else utc_today()
 
     mitigated = _threats_mitigated(s)
     sampled_requests = _as_int(s.get("http_requests_sampled"))
@@ -103,6 +129,10 @@ def build_executive_summary(
     ssl_mode = _as_str(zh.get("ssl_mode"))
     always_https = _as_str(zh.get("always_https"))
     dnssec_status = _as_str(zh.get("dnssec_status"))
+    total_requests = _as_int(h.get("total_requests"))
+    encrypted_requests = _as_int(h.get("encrypted_requests"))
+    enc_gap = max(0, total_requests - encrypted_requests)
+    enc_gap_pct = (100.0 * enc_gap / total_requests) if total_requests > 0 else 0.0
 
     takeaways: list[str] = []
     actions: list[str] = []
@@ -116,12 +146,17 @@ def build_executive_summary(
         or "status_5xx_rate_pct" in ha
         or "origin_response_duration_avg_ms" in ha
     ):
+        rel = _reliability_phrase_for_5xx(r5)
         traffic_line = (
-            f"Traffic stable at {total_requests_human} requests; reliability stayed healthy "
+            f"Traffic stable at {total_requests_human} requests; {rel} "
             f"with 5xx at {r5:.2f}%. Client-side friction was 4xx at {r4:.2f}%."
         )
         if origin_avg is not None:
             traffic_line += f" Origin response averaged {float(origin_avg):.1f} ms."
+        p50 = ha.get("latency_p50_ms")
+        p95 = ha.get("latency_p95_ms")
+        if p50 is not None and p95 is not None:
+            traffic_line += f" Edge latency p50/p95 {float(p50):.0f}/{float(p95):.0f} ms."
         takeaways.append(traffic_line)
     else:
         takeaways.append(f"Traffic: {total_requests_human} requests in period.")
@@ -130,10 +165,55 @@ def build_executive_summary(
         f"Security: {format_count_human(mitigated)} threats were blocked or challenged "
         f"({mitigation_rate:.1f}% of traffic)."
     )
+    if total_requests > 0 and enc_gap_pct <= 5.0:
+        takeaways.append("All traffic is encrypted over HTTPS.")
+    elif total_requests > 0:
+        takeaways.append(f"{enc_gap_pct:.1f}% of traffic is still HTTP.")
     takeaways.append(
         f"DNS: {format_count_human(_as_int(d.get('total_queries')))} queries at "
-        f"{float(d.get('average_qps') or 0.0):.3f} qps average."
+        f"{float(d.get('average_qps') or 0.0):.1f} qps average."
     )
+
+    if len(dr) == 0:
+        takeaways.append(
+            "DNS inventory: not synced for this report period (include dns_records in sync)."
+        )
+    elif dr.get("unavailable") is True:
+        takeaways.append("DNS inventory: unavailable for this token or API.")
+    else:
+        apex = _as_int(dr.get("apex_unproxied_a_aaaa"))
+        takeaways.append(
+            f"DNS inventory: {format_count_human(_as_int(dr.get('total_records')))} records; "
+            f"{format_count_human(_as_int(dr.get('proxied_records')))} proxied, "
+            f"{format_count_human(_as_int(dr.get('dns_only_records')))} DNS-only."
+            + (" Apex record not proxied - origin IP exposed." if apex else "")
+        )
+
+    if len(au) == 0:
+        takeaways.append(
+            "Account audit: not synced for this report period (include audit in sync)."
+        )
+    elif au.get("unavailable") is True:
+        takeaways.append("Account audit: unavailable for this token or API.")
+    else:
+        audit_total_h = format_count_human(_as_int(au.get("total_events")))
+        takeaways.append(f"Account audit (period total): {audit_total_h} events.")
+
+    if len(ce) == 0:
+        takeaways.append(
+            "TLS certificates: not synced for this report period (include certificates in sync)."
+        )
+    elif ce.get("unavailable") is True:
+        takeaways.append("TLS certificates: unavailable for this token or API.")
+    else:
+        cert_human = _format_cert_expiry_human(ce.get("soonest_expiry"), as_of=as_of)
+        exp30 = _as_int(ce.get("expiring_in_30_days"))
+        cert_packs_h = format_count_human(_as_int(ce.get("total_certificate_packs")))
+        takeaways.append(
+            f"TLS certificate packs: {cert_packs_h} pack(s); "
+            f"{exp30} expiring within 30 days."
+            + (f" Certificate expires {cert_human}." if cert_human != "-" else "")
+        )
 
     if always_https.lower() != "on":
         actions.append("Enable Always Use HTTPS at zone level.")
@@ -143,6 +223,21 @@ def build_executive_summary(
         actions.append("Review SSL mode and target Strict for origin validation.")
     if _as_int(zh.get("security_rules_active")) == 0:
         actions.append("Review firewall/rate-limit posture and activate baseline rules.")
+    has_apex_exposure = (
+        bool(len(dr))
+        and dr.get("unavailable") is not True
+        and _as_int(dr.get("apex_unproxied_a_aaaa")) > 0
+    )
+    if has_apex_exposure:
+        actions.append(f"Enable proxy on apex A/AAAA record for {zone_name}.")
+    if len(ce) and ce.get("unavailable") is not True and _as_int(ce.get("expiring_in_30_days")) > 0:
+        actions.append(
+            "Plan renewal or validation for TLS certificate packs expiring within 30 days."
+        )
+    if total_requests > 0 and enc_gap_pct > 5.0:
+        actions.append("Enable Always HTTPS to force encrypted traffic.")
+    if len(au) and au.get("unavailable") is not True and _as_int(au.get("total_events")) > 50:
+        actions.append("Review recent account audit activity for unexpected configuration changes.")
     if not actions:
         actions.append("Maintain current baseline and monitor daily warning signals.")
 
@@ -161,16 +256,20 @@ def build_executive_summary(
                 "security_rules_active": zh.get("security_rules_active", "unavailable"),
             },
             "traffic": {
-                "total_requests": _as_int(h.get("total_requests")),
+                "total_requests": total_requests,
                 "total_requests_human": str(h.get("total_requests_human") or "0"),
                 "cache_hit_ratio": float(h.get("cache_hit_ratio") or 0.0),
-                "encrypted_requests": _as_int(h.get("encrypted_requests")),
+                "encrypted_requests": encrypted_requests,
                 "encrypted_requests_human": str(h.get("encrypted_requests_human") or "0"),
+                "encrypted_gap_pct": enc_gap_pct,
                 "status_4xx_rate_pct": float(ha.get("status_4xx_rate_pct") or 0.0),
                 "status_5xx_rate_pct": float(ha.get("status_5xx_rate_pct") or 0.0),
                 "latency_p50_ms": ha.get("latency_p50_ms"),
                 "latency_p95_ms": ha.get("latency_p95_ms"),
                 "origin_response_duration_avg_ms": ha.get("origin_response_duration_avg_ms"),
+                "origin_response_duration_avg_ms_daily_mean": ha.get(
+                    "origin_response_duration_avg_ms_daily_mean"
+                ),
             },
             "security": {
                 "mitigated_events": mitigated,
@@ -195,8 +294,33 @@ def build_executive_summary(
                 "served_cf_count": _as_int(c.get("served_cf_count")),
                 "served_origin_count": _as_int(c.get("served_origin_count")),
             },
+            "dns_records": {
+                "unavailable": bool(dr.get("unavailable") is True),
+                "total_records": _as_int(dr.get("total_records")),
+                "proxied_records": _as_int(dr.get("proxied_records")),
+                "dns_only_records": _as_int(dr.get("dns_only_records")),
+                "apex_unproxied_a_aaaa": _as_int(dr.get("apex_unproxied_a_aaaa")),
+                "apex_protection_status": (
+                    "unavailable"
+                    if dr.get("unavailable") is True
+                    else ("exposed" if _as_int(dr.get("apex_unproxied_a_aaaa")) > 0 else "proxied")
+                ),
+            },
+            "audit": {
+                "unavailable": bool(au.get("unavailable") is True),
+                "total_events": _as_int(au.get("total_events")),
+            },
+            "certificates": {
+                "unavailable": bool(ce.get("unavailable") is True),
+                "total_certificate_packs": _as_int(ce.get("total_certificate_packs")),
+                "expiring_in_30_days": _as_int(ce.get("expiring_in_30_days")),
+                "soonest_expiry": ce.get("soonest_expiry"),
+                "cert_expires_human": _format_cert_expiry_human(
+                    ce.get("soonest_expiry"), as_of=as_of
+                ),
+            },
         },
         "takeaways": takeaways,
-        "actions": actions[:3],
+        "actions": actions[:5],
         "warnings_count": len(warn),
     }
