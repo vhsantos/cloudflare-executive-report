@@ -60,6 +60,7 @@ class CoverConfig:
 class AppConfig:
     api_token: str = ""
     cache_dir: str = "~/.cache/cf-report"
+    output_dir: str = "~/.cf-report"
     default_zone: str = ""
     log_level: str = "info"
     # low | medium | high - matplotlib DPI for PDF maps/charts (smaller file vs sharper plots)
@@ -70,10 +71,26 @@ class AppConfig:
     def cache_path(self) -> Path:
         return expand_path(self.cache_dir)
 
+    def output_path(self) -> Path:
+        return expand_path(self.output_dir)
+
+    def report_outputs_dir(self) -> Path:
+        return self.output_path() / "outputs"
+
+    def report_current_path(self) -> Path:
+        return self.report_outputs_dir() / "cf_report.json"
+
+    def report_previous_path(self) -> Path:
+        return self.report_outputs_dir() / "cf_report.previous.json"
+
+    def report_history_dir(self) -> Path:
+        return self.report_outputs_dir() / "history"
+
     def to_yaml_dict(self) -> dict[str, Any]:
         return {
             "api_token": self.api_token,
             "cache_dir": self.cache_dir,
+            "output_dir": self.output_dir,
             "default_zone": self.default_zone,
             "log_level": self.log_level,
             "pdf_image_quality": self.pdf_image_quality,
@@ -116,6 +133,7 @@ class AppConfig:
         return cls(
             api_token=str(data.get("api_token") or ""),
             cache_dir=str(data.get("cache_dir") or "~/.cache/cf-report"),
+            output_dir=str(data.get("output_dir") or "~/.cf-report"),
             default_zone=str(data.get("default_zone") or ""),
             log_level=str(data.get("log_level") or "info"),
             pdf_image_quality=pdf_image_quality,
@@ -153,6 +171,7 @@ def template_config() -> AppConfig:
     return AppConfig(
         api_token="cfat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
         cache_dir="~/.cache/cf-report",
+        output_dir="~/.cf-report",
         default_zone="",
         log_level="info",
         pdf_image_quality="medium",

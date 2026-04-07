@@ -75,7 +75,7 @@ Each zone in `cf_report_output.json` includes `executive_summary`, derived from 
 
 - Core fields include `verdict`, `verdict_reasons`, `kpis`, `takeaways`, and `actions` (up to five).
 - The same shared builder (`build_executive_summary`) is used by both JSON sync output and PDF rendering.
-- Reliability wording for adaptive HTTP uses shared thresholds in `executive_summary_constants.py`.
+- Reliability wording for adaptive HTTP uses shared thresholds in `executive/constants.py`.
 - Executive security wording is business-facing:
   - `Blocked/Challenged`
   - `Mitigation rate`

@@ -7,9 +7,9 @@ from typing import Any
 
 from cloudflare_executive_report.aggregate import format_count_human
 from cloudflare_executive_report.dates import format_date_with_days_from_iso, utc_today
-from cloudflare_executive_report.executive_summary_constants import (
-    RELIABILITY_5XX_HEALTHY_MAX,
-    RELIABILITY_5XX_WARNING_MAX,
+from cloudflare_executive_report.executive.rules import (
+    build_rule_messages,
+    evaluate_comparison_gate,
 )
 
 _DEFENSIVE_ACTIONS = frozenset(
@@ -41,14 +41,6 @@ def _as_int(v: Any) -> int:
 
 def _format_cert_expiry_human(soonest: Any, *, as_of: date) -> str:
     return format_date_with_days_from_iso(soonest, as_of=as_of)
-
-
-def _reliability_phrase_for_5xx(rate_pct: float) -> str:
-    if rate_pct <= RELIABILITY_5XX_HEALTHY_MAX:
-        return "reliability looked strong"
-    if rate_pct <= RELIABILITY_5XX_WARNING_MAX:
-        return "reliability deserved attention"
-    return "reliability was elevated (elevated server errors)"
 
 
 def _actions_mitigated_from_top_actions(security: dict[str, Any]) -> int:
@@ -95,6 +87,7 @@ def _verdict(
 
 def build_executive_summary(
     *,
+    zone_id: str = "",
     zone_name: str,
     zone_health: dict[str, Any] | None,
     dns: dict[str, Any] | None,
@@ -107,6 +100,9 @@ def build_executive_summary(
     certificates: dict[str, Any] | None = None,
     warnings: list[str] | None = None,
     as_of_date: date | None = None,
+    current_period: dict[str, Any] | None = None,
+    previous_report: dict[str, Any] | None = None,
+    previous_zone: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a compact CTO summary object from existing section rollups."""
     zh = _as_dict(zone_health)
@@ -137,83 +133,7 @@ def build_executive_summary(
     takeaways: list[str] = []
     actions: list[str] = []
 
-    total_requests_human = format_count_human(_as_int(h.get("total_requests")))
-    r4 = float(ha.get("status_4xx_rate_pct") or 0.0)
-    r5 = float(ha.get("status_5xx_rate_pct") or 0.0)
-    origin_avg = ha.get("origin_response_duration_avg_ms")
-    if ha and (
-        "status_4xx_rate_pct" in ha
-        or "status_5xx_rate_pct" in ha
-        or "origin_response_duration_avg_ms" in ha
-    ):
-        rel = _reliability_phrase_for_5xx(r5)
-        traffic_line = (
-            f"Traffic stable at {total_requests_human} requests; {rel} "
-            f"with 5xx at {r5:.2f}%. Client-side friction was 4xx at {r4:.2f}%."
-        )
-        if origin_avg is not None:
-            traffic_line += f" Origin response averaged {float(origin_avg):.1f} ms."
-        p50 = ha.get("latency_p50_ms")
-        p95 = ha.get("latency_p95_ms")
-        if p50 is not None and p95 is not None:
-            traffic_line += f" Edge latency p50/p95 {float(p50):.0f}/{float(p95):.0f} ms."
-        takeaways.append(traffic_line)
-    else:
-        takeaways.append(f"Traffic: {total_requests_human} requests in period.")
     mitigation_rate = float(s.get("mitigation_rate_pct") or 0.0)
-    takeaways.append(
-        f"Security: {format_count_human(mitigated)} threats were blocked or challenged "
-        f"({mitigation_rate:.1f}% of traffic)."
-    )
-    if total_requests > 0 and enc_gap_pct <= 5.0:
-        takeaways.append("All traffic is encrypted over HTTPS.")
-    elif total_requests > 0:
-        takeaways.append(f"{enc_gap_pct:.1f}% of traffic is still HTTP.")
-    takeaways.append(
-        f"DNS: {format_count_human(_as_int(d.get('total_queries')))} queries at "
-        f"{float(d.get('average_qps') or 0.0):.1f} qps average."
-    )
-
-    if len(dr) == 0:
-        takeaways.append(
-            "DNS inventory: not synced for this report period (include dns_records in sync)."
-        )
-    elif dr.get("unavailable") is True:
-        takeaways.append("DNS inventory: unavailable for this token or API.")
-    else:
-        apex = _as_int(dr.get("apex_unproxied_a_aaaa"))
-        takeaways.append(
-            f"DNS inventory: {format_count_human(_as_int(dr.get('total_records')))} records; "
-            f"{format_count_human(_as_int(dr.get('proxied_records')))} proxied, "
-            f"{format_count_human(_as_int(dr.get('dns_only_records')))} DNS-only."
-            + (" Apex record not proxied - origin IP exposed." if apex else "")
-        )
-
-    if len(au) == 0:
-        takeaways.append(
-            "Account audit: not synced for this report period (include audit in sync)."
-        )
-    elif au.get("unavailable") is True:
-        takeaways.append("Account audit: unavailable for this token or API.")
-    else:
-        audit_total_h = format_count_human(_as_int(au.get("total_events")))
-        takeaways.append(f"Account audit (period total): {audit_total_h} events.")
-
-    if len(ce) == 0:
-        takeaways.append(
-            "TLS certificates: not synced for this report period (include certificates in sync)."
-        )
-    elif ce.get("unavailable") is True:
-        takeaways.append("TLS certificates: unavailable for this token or API.")
-    else:
-        cert_human = _format_cert_expiry_human(ce.get("soonest_expiry"), as_of=as_of)
-        exp30 = _as_int(ce.get("expiring_in_30_days"))
-        cert_packs_h = format_count_human(_as_int(ce.get("total_certificate_packs")))
-        takeaways.append(
-            f"TLS certificate packs: {cert_packs_h} pack(s); "
-            f"{exp30} expiring within 30 days."
-            + (f" Certificate expires {cert_human}." if cert_human != "-" else "")
-        )
 
     if always_https.lower() != "on":
         actions.append("Enable Always Use HTTPS at zone level.")
@@ -240,6 +160,43 @@ def build_executive_summary(
         actions.append("Review recent account audit activity for unexpected configuration changes.")
     if not actions:
         actions.append("Maintain current baseline and monitor daily warning signals.")
+
+    gate = evaluate_comparison_gate(
+        current_zone_id=zone_id,
+        previous_report=previous_report,
+        current_period=_as_dict(current_period),
+    )
+    current_zone_payload = {
+        "zone_health": zh,
+        "http": h,
+        "security": s,
+        "cache": c,
+        "http_adaptive": ha,
+        "dns_records": dr,
+        "audit": au,
+        "certificates": ce,
+    }
+    rule_buckets = build_rule_messages(
+        current_zone=current_zone_payload,
+        previous_zone=previous_zone,
+        comparison_allowed=gate.allowed,
+    )
+    if gate.warning is not None:
+        rule_buckets["warnings"] = [gate.warning, *rule_buckets.get("warnings", [])]
+
+    categorized_takeaways = {
+        k: [
+            {
+                "phrase_key": m.phrase_key,
+                "severity": m.severity,
+                "message": m.message,
+                "display": m.display(),
+            }
+            for m in v
+        ]
+        for k, v in rule_buckets.items()
+    }
+    takeaways = [item["display"] for bucket in categorized_takeaways.values() for item in bucket]
 
     return {
         "zone_name": zone_name,
@@ -321,6 +278,7 @@ def build_executive_summary(
             },
         },
         "takeaways": takeaways,
+        "takeaways_categorized": categorized_takeaways,
         "actions": actions[:5],
-        "warnings_count": len(warn),
+        "warnings_count": len(warn) + len(categorized_takeaways.get("warnings", [])),
     }

@@ -208,6 +208,9 @@ def cmd_report(
         "--skip-zone-health",
         help="Omit zone health (REST); same as sync.",
     ),
+    output_dir: Path | None = typer.Option(
+        None, "--output-dir", help="Override JSON/history output root directory for this run."
+    ),
     config: Path | None = typer.Option(None, "--config", help="Override config path."),
 ) -> None:
     """Sync cache (unless --cache-only) then build a PDF.
@@ -254,6 +257,9 @@ def cmd_report(
     except CliConfigError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.GENERAL_ERROR) from None
+
+    if output_dir is not None:
+        cfg.output_dir = str(output_dir)
 
     setup_logging(verbose=verbose, quiet=quiet, log_level=_config_log_level(cfg))
 
@@ -456,6 +462,9 @@ def cmd_sync(
         "--skip-zone-health",
         help="Omit zone health (REST); report includes analytics streams only.",
     ),
+    output_dir: Path | None = typer.Option(
+        None, "--output-dir", help="Override JSON/history output root directory for this run."
+    ),
     config: Path | None = typer.Option(None, "--config", help="Override config path."),
 ) -> None:
     """Incremental sync by default; use --last N or --start/--end for explicit windows."""
@@ -485,6 +494,9 @@ def cmd_sync(
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.GENERAL_ERROR) from None
 
+    if output_dir is not None:
+        cfg.output_dir = str(output_dir)
+
     setup_logging(verbose=verbose, quiet=quiet, log_level=_config_log_level(cfg))
 
     zone_effective = resolve_zone_filter(cfg, zone)
@@ -503,9 +515,15 @@ def cmd_sync(
 def cmd_clean(
     ctx: typer.Context,
     older_than: int | None = typer.Option(
-        None, "--older-than", help="Delete day dirs older than N days."
+        None, "--older-than", help="Delete selected scope entries older than N days."
     ),
-    delete_all: bool = typer.Option(False, "--all", help="Delete entire cache tree."),
+    scope_cache: bool = typer.Option(False, "--cache", help="Clean cache scope."),
+    scope_history: bool = typer.Option(False, "--history", help="Clean report history scope."),
+    delete_all: bool = typer.Option(False, "--all", help="Clean both cache and history."),
+    force: bool = typer.Option(False, "--force", help="Confirm destructive cleanup for --all."),
+    output_dir: Path | None = typer.Option(
+        None, "--output-dir", help="Override JSON/history output root directory for this run."
+    ),
 ) -> None:
     """Prune or wipe the DNS cache directory."""
     verbose = ctx.obj.get("verbose", False)
@@ -515,8 +533,24 @@ def cmd_clean(
     except (FileNotFoundError, ValueError) as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.GENERAL_ERROR) from None
+    if output_dir is not None:
+        cfg.output_dir = str(output_dir)
     setup_logging(verbose=verbose, quiet=quiet, log_level=_config_log_level(cfg))
-    code = run_clean(cfg, older_than=older_than, delete_all=delete_all, quiet=quiet)
+    if delete_all and not force:
+        typer.echo("Error: --all requires --force.", err=True)
+        raise typer.Exit(exits.INVALID_PARAMS)
+    selected_cache = scope_cache or delete_all
+    selected_history = scope_history or delete_all
+    if not selected_cache and not selected_history:
+        typer.echo("Error: specify --cache, --history, or --all.", err=True)
+        raise typer.Exit(exits.INVALID_PARAMS)
+    code = run_clean(
+        cfg,
+        older_than=older_than,
+        scope_cache=selected_cache,
+        scope_history=selected_history,
+        quiet=quiet,
+    )
     raise typer.Exit(code)
 
 

@@ -12,7 +12,7 @@ from reportlab.platypus import PageBreak, Spacer
 from cloudflare_executive_report.cf_client import CloudflareClient
 from cloudflare_executive_report.config import AppConfig
 from cloudflare_executive_report.dates import parse_ymd
-from cloudflare_executive_report.executive_summary import build_executive_summary
+from cloudflare_executive_report.executive.summary import build_executive_summary
 from cloudflare_executive_report.pdf.cover import append_cover_page
 from cloudflare_executive_report.pdf.document import build_simple_doc, footer_canvas_factory
 from cloudflare_executive_report.pdf.figure_quality import (
