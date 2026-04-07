@@ -93,6 +93,7 @@ def fetch_zone_health(
     zone_name: str,
     *,
     skip: bool,
+    zone_meta: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     warnings: list[str] = []
     if skip:
@@ -110,19 +111,23 @@ def fetch_zone_health(
     sdk = client.sdk
     out: dict[str, Any] = {}
 
-    try:
-        z = sdk.zones.get(zone_id=zone_id)
-        if z is None:
+    if zone_meta is not None:
+        st = zone_meta.get("status")
+        out["zone_status"] = str(st) if st is not None else UNAVAILABLE
+    else:
+        try:
+            z = sdk.zones.get(zone_id=zone_id)
+            if z is None:
+                out["zone_status"] = UNAVAILABLE
+            else:
+                st = getattr(z, "status", None)
+                out["zone_status"] = str(st) if st is not None else UNAVAILABLE
+        except PermissionDeniedError:
+            _warn(warnings, f"Zone health zone_status unavailable for {zone_name}")
             out["zone_status"] = UNAVAILABLE
-        else:
-            st = getattr(z, "status", None)
-            out["zone_status"] = str(st) if st is not None else UNAVAILABLE
-    except PermissionDeniedError:
-        _warn(warnings, f"Zone health zone_status unavailable for {zone_name}")
-        out["zone_status"] = UNAVAILABLE
-    except Exception as e:
-        _warn(warnings, f"Zone health zone_status unavailable: {e}")
-        out["zone_status"] = UNAVAILABLE
+        except Exception as e:
+            _warn(warnings, f"Zone health zone_status unavailable: {e}")
+            out["zone_status"] = UNAVAILABLE
 
     out["ssl_mode"] = _setting_value(sdk, zone_id, "ssl", warnings, label="ssl_mode")
     out["always_https"] = _setting_value(

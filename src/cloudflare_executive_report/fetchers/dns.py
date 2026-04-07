@@ -146,7 +146,15 @@ class DnsFetcher:
     def outside_retention(self, day: date, *, plan_legacy_id: str | None) -> bool:
         return date_outside_dns_retention(day, dns_retention_days(plan_legacy_id))
 
-    def fetch(self, client: CloudflareClient, zone_id: str, day: date) -> dict[str, Any]:
+    def fetch(
+        self,
+        client: CloudflareClient,
+        zone_id: str,
+        day: date,
+        *,
+        zone_meta: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        _ = zone_meta
         ge, lt = day_bounds_utc(day)
         return fetch_dns_for_bounds(client, zone_id, ge, lt)
 
@@ -157,7 +165,9 @@ class DnsFetcher:
         zone_name: str,
         *,
         plan_legacy_id: str | None,
+        zone_meta: dict[str, Any] | None,
     ) -> tuple[list[dict[str, Any]], list[str], bool]:
+        _ = zone_meta
         t = utc_today()
         if date_outside_dns_retention(t, dns_retention_days(plan_legacy_id)):
             return [], [], False

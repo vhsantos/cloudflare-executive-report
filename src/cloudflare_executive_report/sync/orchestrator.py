@@ -205,16 +205,21 @@ def _run_sync_locked(
                 log.error("--end cannot be after yesterday (UTC). Use --include-today for today.")
                 return exits.INVALID_PARAMS
 
+        # Cache zone metadata once per run to avoid redundant API calls
+        zmeta_by_zone_id: dict[str, dict] = {}
         for z in zones:
-            _progress(f"Zone {z.name} ({z.id})", quiet=opts.quiet)
             try:
-                zmeta = get_zone(client, z.id)
+                zmeta_by_zone_id[z.id] = get_zone(client, z.id)
             except CloudflareAuthError as e:
                 log.error("%s", e)
                 return exits.AUTH_FAILED
             except CloudflareAPIError as e:
                 log.error("Zone lookup failed: %s", e)
                 return exits.GENERAL_ERROR
+
+        for z in zones:
+            _progress(f"Zone {z.name} ({z.id})", quiet=opts.quiet)
+            zmeta = zmeta_by_zone_id[z.id]
 
             plan = (zmeta.get("plan") or {}).get("legacy_id")
 
@@ -236,6 +241,7 @@ def _run_sync_locked(
                         z.name,
                         d,
                         plan_legacy_id=plan,
+                        zone_meta=zmeta,
                         force_fetch=force_fetch,
                         refresh=opts.refresh,
                         quiet=opts.quiet,
@@ -264,14 +270,7 @@ def _run_sync_locked(
         all_warnings: list[str] = []
 
         for z in zones:
-            try:
-                zmeta = get_zone(client, z.id)
-            except CloudflareAuthError as e:
-                log.error("%s", e)
-                return exits.AUTH_FAILED
-            except CloudflareAPIError as e:
-                log.error("Zone lookup failed: %s", e)
-                return exits.GENERAL_ERROR
+            zmeta = zmeta_by_zone_id[z.id]
             plan = (zmeta.get("plan") or {}).get("legacy_id")
 
             cache_end = format_ymd(y) if opts.include_today else report_end
@@ -295,7 +294,7 @@ def _run_sync_locked(
                 )
                 if opts.include_today:
                     extra, tw, rl = fetcher.append_live_today(
-                        client, z.id, z.name, plan_legacy_id=plan
+                        client, z.id, z.name, plan_legacy_id=plan, zone_meta=zmeta
                     )
                     api_days = api_days + extra
                     warns.extend(tw)
@@ -305,7 +304,13 @@ def _run_sync_locked(
                 all_warnings.extend(warns)
                 zone_warnings.extend(warns)
 
-            zh, zw = fetch_zone_health(client, z.id, z.name, skip=opts.skip_zone_health)
+            zh, zw = fetch_zone_health(
+                client,
+                z.id,
+                z.name,
+                skip=opts.skip_zone_health,
+                zone_meta=zmeta,
+            )
             zblock["zone_health"] = zh
             all_warnings.extend(zw)
             zone_warnings.extend(zw)

@@ -31,7 +31,26 @@ def _fetch_all_dns_records(client: CloudflareClient, zone_id: str) -> list[dict[
 def fetch_dns_records_snapshot(client: CloudflareClient, zone_id: str, day: date) -> dict[str, Any]:
     try:
         zone = client.get_zone(zone_id)
-        zone_name = str(zone.get("name") or "").strip().lower()
+    except CloudflareAuthError:
+        return {
+            "date": format_ymd(day),
+            "unavailable": True,
+            "reason": "permission_denied",
+        }
+    except CloudflareAPIError as e:
+        return {
+            "date": format_ymd(day),
+            "unavailable": True,
+            "reason": f"api_error:{e}",
+        }
+    zone_name = str(zone.get("name") or "").strip().lower()
+    return fetch_dns_records_snapshot_with_zone_name(client, zone_id, zone_name=zone_name, day=day)
+
+
+def fetch_dns_records_snapshot_with_zone_name(
+    client: CloudflareClient, zone_id: str, *, zone_name: str, day: date
+) -> dict[str, Any]:
+    try:
         rows = _fetch_all_dns_records(client, zone_id)
     except CloudflareAuthError:
         return {
@@ -79,7 +98,19 @@ class DnsRecordsFetcher:
         _ = (day, plan_legacy_id)
         return False
 
-    def fetch(self, client: CloudflareClient, zone_id: str, day: date) -> dict[str, Any]:
+    def fetch(
+        self,
+        client: CloudflareClient,
+        zone_id: str,
+        day: date,
+        *,
+        zone_meta: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        if zone_meta:
+            zone_name = str(zone_meta.get("name") or "").strip().lower()
+            return fetch_dns_records_snapshot_with_zone_name(
+                client, zone_id, zone_name=zone_name, day=day
+            )
         return fetch_dns_records_snapshot(client, zone_id, day)
 
     def append_live_today(
@@ -89,6 +120,7 @@ class DnsRecordsFetcher:
         zone_name: str,
         *,
         plan_legacy_id: str | None,
+        zone_meta: dict[str, Any] | None,
     ) -> tuple[list[dict[str, Any]], list[str], bool]:
         _ = (zone_name, plan_legacy_id)
-        return [fetch_dns_records_snapshot(client, zone_id, utc_today())], [], False
+        return [self.fetch(client, zone_id, utc_today(), zone_meta=zone_meta)], [], False

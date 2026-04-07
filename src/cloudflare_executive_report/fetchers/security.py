@@ -271,7 +271,15 @@ class SecurityFetcher:
     def outside_retention(self, day: date, *, plan_legacy_id: str | None) -> bool:
         return date_outside_security_retention(day, plan_legacy_id=plan_legacy_id)
 
-    def fetch(self, client: CloudflareClient, zone_id: str, day: date) -> dict[str, Any]:
+    def fetch(
+        self,
+        client: CloudflareClient,
+        zone_id: str,
+        day: date,
+        *,
+        zone_meta: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        _ = zone_meta
         return fetch_security_for_date(client, zone_id, day)
 
     def append_live_today(
@@ -281,7 +289,9 @@ class SecurityFetcher:
         zone_name: str,
         *,
         plan_legacy_id: str | None,
+        zone_meta: dict[str, Any] | None,
     ) -> tuple[list[dict[str, Any]], list[str], bool]:
+        _ = zone_meta
         t = utc_today()
         if date_outside_security_retention(t, plan_legacy_id=plan_legacy_id):
             return [], [], False

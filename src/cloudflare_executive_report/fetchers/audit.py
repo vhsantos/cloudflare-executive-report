@@ -10,7 +10,7 @@ from cloudflare_executive_report.cf_client import (
     CloudflareAuthError,
     CloudflareClient,
 )
-from cloudflare_executive_report.dates import day_bounds_utc, format_ymd, utc_now_iso_z, utc_today
+from cloudflare_executive_report.dates import day_bounds_utc, format_ymd, utc_today
 
 
 def _event_label(row: dict[str, Any]) -> str:
@@ -39,8 +39,23 @@ def fetch_audit_snapshot(
 ) -> dict[str, Any]:
     try:
         zone = client.get_zone(zone_id)
-        account = zone.get("account") or {}
-        account_id = str(account.get("id") or "").strip()
+    except CloudflareAuthError:
+        return {"date": format_ymd(day), "unavailable": True, "reason": "permission_denied"}
+    except CloudflareAPIError as e:
+        return {"date": format_ymd(day), "unavailable": True, "reason": f"api_error:{e}"}
+    return fetch_audit_snapshot_with_account(
+        client,
+        account_id=str((zone.get("account") or {}).get("id") or "").strip(),
+        since_iso=since_iso,
+        until_iso=until_iso,
+        day=day,
+    )
+
+
+def fetch_audit_snapshot_with_account(
+    client: CloudflareClient, *, account_id: str, since_iso: str, until_iso: str, day: date
+) -> dict[str, Any]:
+    try:
         if not account_id:
             return {"date": format_ymd(day), "unavailable": True, "reason": "missing_account_id"}
         # SDK: audit_logs.list
@@ -83,8 +98,20 @@ class AuditFetcher:
         _ = (day, plan_legacy_id)
         return False
 
-    def fetch(self, client: CloudflareClient, zone_id: str, day: date) -> dict[str, Any]:
+    def fetch(
+        self,
+        client: CloudflareClient,
+        zone_id: str,
+        day: date,
+        *,
+        zone_meta: dict[str, Any] | None,
+    ) -> dict[str, Any]:
         since, until = day_bounds_utc(day)
+        if zone_meta:
+            account_id = str(((zone_meta.get("account") or {}).get("id")) or "").strip()
+            return fetch_audit_snapshot_with_account(
+                client, account_id=account_id, since_iso=since, until_iso=until, day=day
+            )
         return fetch_audit_snapshot(client, zone_id, since, until, day)
 
     def append_live_today(
@@ -94,11 +121,12 @@ class AuditFetcher:
         zone_name: str,
         *,
         plan_legacy_id: str | None,
+        zone_meta: dict[str, Any] | None,
     ) -> tuple[list[dict[str, Any]], list[str], bool]:
         _ = (zone_name, plan_legacy_id)
         t = utc_today()
         return (
-            [fetch_audit_snapshot(client, zone_id, day_bounds_utc(t)[0], utc_now_iso_z(), t)],
+            [self.fetch(client, zone_id, t, zone_meta=zone_meta)],
             [],
             False,
         )

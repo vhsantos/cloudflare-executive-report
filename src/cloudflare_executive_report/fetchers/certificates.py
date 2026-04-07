@@ -75,7 +75,15 @@ class CertificatesFetcher:
         _ = (day, plan_legacy_id)
         return False
 
-    def fetch(self, client: CloudflareClient, zone_id: str, day: date) -> dict[str, Any]:
+    def fetch(
+        self,
+        client: CloudflareClient,
+        zone_id: str,
+        day: date,
+        *,
+        zone_meta: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        _ = zone_meta
         return fetch_certificates_snapshot(client, zone_id, day)
 
     def append_live_today(
@@ -85,7 +93,8 @@ class CertificatesFetcher:
         zone_name: str,
         *,
         plan_legacy_id: str | None,
+        zone_meta: dict[str, Any] | None,
     ) -> tuple[list[dict[str, Any]], list[str], bool]:
-        _ = (zone_name, plan_legacy_id)
+        _ = (zone_name, plan_legacy_id, zone_meta)
         t = utc_today()
         return [fetch_certificates_snapshot(client, zone_id, t)], [], False
