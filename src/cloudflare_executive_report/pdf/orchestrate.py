@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from reportlab.platypus import PageBreak, Paragraph, Spacer
+from reportlab.platypus import PageBreak, Spacer
 
 from cloudflare_executive_report.cf_client import CloudflareClient
 from cloudflare_executive_report.config import AppConfig
@@ -83,13 +83,6 @@ def write_report_pdf(
         zone_id, zone_name = resolve_zone(cfg, zone_key)
         if zi > 0:
             story.append(PageBreak())
-        story.append(
-            Paragraph(
-                f"<font color='{th.slate}'><b>{zone_name}</b></font> "
-                f"<font color='{th.muted}'>({zone_id})</font>",
-                styles["RepZoneTitle"],
-            )
-        )
         story.append(Spacer(1, 6))
 
         loaded_dns = None
