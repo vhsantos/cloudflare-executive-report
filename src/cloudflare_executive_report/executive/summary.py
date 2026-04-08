@@ -11,6 +11,7 @@ from cloudflare_executive_report.executive.rules import (
     build_rule_messages,
     evaluate_comparison_gate,
 )
+from cloudflare_executive_report.formatting import trim_decimal
 
 _DEFENSIVE_ACTIONS = frozenset(
     {
@@ -37,6 +38,45 @@ def _as_int(v: Any) -> int:
         return int(v or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def _as_float(v: Any) -> float:
+    try:
+        return float(v or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _fmt_short(v: float, *, suffix: str = "") -> str:
+    return f"{trim_decimal(v, 1)}{suffix}"
+
+
+def _kpi_indicator(
+    *,
+    current: float,
+    previous: float | None,
+    mode: str,
+    better_when_lower: bool = False,
+) -> str:
+    if previous is None:
+        return ""
+    if mode == "pct":
+        if previous == 0:
+            return ""
+        delta = ((current - previous) / previous) * 100.0
+        if abs(delta) < 0.1:
+            return ""
+        improved = delta < 0 if better_when_lower else delta > 0
+        return f"{'▲' if improved else '▼'}{_fmt_short(abs(delta), suffix='%')}"
+    delta = current - previous
+    if abs(delta) < 0.1:
+        return ""
+    improved = delta < 0 if better_when_lower else delta > 0
+    if mode == "pp":
+        return f"{'▲' if improved else '▼'}{_fmt_short(abs(delta))}"
+    if mode == "ms":
+        return f"{'▲' if improved else '▼'}{_fmt_short(abs(delta))}"
+    return f"{'▲' if improved else '▼'}{_fmt_short(abs(delta))}"
 
 
 def _format_cert_expiry_human(soonest: Any, *, as_of: date) -> str:
@@ -174,6 +214,47 @@ def build_executive_summary(
     }
     takeaways = [item["display"] for bucket in categorized_takeaways.values() for item in bucket]
     actions = [item.message for item in rule_buckets.get("actions", [])]
+    prev_http = _as_dict(previous_zone.get("http")) if previous_zone else {}
+    prev_dns = _as_dict(previous_zone.get("dns")) if previous_zone else {}
+    prev_ha = _as_dict(previous_zone.get("http_adaptive")) if previous_zone else {}
+    prev_requests = (
+        _as_float(prev_http.get("total_requests")) if previous_zone and gate.allowed else None
+    )
+    prev_cache_hit = (
+        _as_float(prev_http.get("cache_hit_ratio")) if previous_zone and gate.allowed else None
+    )
+    prev_4xx = (
+        _as_float(prev_ha.get("status_4xx_rate_pct")) if previous_zone and gate.allowed else None
+    )
+    prev_origin_ms = (
+        _as_float(prev_ha.get("origin_response_duration_avg_ms"))
+        if previous_zone and gate.allowed
+        else None
+    )
+    prev_qps = _as_float(prev_dns.get("average_qps")) if previous_zone and gate.allowed else None
+    kpi_indicators = {
+        "traffic.total_requests": _kpi_indicator(
+            current=_as_float(total_requests), previous=prev_requests, mode="pct"
+        ),
+        "traffic.cache_hit_ratio": _kpi_indicator(
+            current=_as_float(h.get("cache_hit_ratio")), previous=prev_cache_hit, mode="pp"
+        ),
+        "traffic.status_4xx_rate_pct": _kpi_indicator(
+            current=_as_float(ha.get("status_4xx_rate_pct")),
+            previous=prev_4xx,
+            mode="pp",
+            better_when_lower=True,
+        ),
+        "traffic.origin_response_duration_avg_ms": _kpi_indicator(
+            current=_as_float(ha.get("origin_response_duration_avg_ms")),
+            previous=prev_origin_ms,
+            mode="ms",
+            better_when_lower=True,
+        ),
+        "dns.average_qps": _kpi_indicator(
+            current=_as_float(d.get("average_qps")), previous=prev_qps, mode="num"
+        ),
+    }
 
     return {
         "zone_name": zone_name,
@@ -257,5 +338,6 @@ def build_executive_summary(
         "takeaways": takeaways,
         "takeaways_categorized": categorized_takeaways,
         "actions": actions,
+        "kpi_indicators": kpi_indicators,
         "warnings_count": len(warn) + len(categorized_takeaways.get("warnings", [])),
     }

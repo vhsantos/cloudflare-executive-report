@@ -6,8 +6,20 @@ from typing import Any
 
 from reportlab.platypus import Paragraph, Spacer
 
+from cloudflare_executive_report.formatting import (
+    format_count_compact,
+    format_number_compact,
+    format_percent_compact,
+)
 from cloudflare_executive_report.pdf.primitives import kpi_multi_cell_row, make_styles
 from cloudflare_executive_report.pdf.theme import Theme
+
+
+def _indicator_for(summary: dict[str, Any], key: str) -> str:
+    indicators = summary.get("kpi_indicators")
+    if isinstance(indicators, dict):
+        return str(indicators.get(key) or "").strip()
+    return ""
 
 
 def append_executive_summary(
@@ -59,11 +71,19 @@ def append_executive_summary(
     story.append(
         kpi_multi_cell_row(
             [
-                ("Requests", str(traffic.get("total_requests_human") or "0")),
-                ("Encrypted requests", str(traffic.get("encrypted_requests_human") or "0")),
-                ("Cache hit ratio", f"{float(traffic.get('cache_hit_ratio') or 0.0):.1f}%"),
-                ("Blocked/Challenged", str(security.get("mitigated_events_human") or "0")),
-                ("Mitigation rate", f"{float(security.get('mitigation_rate_pct') or 0.0):.1f}%"),
+                (
+                    "Requests",
+                    format_count_compact(traffic.get("total_requests")),
+                    _indicator_for(summary, "traffic.total_requests"),
+                ),
+                ("Encrypted requests", format_count_compact(traffic.get("encrypted_requests"))),
+                (
+                    "Cache hit ratio",
+                    format_percent_compact(traffic.get("cache_hit_ratio")),
+                    _indicator_for(summary, "traffic.cache_hit_ratio"),
+                ),
+                ("Blocked/Challenged", format_count_compact(security.get("mitigated_events"))),
+                ("Mitigation rate", format_percent_compact(security.get("mitigation_rate_pct"))),
             ],
             styles,
             theme=theme,
@@ -81,10 +101,18 @@ def append_executive_summary(
     story.append(
         kpi_multi_cell_row(
             [
-                ("4xx rate", f"{float(traffic.get('status_4xx_rate_pct') or 0.0):.2f}%"),
-                ("5xx rate", f"{float(traffic.get('status_5xx_rate_pct') or 0.0):.2f}%"),
+                (
+                    "4xx rate",
+                    format_percent_compact(traffic.get("status_4xx_rate_pct")),
+                    _indicator_for(summary, "traffic.status_4xx_rate_pct"),
+                ),
+                ("5xx rate", format_percent_compact(traffic.get("status_5xx_rate_pct"))),
                 ("Edge p50/p95", lat_txt),
-                ("Origin response", origin_txt),
+                (
+                    "Origin response",
+                    origin_txt,
+                    _indicator_for(summary, "traffic.origin_response_duration_avg_ms"),
+                ),
             ],
             styles,
             theme=theme,
@@ -98,8 +126,12 @@ def append_executive_summary(
     story.append(
         kpi_multi_cell_row(
             [
-                ("DNS queries", str(dns.get("total_queries_human") or "0")),
-                ("Avg DNS QPS", f"{float(dns.get('average_qps') or 0.0):.1f}"),
+                ("DNS queries", format_count_compact(dns.get("total_queries"))),
+                (
+                    "Avg DNS QPS",
+                    format_number_compact(dns.get("average_qps")),
+                    _indicator_for(summary, "dns.average_qps"),
+                ),
                 (
                     "DNS records",
                     "unavailable" if dr_un else str(dns_records.get("total_records") or "0"),

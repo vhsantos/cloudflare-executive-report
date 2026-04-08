@@ -8,6 +8,7 @@ from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.units import inch
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.platypus import Flowable, Image, KeepInFrame, Paragraph, Table, TableStyle
 
 from cloudflare_executive_report.aggregate import format_count_human
@@ -15,7 +16,7 @@ from cloudflare_executive_report.pdf.styles import build_styles
 from cloudflare_executive_report.pdf.theme import Theme
 
 # ``KeepInFrame`` maxWidth (pt). ``wrap()`` uses ``min(this, cell_availWidth)``; a huge
-# value means the table cell’s inner width (after padding) is always the effective cap,
+# value means the table cell's inner width (after padding) is always the effective cap,
 # so we do not duplicate column-width math here.
 _KEEP_IN_FRAME_MAX_WIDTH_PT = 1e9
 
@@ -275,7 +276,7 @@ def colo_table_wrap(
 
 
 def kpi_multi_cell_row(
-    cells: list[tuple[str, str]],
+    cells: list[tuple[str, str] | tuple[str, str, str]],
     styles: Any,
     *,
     theme: Theme,
@@ -291,9 +292,19 @@ def kpi_multi_cell_row(
     cell_w = (w_full - gap_total) / n
     div_color = colors.HexColor(theme.border)
 
+    def _indicator_color(indicator_text: str) -> str:
+        if indicator_text.startswith("▲"):
+            return "#00AA00"
+        if indicator_text.startswith("▼"):
+            return "#CC0000"
+        return theme.muted
+
     row: list[Any] = []
     col_widths: list[float] = []
-    for i, (label, value) in enumerate(cells):
+    for i, cell in enumerate(cells):
+        label = cell[0]
+        value = cell[1]
+        indicator = cell[2] if len(cell) > 2 else ""
         if i > 0:
             row.append(
                 KpiColumnDivider(
@@ -303,10 +314,62 @@ def kpi_multi_cell_row(
                 )
             )
             col_widths.append(sep_w)
+        value_text = escape(str(value))
+        indicator_text = escape(str(indicator).strip())
+        indicator_color = _indicator_color(indicator_text)
+        value_block: Any
+        if indicator_text:
+            raw_value = str(value)
+            raw_indicator = str(indicator).strip()
+            value_w = max(1.0, stringWidth(raw_value, "Helvetica-Bold", 20))
+            indicator_w = max(1.0, stringWidth(raw_indicator, "Helvetica-Bold", 7))
+            value_line = Table(
+                [
+                    [
+                        Paragraph(value_text, styles["RepKpiValue"]),
+                        Paragraph(
+                            (
+                                f"<font size='7' color='{indicator_color}'>"
+                                f"<b>{indicator_text}</b></font>"
+                            ),
+                            styles["RepKpiLabelCenter"],
+                        ),
+                    ]
+                ],
+                colWidths=[value_w, indicator_w],
+            )
+            value_line.setStyle(
+                TableStyle(
+                    [
+                        ("ALIGN", (0, 0), (0, 0), "LEFT"),
+                        ("ALIGN", (1, 0), (1, 0), "LEFT"),
+                        ("VALIGN", (0, 0), (1, 0), "MIDDLE"),
+                        ("LEFTPADDING", (0, 0), (1, 0), 0),
+                        ("RIGHTPADDING", (0, 0), (1, 0), 0),
+                        ("TOPPADDING", (0, 0), (1, 0), 0),
+                        ("BOTTOMPADDING", (0, 0), (1, 0), 0),
+                    ]
+                )
+            )
+            value_block = Table([[value_line]], colWidths=[cell_w])
+            value_block.setStyle(
+                TableStyle(
+                    [
+                        ("ALIGN", (0, 0), (0, 0), "CENTER"),
+                        ("VALIGN", (0, 0), (0, 0), "MIDDLE"),
+                        ("LEFTPADDING", (0, 0), (0, 0), 0),
+                        ("RIGHTPADDING", (0, 0), (0, 0), 0),
+                        ("TOPPADDING", (0, 0), (0, 0), 0),
+                        ("BOTTOMPADDING", (0, 0), (0, 0), 0),
+                    ]
+                )
+            )
+        else:
+            value_block = Paragraph(value_text, styles["RepKpiValueCenter"])
         inner = Table(
             [
-                [Paragraph(label, styles["RepKpiLabelCenter"])],
-                [Paragraph(value, styles["RepKpiValueCenter"])],
+                [Paragraph(escape(str(label)), styles["RepKpiLabelCenter"])],
+                [value_block],
             ],
             colWidths=[cell_w],
         )
