@@ -131,35 +131,8 @@ def build_executive_summary(
     enc_gap_pct = (100.0 * enc_gap / total_requests) if total_requests > 0 else 0.0
 
     takeaways: list[str] = []
-    actions: list[str] = []
 
     mitigation_rate = float(s.get("mitigation_rate_pct") or 0.0)
-
-    if always_https.lower() != "on":
-        actions.append("Enable Always Use HTTPS at zone level.")
-    if dnssec_status.lower() in {"disabled", "off", "unavailable"}:
-        actions.append("Review DNSSEC configuration and enable if policy requires it.")
-    if ssl_mode.lower() not in {"strict", "full_strict"}:
-        actions.append("Review SSL mode and target Strict for origin validation.")
-    if _as_int(zh.get("security_rules_active")) == 0:
-        actions.append("Review firewall/rate-limit posture and activate baseline rules.")
-    has_apex_exposure = (
-        bool(len(dr))
-        and dr.get("unavailable") is not True
-        and _as_int(dr.get("apex_unproxied_a_aaaa")) > 0
-    )
-    if has_apex_exposure:
-        actions.append(f"Enable proxy on apex A/AAAA record for {zone_name}.")
-    if len(ce) and ce.get("unavailable") is not True and _as_int(ce.get("expiring_in_30_days")) > 0:
-        actions.append(
-            "Plan renewal or validation for TLS certificate packs expiring within 30 days."
-        )
-    if total_requests > 0 and enc_gap_pct > 5.0:
-        actions.append("Enable Always HTTPS to force encrypted traffic.")
-    if len(au) and au.get("unavailable") is not True and _as_int(au.get("total_events")) > 50:
-        actions.append("Review recent account audit activity for unexpected configuration changes.")
-    if not actions:
-        actions.append("Maintain current baseline and monitor daily warning signals.")
 
     gate = evaluate_comparison_gate(
         current_zone_id=zone_id,
@@ -167,6 +140,7 @@ def build_executive_summary(
         current_period=_as_dict(current_period),
     )
     current_zone_payload = {
+        "zone_name": zone_name,
         "zone_health": zh,
         "http": h,
         "security": s,
@@ -184,6 +158,7 @@ def build_executive_summary(
     if gate.warning is not None:
         rule_buckets["warnings"] = [gate.warning, *rule_buckets.get("warnings", [])]
 
+    takeaway_buckets = ("positive_changes", "warnings", "correlations", "comparisons")
     categorized_takeaways = {
         k: [
             {
@@ -194,9 +169,11 @@ def build_executive_summary(
             }
             for m in v
         ]
-        for k, v in rule_buckets.items()
+        for k in takeaway_buckets
+        for v in [rule_buckets.get(k, [])]
     }
     takeaways = [item["display"] for bucket in categorized_takeaways.values() for item in bucket]
+    actions = [item.message for item in rule_buckets.get("actions", [])]
 
     return {
         "zone_name": zone_name,
@@ -279,6 +256,6 @@ def build_executive_summary(
         },
         "takeaways": takeaways,
         "takeaways_categorized": categorized_takeaways,
-        "actions": actions[:5],
+        "actions": actions,
         "warnings_count": len(warn) + len(categorized_takeaways.get("warnings", [])),
     }

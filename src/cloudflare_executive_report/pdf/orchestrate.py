@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
@@ -60,6 +61,27 @@ def resolve_zone(cfg: AppConfig, key: str) -> tuple[str, str]:
     return key, key
 
 
+def _load_previous_report(cfg: AppConfig) -> dict[str, Any] | None:
+    path = cfg.report_previous_path()
+    if not path.is_file():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _find_previous_zone(
+    previous_report: dict[str, Any] | None, zone_id: str
+) -> dict[str, Any] | None:
+    if not isinstance(previous_report, dict):
+        return None
+    for zone in previous_report.get("zones") or []:
+        if isinstance(zone, dict) and str(zone.get("zone_id") or "") == zone_id:
+            return zone
+    return None
+
+
 def write_report_pdf(
     output_path: Path,
     cfg: AppConfig,
@@ -73,6 +95,7 @@ def write_report_pdf(
         q = parse_pdf_image_quality(cfg.pdf_image_quality)
         th = theme_with_pdf_image_quality(q)
     cache_root = cfg.cache_path()
+    previous_report = _load_previous_report(cfg)
     styles = make_styles(th)
     story: list[Any] = []
     append_cover_page(story, cover=cfg.cover, spec=spec, styles=styles, theme=th)
@@ -184,6 +207,7 @@ def write_report_pdf(
 
         if spec.include_executive_summary:
             executive_summary = build_executive_summary(
+                zone_id=zone_id,
                 zone_name=zone_name,
                 zone_health=zone_health,
                 dns=loaded_dns.rollup if loaded_dns else None,
@@ -196,6 +220,9 @@ def write_report_pdf(
                 certificates=loaded_certificates.rollup if loaded_certificates else None,
                 warnings=zone_warnings,
                 as_of_date=parse_ymd(spec.end),
+                current_period={"start": spec.start, "end": spec.end},
+                previous_report=previous_report,
+                previous_zone=_find_previous_zone(previous_report, zone_id),
             )
             append_executive_summary(
                 story,

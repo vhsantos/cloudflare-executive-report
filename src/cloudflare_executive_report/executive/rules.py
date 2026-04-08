@@ -136,6 +136,7 @@ def build_rule_messages(
     warnings: list[RuleMessage] = []
     correlations: list[RuleMessage] = []
     comparisons: list[RuleMessage] = []
+    actions: list[RuleMessage] = []
 
     zh = _as_dict(current_zone.get("zone_health"))
     http = _as_dict(current_zone.get("http"))
@@ -210,6 +211,27 @@ def build_rule_messages(
         )
     if audits > 50:
         correlations.append(_msg("correlation.audit_high", "warning", events=audits))
+
+    # Action rules migrated from summary.py to keep rule ownership centralized.
+    always_https = str(zh.get("always_https") or "").strip().lower()
+    total_requests = _as_int(http.get("total_requests"))
+    encrypted_requests = _as_int(http.get("encrypted_requests"))
+    enc_gap = max(0, total_requests - encrypted_requests)
+    enc_gap_pct = (100.0 * enc_gap / total_requests) if total_requests > 0 else 0.0
+    if always_https != "on" or (total_requests > 0 and enc_gap_pct > 5.0):
+        actions.append(_msg("action.enable_always_https", "info"))
+    if dnssec in {"disabled", "off", "unavailable"}:
+        actions.append(_msg("action.review_dnssec", "info"))
+    if ssl_mode not in {"strict", "full_strict"}:
+        actions.append(_msg("action.review_ssl_mode", "info"))
+    if not waf_on:
+        actions.append(_msg("action.review_waf_posture", "info"))
+    if apex_unproxied:
+        actions.append(_msg("action.enable_apex_proxy", "info"))
+    if len(ce) and ce.get("unavailable") is not True and exp_days > 0:
+        actions.append(_msg("action.plan_tls_renewal", "info"))
+    if len(au) and au.get("unavailable") is not True and audits > 50:
+        actions.append(_msg("action.review_audit_activity", "info"))
 
     if previous_zone and comparison_allowed:
         p_http = _as_dict(previous_zone.get("http"))
@@ -296,6 +318,7 @@ def build_rule_messages(
         "warnings": warnings,
         "correlations": correlations,
         "comparisons": comparisons,
+        "actions": actions,
     }
 
 

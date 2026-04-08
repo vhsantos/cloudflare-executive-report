@@ -93,7 +93,61 @@ def test_build_executive_summary_warning_with_warnings_and_inactive_zone():
     assert "zone_status=pending" in out["verdict_reasons"]
     assert "warnings_present" in out["verdict_reasons"]
     assert out["warnings_count"] >= 1
-    assert 3 <= len(out["actions"]) <= 5
+    assert len(out["actions"]) >= 1
+    assert set(out["takeaways_categorized"].keys()) == {
+        "positive_changes",
+        "warnings",
+        "correlations",
+        "comparisons",
+    }
+    assert all(a not in out["takeaways"] for a in out["actions"])
+
+
+def test_build_executive_summary_no_actions_when_no_action_rules_match():
+    out = build_executive_summary(
+        zone_name="example.com",
+        zone_health={
+            "zone_status": "active",
+            "ssl_mode": "strict",
+            "always_https": "on",
+            "security_level": "high",
+            "dnssec_status": "active",
+            "ddos_protection": "on",
+            "security_rules_active": 3,
+        },
+        dns={"total_queries": 1000, "average_qps": 1.2},
+        http={
+            "total_requests": 50000,
+            "total_requests_human": "50K",
+            "cache_hit_ratio": 55.0,
+            "encrypted_requests": 49000,
+            "encrypted_requests_human": "49K",
+        },
+        security={
+            "total_events": 200,
+            "mitigated_count": 200,
+            "http_requests_sampled": 50000,
+            "http_requests_sampled_human": "50K",
+            "not_mitigated_sampled": 49800,
+            "not_mitigated_sampled_human": "49.8K",
+            "mitigation_rate_pct": 0.4,
+        },
+        cache={"cache_hit_ratio": 55.0, "served_cf_count": 20000, "served_origin_count": 30000},
+        dns_records={
+            "total_records": 10,
+            "proxied_records": 8,
+            "dns_only_records": 2,
+            "apex_unproxied_a_aaaa": 0,
+        },
+        audit={"total_events": 10},
+        certificates={
+            "total_certificate_packs": 1,
+            "expiring_in_30_days": 0,
+            "soonest_expiry": "2026-12-01T00:00:00Z",
+        },
+        warnings=[],
+    )
+    assert out["actions"] == []
 
 
 def test_build_executive_summary_fallback_threats_from_top_actions():
@@ -192,4 +246,4 @@ def test_build_executive_summary_apex_and_cert_kpi_fields():
     assert out["kpis"]["certificates"]["cert_expires_human"].startswith("2026-05-16")
     assert out["kpis"]["traffic"]["encrypted_gap_pct"] > 5.0
     assert any("Apex record not proxied" in t for t in out["takeaways"])
-    assert any("Enable Always HTTPS" in a for a in out["actions"])
+    assert any("Enable proxy on apex A/AAAA record - hides origin IP." in a for a in out["actions"])

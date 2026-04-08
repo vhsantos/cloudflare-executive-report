@@ -153,5 +153,5 @@ def append_executive_summary(
         story.append(Spacer(1, 10))
     if actions:
         story.append(Paragraph("Actions", styles["RepSection"]))
-        for row in actions[:5]:
+        for row in actions:
             story.append(Paragraph(f"- {row}", styles["RepTableCell"]))

@@ -69,6 +69,18 @@ PHRASES: dict[str, str] = {
     "comparison.ssl_regression": (
         "Security regression: SSL mode changed from {previous} to {current}"
     ),
+    # Actions
+    "action.enable_always_https": (
+        "Enable Always Use HTTPS - redirects HTTP to HTTPS for all traffic."
+    ),
+    "action.review_dnssec": "Enable DNSSEC - prevents DNS spoofing and domain hijacking.",
+    "action.review_ssl_mode": "Change SSL mode to Full (Strict) for end-to-end encryption.",
+    "action.review_waf_posture": (
+        "Review Web Application Firewall (WAF) and rate-limiting baseline."
+    ),
+    "action.enable_apex_proxy": "Enable proxy on apex A/AAAA record - hides origin IP.",
+    "action.plan_tls_renewal": "Renew TLS certificate before expiry - prevents outages.",
+    "action.review_audit_activity": "Review audit log - check for unauthorized changes.",
 }
 
 PREFIXES: dict[str, str] = {

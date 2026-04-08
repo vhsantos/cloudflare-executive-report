@@ -17,6 +17,14 @@
 
 - [ ] Align executive takeaways with verdict logic to avoid contradictory messaging.
 - [ ] Add a short "How to read reliability metrics" section in docs for non-technical stakeholders.
+- [ ] Refactor PDF executive summary to reuse `executive_summary` from already-built report JSON (single source of truth), instead of recomputing summary in PDF path.
+  - Context: `cf-report report` currently runs sync/write JSON, then PDF recomputes executive summary from cache + extra context.
+  - Issue: this duplicated logic can drift between JSON and PDF (observed bug: PDF showing "First report..." while current JSON did not).
+  - Goal: eliminate duplicated summary derivation and ensure PDF takeaways always match JSON takeaways exactly.
+  - Acceptance criteria:
+    - `cf-report report` PDF takeaways/actions match `cf_report.json` `executive_summary.takeaways` and `actions` for each zone.
+    - No separate comparison gate decision in PDF-only path.
+    - Add regression test covering a two-run period comparison where JSON and PDF outputs stay consistent.
 
 ## Performance and Cloudflare API limits
 
@@ -27,3 +35,18 @@
 - [ ] Add guardrails for `--types` combinations that can exceed budget on Free plan.
 - [ ] Add observability counters in logs (queries attempted, succeeded, failed, rate-limited) per run.
 - [ ] Evaluate cache-first behavior for PDF/report generation to avoid unnecessary live API requests.
+
+## PDF emoji support (future check)
+
+- [ ] Evaluate emoji rendering support in PDF output.
+  - Context: emoji characters can render as black boxes due to missing glyph support in current ReportLab font setup.
+  - Investigate: embedded font strategy (Unicode/emoji-capable), viewer compatibility, and fallback behavior.
+  - Acceptance criteria:
+    - Known emoji test set renders correctly (or is safely replaced) in generated PDF.
+    - No black-box/tofu glyphs in supported environments.
+    - Document supported/unsupported emoji behavior in README.
+
+## Validated
+
+- [ ] Executive Summary incoherent.
+  - Security level at Medium - consider High for sensitive data, but KPI SSL mode full/strict.
