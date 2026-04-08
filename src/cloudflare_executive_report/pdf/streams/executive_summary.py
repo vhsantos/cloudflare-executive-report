@@ -9,6 +9,7 @@ from reportlab.platypus import Paragraph, Spacer
 from cloudflare_executive_report.formatting import (
     format_count_compact,
     format_number_compact,
+    format_pdf_status_line,
     format_percent_compact,
 )
 from cloudflare_executive_report.pdf.primitives import kpi_multi_cell_row, make_styles
@@ -209,9 +210,11 @@ def append_executive_summary(
     if takeaways:
         story.append(Paragraph("Takeaways", styles["RepSection"]))
         for row in takeaways[:8]:
-            story.append(Paragraph(f"- {row}", styles["RepTableCell"]))
+            story.append(Paragraph(format_pdf_status_line(row), styles["RepTableCell"]))
         story.append(Spacer(1, 10))
     if actions:
         story.append(Paragraph("Actions", styles["RepSection"]))
         for row in actions:
-            story.append(Paragraph(f"- {row}", styles["RepTableCell"]))
+            story.append(
+                Paragraph(format_pdf_status_line(row, level="action"), styles["RepTableCell"])
+            )

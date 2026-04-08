@@ -36,15 +36,18 @@
 - [ ] Add observability counters in logs (queries attempted, succeeded, failed, rate-limited) per run.
 - [ ] Evaluate cache-first behavior for PDF/report generation to avoid unnecessary live API requests.
 
-## PDF emoji support (future check)
+## PDF status markers (no emoji)
 
-- [ ] Evaluate emoji rendering support in PDF output.
-  - Context: emoji characters can render as black boxes due to missing glyph support in current ReportLab font setup.
-  - Investigate: embedded font strategy (Unicode/emoji-capable), viewer compatibility, and fallback behavior.
+- [ ] Replace/standardize status markers with non-emoji rendering only.
+  - Decision: emoji are not supported reliably in our PDF environments and should not be used.
+  - Preferred options:
+    - ASCII/text markers (`[OK]`, `[i]`, `[!]`, `[!!]`, `[>]`) with color.
+    - Bundled SVG status icons (pass/info/warning/critical/action) for deterministic rendering.
   - Acceptance criteria:
-    - Known emoji test set renders correctly (or is safely replaced) in generated PDF.
+    - No emoji glyphs in generated PDFs.
     - No black-box/tofu glyphs in supported environments.
-    - Document supported/unsupported emoji behavior in README.
+    - If SVG path is chosen, rendering is consistent without requiring user font installation.
+    - Document the chosen marker system in README.
 
 ## Validated
 

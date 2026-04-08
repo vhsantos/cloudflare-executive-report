@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from html import escape
 from typing import Any
 
 
@@ -57,3 +58,65 @@ def format_number_compact(v: Any) -> str:
     if abs(x) >= 10:
         return str(int(round(x)))
     return trim_decimal(x, 1)
+
+
+def status_marker_for_pdf(level: str) -> tuple[str, str]:
+    """Return (marker, color) for PDF status labels.
+
+    Uses PDF-safe symbols/text markers and falls back to pure ASCII markers on error.
+    """
+    normalized = str(level or "").strip().lower()
+    colors = {
+        "positive": "#16A34A",
+        "info": "#2563EB",
+        "warning": "#D97706",
+        "critical": "#DC2626",
+        "action": "#2563EB",
+    }
+    safe_markers = {
+        "positive": "✔",
+        "info": "[i]",
+        "warning": "(!)",
+        "critical": "✖",
+        "action": "[>]",
+    }
+    ascii_markers = {
+        "positive": "[OK]",
+        "info": "[i]",
+        "warning": "[!]",
+        "critical": "[!!]",
+        "action": "[>]",
+    }
+    if normalized not in colors:
+        normalized = "info"
+    try:
+        marker = safe_markers[normalized]
+        _ = marker.encode("utf-8")
+    except Exception:
+        marker = ascii_markers[normalized]
+    return marker, colors[normalized]
+
+
+def parse_status_prefixed_text(text: str) -> tuple[str, str]:
+    """Parse catalog-style prefixes and return (level, clean_text)."""
+    raw = str(text or "").strip()
+    if raw.startswith("[OK] "):
+        return "positive", raw[5:].strip()
+    if raw.startswith("[i] "):
+        return "info", raw[4:].strip()
+    if raw.startswith("[!] "):
+        return "warning", raw[4:].strip()
+    if raw.startswith("[!!] "):
+        return "critical", raw[5:].strip()
+    return "info", raw
+
+
+def format_pdf_status_line(text: str, *, level: str | None = None) -> str:
+    """Build escaped, colorized status line markup for ReportLab Paragraph."""
+    resolved_level, resolved_text = (
+        (str(level).strip().lower(), str(text or "").strip())
+        if level is not None
+        else parse_status_prefixed_text(text)
+    )
+    marker, color = status_marker_for_pdf(resolved_level)
+    return f"<font color='{color}'><b>{escape(marker)}</b></font> {escape(resolved_text)}"
