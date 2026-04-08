@@ -5,13 +5,12 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from cloudflare_executive_report.aggregate import format_count_human
 from cloudflare_executive_report.dates import format_date_with_days_from_iso, utc_today
 from cloudflare_executive_report.executive.rules import (
     build_rule_messages,
     evaluate_comparison_gate,
 )
-from cloudflare_executive_report.formatting import trim_decimal
+from cloudflare_executive_report.formatting import format_count_human, trim_decimal
 
 _DEFENSIVE_ACTIONS = frozenset(
     {
@@ -47,10 +46,6 @@ def _as_float(v: Any) -> float:
         return 0.0
 
 
-def _fmt_short(v: float, *, suffix: str = "") -> str:
-    return f"{trim_decimal(v, 1)}{suffix}"
-
-
 def _kpi_indicator(
     *,
     current: float,
@@ -67,16 +62,16 @@ def _kpi_indicator(
         if abs(delta) < 0.1:
             return ""
         improved = delta < 0 if better_when_lower else delta > 0
-        return f"{'▲' if improved else '▼'}{_fmt_short(abs(delta), suffix='%')}"
+        return f"{'▲' if improved else '▼'}{trim_decimal(abs(delta), 1)}%"
     delta = current - previous
     if abs(delta) < 0.1:
         return ""
     improved = delta < 0 if better_when_lower else delta > 0
     if mode == "pp":
-        return f"{'▲' if improved else '▼'}{_fmt_short(abs(delta))}"
+        return f"{'▲' if improved else '▼'}{trim_decimal(abs(delta), 1)}"
     if mode == "ms":
-        return f"{'▲' if improved else '▼'}{_fmt_short(abs(delta))}"
-    return f"{'▲' if improved else '▼'}{_fmt_short(abs(delta))}"
+        return f"{'▲' if improved else '▼'}{trim_decimal(abs(delta), 1)}"
+    return f"{'▲' if improved else '▼'}{trim_decimal(abs(delta), 1)}"
 
 
 def _format_cert_expiry_human(soonest: Any, *, as_of: date) -> str:

@@ -18,6 +18,7 @@ from cloudflare_executive_report.fetchers.security import (
     ROLLUP_CHALLENGE_SUBSTRINGS,
     ROLLUP_EXCLUDE_ACTION_PREFIXES,
 )
+from cloudflare_executive_report.formatting import format_bytes_human, format_count_human
 
 
 def _merge_rows(
@@ -55,38 +56,6 @@ def _top_pct(
     for k, c in items:
         out.append({name_key: k, "count": c, "percentage": _pct_of_total(c, total)})
     return out
-
-
-def format_bytes_human(n: int) -> str:
-    if n < 0:
-        n = 0
-    units = ("B", "KB", "MB", "GB", "TB")
-    v = float(n)
-    u = 0
-    while v >= 1024 and u < len(units) - 1:
-        v /= 1024.0
-        u += 1
-    if u == 0:
-        return f"{int(v)}B"
-    return f"{v:.1f}{units[u]}"
-
-
-def format_count_human(n: int) -> str:
-    if n < 0:
-        n = 0
-    if n < 1000:
-        return str(n)
-    if n < 1_000_000:
-        v = n / 1000.0
-        s = f"{v:.1f}".rstrip("0").rstrip(".")
-        return f"{s}K"
-    if n < 1_000_000_000:
-        v = n / 1_000_000.0
-        s = f"{v:.1f}".rstrip("0").rstrip(".")
-        return f"{s}M"
-    v = n / 1_000_000_000.0
-    s = f"{v:.1f}".rstrip("0").rstrip(".")
-    return f"{s}B"
 
 
 def _country_label_code(client_country_name: str) -> tuple[str, str]:

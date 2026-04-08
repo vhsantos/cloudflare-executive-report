@@ -12,6 +12,32 @@ def trim_decimal(v: float, digits: int = 1) -> str:
     return s
 
 
+def format_bytes_human(n: int) -> str:
+    if n < 0:
+        n = 0
+    units = ("B", "KB", "MB", "GB", "TB")
+    v = float(n)
+    u = 0
+    while v >= 1024 and u < len(units) - 1:
+        v /= 1024.0
+        u += 1
+    if u == 0:
+        return f"{int(v)}B"
+    return f"{trim_decimal(v, 1)}{units[u]}"
+
+
+def format_count_human(n: int) -> str:
+    if n < 0:
+        n = 0
+    if n < 1000:
+        return str(n)
+    if n < 1_000_000:
+        return f"{trim_decimal(n / 1000.0, 1)}K"
+    if n < 1_000_000_000:
+        return f"{trim_decimal(n / 1_000_000.0, 1)}M"
+    return f"{trim_decimal(n / 1_000_000_000.0, 1)}B"
+
+
 def format_count_compact(v: Any) -> str:
     n = float(v or 0)
     if n >= 1_000_000:

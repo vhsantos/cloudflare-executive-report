@@ -18,7 +18,7 @@ from matplotlib.colors import to_rgba
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
-from cloudflare_executive_report.aggregate import format_bytes_human
+from cloudflare_executive_report.formatting import format_bytes_human, trim_decimal
 from cloudflare_executive_report.pdf.theme import Theme
 
 ChartTimeGranularity = Literal["day", "week", "month"]
@@ -234,19 +234,19 @@ def _format_y_tick_cf(value: float, _pos: int | None = None) -> str:
     axv = abs(x)
     if axv >= 1_000_000_000:
         v = x / 1_000_000_000.0
-        s = f"{v:.2f}".rstrip("0").rstrip(".")
+        s = trim_decimal(v, 2)
         return f"{s}B"
     if axv >= 1_000_000:
         v = x / 1_000_000.0
-        s = f"{v:.2f}".rstrip("0").rstrip(".")
+        s = trim_decimal(v, 2)
         return f"{s}M"
     if axv >= 1000:
         v = x / 1000.0
-        s = f"{v:.2f}".rstrip("0").rstrip(".")
+        s = trim_decimal(v, 2)
         return f"{s}k"
     if x == int(x):
         return str(int(x))
-    return f"{x:.1f}".rstrip("0").rstrip(".")
+    return trim_decimal(x, 1)
 
 
 def _format_y_tick_bytes(value: float, _pos: int | None = None) -> str:
