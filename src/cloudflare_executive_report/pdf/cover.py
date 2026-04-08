@@ -8,7 +8,7 @@ from typing import Any
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import inch
-from reportlab.platypus import Image, PageBreak, Paragraph, Spacer
+from reportlab.platypus import Image, KeepInFrame, Paragraph, Spacer
 
 from cloudflare_executive_report.config import CoverConfig
 from cloudflare_executive_report.pdf.layout_spec import ReportSpec
@@ -22,7 +22,13 @@ def _logo_flowable(cover: CoverConfig) -> Image | None:
     try:
         if not p.is_file():
             return None
-        return Image(str(p), width=3.2 * inch, height=1.2 * inch, hAlign="CENTER")
+        img = Image(str(p))
+        max_w = 4.8 * inch
+        max_h = 2.4 * inch
+        # Same strategy as the older project: let ReportLab constrain while preserving ratio.
+        img._restrictSize(max_w, max_h)
+        img.hAlign = "CENTER"
+        return img
     except Exception:
         return None
 
@@ -204,12 +210,19 @@ def append_cover_page(
     else:
         between_pt = min_gap_pt
 
-    story.append(Spacer(1, top_gap_pt))
-    story.extend(top_block)
-    story.append(Spacer(1, between_pt))
-    story.extend(middle_block)
-    story.append(Spacer(1, between_pt))
-    story.extend(notes_block)
-
-    story.append(PageBreak())
+    cover_flowables: list[Any] = [Spacer(1, top_gap_pt), *top_block, Spacer(1, between_pt)]
+    cover_flowables.extend(middle_block)
+    cover_flowables.append(Spacer(1, between_pt))
+    cover_flowables.extend(notes_block)
+    # Hard guarantee: cover content stays on one page.
+    story.append(
+        KeepInFrame(
+            content_width_pt,
+            usable_height_pt,
+            cover_flowables,
+            mode="shrink",
+            hAlign="CENTER",
+            vAlign="TOP",
+        )
+    )
     return True
