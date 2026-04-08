@@ -38,6 +38,8 @@ from cloudflare_executive_report.pdf.streams.executive_summary import append_exe
 from cloudflare_executive_report.pdf.streams.http import append_http_stream
 from cloudflare_executive_report.pdf.streams.security import append_security_stream
 from cloudflare_executive_report.pdf.theme import Theme
+from cloudflare_executive_report.sync.options import SyncOptions
+from cloudflare_executive_report.sync.orchestrator import select_previous_report_for_period
 from cloudflare_executive_report.zone_health import fetch_zone_health
 
 log = logging.getLogger(__name__)
@@ -87,6 +89,7 @@ def write_report_pdf(
     cfg: AppConfig,
     spec: ReportSpec,
     *,
+    sync_opts: SyncOptions | None = None,
     theme: Theme | None = None,
 ) -> None:
     if theme is not None:
@@ -95,7 +98,6 @@ def write_report_pdf(
         q = parse_pdf_image_quality(cfg.pdf_image_quality)
         th = theme_with_pdf_image_quality(q)
     cache_root = cfg.cache_path()
-    previous_report = _load_previous_report(cfg)
     styles = make_styles(th)
     story: list[Any] = []
     append_cover_page(story, cover=cfg.cover, spec=spec, styles=styles, theme=th)
@@ -206,6 +208,16 @@ def write_report_pdf(
         zone_warnings.extend(health_warnings)
 
         if spec.include_executive_summary:
+            if sync_opts is None:
+                previous_report = _load_previous_report(cfg)
+            else:
+                previous_report = select_previous_report_for_period(
+                    cfg,
+                    current_start=spec.start,
+                    current_end=spec.end,
+                    zone_id=zone_id,
+                    opts=sync_opts,
+                )
             executive_summary = build_executive_summary(
                 zone_id=zone_id,
                 zone_name=zone_name,

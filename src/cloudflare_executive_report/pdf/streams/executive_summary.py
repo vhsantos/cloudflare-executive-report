@@ -76,14 +76,26 @@ def append_executive_summary(
                     format_count_compact(traffic.get("total_requests")),
                     _indicator_for(summary, "traffic.total_requests"),
                 ),
-                ("Encrypted requests", format_count_compact(traffic.get("encrypted_requests"))),
+                (
+                    "Encrypted requests",
+                    format_count_compact(traffic.get("encrypted_requests")),
+                    _indicator_for(summary, "traffic.encrypted_requests"),
+                ),
                 (
                     "Cache hit ratio",
                     format_percent_compact(traffic.get("cache_hit_ratio")),
                     _indicator_for(summary, "traffic.cache_hit_ratio"),
                 ),
-                ("Blocked/Challenged", format_count_compact(security.get("mitigated_events"))),
-                ("Mitigation rate", format_percent_compact(security.get("mitigation_rate_pct"))),
+                (
+                    "Blocked/Challenged",
+                    format_count_compact(security.get("mitigated_events")),
+                    _indicator_for(summary, "security.mitigated_events"),
+                ),
+                (
+                    "Mitigation rate",
+                    format_percent_compact(security.get("mitigation_rate_pct")),
+                    _indicator_for(summary, "security.mitigation_rate_pct"),
+                ),
             ],
             styles,
             theme=theme,
@@ -106,8 +118,12 @@ def append_executive_summary(
                     format_percent_compact(traffic.get("status_4xx_rate_pct")),
                     _indicator_for(summary, "traffic.status_4xx_rate_pct"),
                 ),
-                ("5xx rate", format_percent_compact(traffic.get("status_5xx_rate_pct"))),
-                ("Edge p50/p95", lat_txt),
+                (
+                    "5xx rate",
+                    format_percent_compact(traffic.get("status_5xx_rate_pct")),
+                    _indicator_for(summary, "traffic.status_5xx_rate_pct"),
+                ),
+                ("Edge p50/p95", lat_txt, _indicator_for(summary, "traffic.latency_p95_ms")),
                 (
                     "Origin response",
                     origin_txt,
@@ -126,7 +142,11 @@ def append_executive_summary(
     story.append(
         kpi_multi_cell_row(
             [
-                ("DNS queries", format_count_compact(dns.get("total_queries"))),
+                (
+                    "DNS queries",
+                    format_count_compact(dns.get("total_queries")),
+                    _indicator_for(summary, "dns.total_queries"),
+                ),
                 (
                     "Avg DNS QPS",
                     format_number_compact(dns.get("average_qps")),
@@ -136,8 +156,16 @@ def append_executive_summary(
                     "DNS records",
                     "unavailable" if dr_un else str(dns_records.get("total_records") or "0"),
                 ),
-                ("Proxied", "-" if dr_un else str(dns_records.get("proxied_records") or "0")),
-                ("DNS-only", "-" if dr_un else str(dns_records.get("dns_only_records") or "0")),
+                (
+                    "Proxied",
+                    "-" if dr_un else str(dns_records.get("proxied_records") or "0"),
+                    _indicator_for(summary, "dns_records.proxied_records"),
+                ),
+                (
+                    "DNS-only",
+                    "-" if dr_un else str(dns_records.get("dns_only_records") or "0"),
+                    _indicator_for(summary, "dns_records.dns_only_records"),
+                ),
             ],
             styles,
             theme=theme,

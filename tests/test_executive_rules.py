@@ -36,6 +36,17 @@ def test_comparison_gate_period_mismatch_phrase():
     assert "Comparison skipped: previous period" in gate.warning.message
 
 
+def test_comparison_gate_rejects_overlapping_periods():
+    prev = _report_with_zone("z1", start="2026-04-01", end="2026-04-07")
+    gate = evaluate_comparison_gate(
+        current_zone_id="z1",
+        previous_report=prev,
+        current_period={"start": "2026-04-05", "end": "2026-04-11"},
+    )
+    assert gate.allowed is False
+    assert "Comparison skipped: previous period" in gate.warning.message
+
+
 def test_correlation_origin_overloaded_uses_exact_phrase():
     current_zone = {
         "zone_health": {},

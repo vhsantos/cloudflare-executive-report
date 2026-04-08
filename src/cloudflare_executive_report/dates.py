@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import calendar
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
 
@@ -81,3 +82,23 @@ def last_n_complete_days(n: int, *, yesterday: date | None = None) -> tuple[date
     y = yesterday if yesterday is not None else utc_yesterday()
     start = y - timedelta(days=n - 1)
     return start, y
+
+
+def week_bounds(d: date) -> tuple[date, date]:
+    """Return Monday..Sunday bounds for the week containing d."""
+    start = d - timedelta(days=d.weekday())
+    end = start + timedelta(days=6)
+    return start, end
+
+
+def month_bounds(d: date) -> tuple[date, date]:
+    """Return first..last day bounds for the month containing d."""
+    last_day = calendar.monthrange(d.year, d.month)[1]
+    start = date(d.year, d.month, 1)
+    end = date(d.year, d.month, last_day)
+    return start, end
+
+
+def year_bounds(d: date) -> tuple[date, date]:
+    """Return first..last day bounds for the year containing d."""
+    return date(d.year, 1, 1), date(d.year, 12, 31)

@@ -10,7 +10,11 @@ from cloudflare_executive_report.executive.rules import (
     build_rule_messages,
     evaluate_comparison_gate,
 )
-from cloudflare_executive_report.formatting import format_count_human, trim_decimal
+from cloudflare_executive_report.formatting import (
+    format_count_compact,
+    format_count_human,
+    trim_decimal,
+)
 
 _DEFENSIVE_ACTIONS = frozenset(
     {
@@ -55,6 +59,10 @@ def _kpi_indicator(
 ) -> str:
     if previous is None:
         return ""
+
+    def _prefix(improved: bool) -> str:
+        return "G:" if improved else "R:"
+
     if mode == "pct":
         if previous == 0:
             return ""
@@ -62,16 +70,80 @@ def _kpi_indicator(
         if abs(delta) < 0.1:
             return ""
         improved = delta < 0 if better_when_lower else delta > 0
-        return f"{'▲' if improved else '▼'}{trim_decimal(abs(delta), 1)}%"
+        direction_up = delta > 0
+        return f"{_prefix(improved)}{'▲' if direction_up else '▼'}{trim_decimal(abs(delta), 1)}%"
     delta = current - previous
     if abs(delta) < 0.1:
         return ""
     improved = delta < 0 if better_when_lower else delta > 0
+    direction_up = delta > 0
+    arrow = "▲" if direction_up else "▼"
     if mode == "pp":
-        return f"{'▲' if improved else '▼'}{trim_decimal(abs(delta), 1)}"
+        return f"{_prefix(improved)}{arrow}{trim_decimal(abs(delta), 1)}"
     if mode == "ms":
-        return f"{'▲' if improved else '▼'}{trim_decimal(abs(delta), 1)}"
-    return f"{'▲' if improved else '▼'}{trim_decimal(abs(delta), 1)}"
+        return f"{_prefix(improved)}{arrow}{trim_decimal(abs(delta), 1)}"
+    return f"{_prefix(improved)}{arrow}{trim_decimal(abs(delta), 1)}"
+
+
+def _kpi_indicator_neutral(
+    *,
+    current: float,
+    previous: float | None,
+    mode: str,
+) -> str:
+    if previous is None:
+        return ""
+    if mode == "pct":
+        if previous == 0:
+            return ""
+        delta = ((current - previous) / previous) * 100.0
+        if abs(delta) < 0.1:
+            return ""
+        return f"N:{'▲' if delta > 0 else '▼'}{trim_decimal(abs(delta), 1)}%"
+    delta = current - previous
+    if abs(delta) < 0.1:
+        return ""
+    return f"N:{'▲' if delta > 0 else '▼'}{trim_decimal(abs(delta), 1)}"
+
+
+def _kpi_indicator_pct_with_baseline(
+    *,
+    current: float,
+    previous: float | None,
+    better_when_lower: bool = False,
+    min_previous: float = 20.0,
+) -> str:
+    if previous is None or previous < min_previous:
+        return ""
+    return _kpi_indicator(
+        current=current,
+        previous=previous,
+        mode="pct",
+        better_when_lower=better_when_lower,
+    )
+
+
+def _kpi_indicator_count_delta(
+    *,
+    current: float,
+    previous: float | None,
+    better_when_lower: bool = False,
+    min_baseline: float = 20.0,
+    neutral: bool = False,
+) -> str:
+    if previous is None:
+        return ""
+    if max(abs(current), abs(previous)) < min_baseline:
+        return ""
+    delta = current - previous
+    if abs(delta) < 1.0:
+        return ""
+    if neutral:
+        return f"N:Δ{'+' if delta > 0 else '-'}{format_count_compact(abs(delta))}"
+    improved = delta < 0 if better_when_lower else delta > 0
+    return (
+        f"{'G:' if improved else 'R:'}{'▲' if delta > 0 else '▼'}{format_count_compact(abs(delta))}"
+    )
 
 
 def _format_cert_expiry_human(soonest: Any, *, as_of: date) -> str:
@@ -212,6 +284,8 @@ def build_executive_summary(
     prev_http = _as_dict(previous_zone.get("http")) if previous_zone else {}
     prev_dns = _as_dict(previous_zone.get("dns")) if previous_zone else {}
     prev_ha = _as_dict(previous_zone.get("http_adaptive")) if previous_zone else {}
+    prev_sec = _as_dict(previous_zone.get("security")) if previous_zone else {}
+    prev_dr = _as_dict(previous_zone.get("dns_records")) if previous_zone else {}
     prev_requests = (
         _as_float(prev_http.get("total_requests")) if previous_zone and gate.allowed else None
     )
@@ -227,16 +301,57 @@ def build_executive_summary(
         else None
     )
     prev_qps = _as_float(prev_dns.get("average_qps")) if previous_zone and gate.allowed else None
+    prev_encrypted_requests = (
+        _as_float(prev_http.get("encrypted_requests")) if previous_zone and gate.allowed else None
+    )
+    prev_mitigated = (
+        _as_float(prev_sec.get("mitigated_count")) if previous_zone and gate.allowed else None
+    )
+    prev_mitigation_rate = (
+        _as_float(prev_sec.get("mitigation_rate_pct")) if previous_zone and gate.allowed else None
+    )
+    prev_5xx = (
+        _as_float(prev_ha.get("status_5xx_rate_pct")) if previous_zone and gate.allowed else None
+    )
+    prev_dns_queries = (
+        _as_float(prev_dns.get("total_queries")) if previous_zone and gate.allowed else None
+    )
+    prev_proxied = (
+        _as_float(prev_dr.get("proxied_records")) if previous_zone and gate.allowed else None
+    )
+    prev_dns_only = (
+        _as_float(prev_dr.get("dns_only_records")) if previous_zone and gate.allowed else None
+    )
+    prev_p95 = _as_float(prev_ha.get("latency_p95_ms")) if previous_zone and gate.allowed else None
     kpi_indicators = {
-        "traffic.total_requests": _kpi_indicator(
-            current=_as_float(total_requests), previous=prev_requests, mode="pct"
+        "traffic.total_requests": _kpi_indicator_pct_with_baseline(
+            current=_as_float(total_requests), previous=prev_requests
+        ),
+        "traffic.encrypted_requests": _kpi_indicator_pct_with_baseline(
+            current=_as_float(encrypted_requests), previous=prev_encrypted_requests
         ),
         "traffic.cache_hit_ratio": _kpi_indicator(
             current=_as_float(h.get("cache_hit_ratio")), previous=prev_cache_hit, mode="pp"
         ),
+        "security.mitigated_events": _kpi_indicator_count_delta(
+            current=_as_float(mitigated),
+            previous=prev_mitigated,
+            neutral=True,
+        ),
+        "security.mitigation_rate_pct": _kpi_indicator_neutral(
+            current=_as_float(mitigation_rate),
+            previous=prev_mitigation_rate,
+            mode="pp",
+        ),
         "traffic.status_4xx_rate_pct": _kpi_indicator(
             current=_as_float(ha.get("status_4xx_rate_pct")),
             previous=prev_4xx,
+            mode="pp",
+            better_when_lower=True,
+        ),
+        "traffic.status_5xx_rate_pct": _kpi_indicator(
+            current=_as_float(ha.get("status_5xx_rate_pct")),
+            previous=prev_5xx,
             mode="pp",
             better_when_lower=True,
         ),
@@ -246,8 +361,30 @@ def build_executive_summary(
             mode="ms",
             better_when_lower=True,
         ),
-        "dns.average_qps": _kpi_indicator(
+        "traffic.latency_p95_ms": _kpi_indicator(
+            current=_as_float(ha.get("latency_p95_ms")),
+            previous=prev_p95,
+            mode="ms",
+            better_when_lower=True,
+        ),
+        "dns.total_queries": _kpi_indicator_neutral(
+            current=_as_float(d.get("total_queries")),
+            previous=prev_dns_queries,
+            mode="pct",
+        ),
+        "dns.average_qps": _kpi_indicator_neutral(
             current=_as_float(d.get("average_qps")), previous=prev_qps, mode="num"
+        ),
+        "dns_records.proxied_records": _kpi_indicator_count_delta(
+            current=_as_float(dr.get("proxied_records")),
+            previous=prev_proxied,
+            min_baseline=3.0,
+        ),
+        "dns_records.dns_only_records": _kpi_indicator_count_delta(
+            current=_as_float(dr.get("dns_only_records")),
+            previous=prev_dns_only,
+            better_when_lower=True,
+            min_baseline=3.0,
         ),
     }
 

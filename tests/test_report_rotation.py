@@ -17,7 +17,7 @@ def test_rotate_report_outputs_creates_previous_and_history(tmp_path):
     _rotate_report_outputs(cfg, history_date=date(2026, 4, 7))
 
     previous = cfg.report_previous_path()
-    history_files = list(cfg.report_history_dir().glob("cf_report_2026-04-07_*.json"))
+    history_files = list(cfg.report_history_dir().glob("cf_report_*.json"))
     assert previous.is_file()
     assert len(history_files) == 1
     history = history_files[0]

@@ -34,9 +34,12 @@ from cloudflare_executive_report.dates import (
     format_ymd,
     iter_dates_inclusive,
     last_n_complete_days,
+    month_bounds,
     parse_ymd,
     utc_today,
     utc_yesterday,
+    week_bounds,
+    year_bounds,
 )
 from cloudflare_executive_report.executive.summary import build_executive_summary
 from cloudflare_executive_report.fetchers.registry import (
@@ -75,7 +78,78 @@ def _streams_for_types(types: frozenset[str]) -> list[str]:
     return [sid for sid in registered_stream_ids() if sid in types]
 
 
+def _semantic_current_bounds(opts: SyncOptions, *, y: date) -> tuple[date, date] | None:
+    def _shift_year_keep_day(d: date, years: int) -> date:
+        target_year = d.year + years
+        day = d.day
+        while day > 0:
+            try:
+                return date(target_year, d.month, day)
+            except ValueError:
+                day -= 1
+        return date(target_year, d.month, 1)
+
+    if opts.mode == SyncMode.yesterday:
+        return y, y
+    if opts.mode == SyncMode.last_week:
+        this_week_start, _ = week_bounds(y)
+        prev_week_end = this_week_start - timedelta(days=1)
+        return week_bounds(prev_week_end)
+    if opts.mode == SyncMode.this_week:
+        start, _ = week_bounds(utc_today())
+        return start, utc_today()
+    if opts.mode == SyncMode.last_month:
+        this_month_start, _ = month_bounds(y)
+        prev_month_day = this_month_start - timedelta(days=1)
+        return month_bounds(prev_month_day)
+    if opts.mode == SyncMode.this_month:
+        start, _ = month_bounds(utc_today())
+        return start, utc_today()
+    if opts.mode == SyncMode.last_year:
+        t = utc_today()
+        return date(t.year - 1, 1, 1), _shift_year_keep_day(t, -1)
+    if opts.mode == SyncMode.this_year:
+        start, _ = year_bounds(utc_today())
+        return start, utc_today()
+    return None
+
+
+def _semantic_baseline_bounds(opts: SyncOptions, *, y: date) -> tuple[date, date] | None:
+    if opts.mode == SyncMode.yesterday:
+        d = y - timedelta(days=1)
+        return d, d
+    if opts.mode == SyncMode.last_week:
+        this_week_start, _ = week_bounds(y)
+        prev_week_end = this_week_start - timedelta(days=1)
+        prev_week_start, _ = week_bounds(prev_week_end)
+        return prev_week_start - timedelta(days=7), prev_week_start - timedelta(days=1)
+    if opts.mode == SyncMode.this_week:
+        this_week_start, _ = week_bounds(utc_today())
+        prev_week_end = this_week_start - timedelta(days=1)
+        return week_bounds(prev_week_end)
+    if opts.mode == SyncMode.last_month:
+        this_month_start, _ = month_bounds(y)
+        prev_month_day = this_month_start - timedelta(days=1)
+        prev_month_start, _ = month_bounds(prev_month_day)
+        month_before_prev = prev_month_start - timedelta(days=1)
+        return month_bounds(month_before_prev)
+    if opts.mode == SyncMode.this_month:
+        this_month_start, _ = month_bounds(utc_today())
+        prev_month_day = this_month_start - timedelta(days=1)
+        return month_bounds(prev_month_day)
+    if opts.mode == SyncMode.last_year:
+        return date(y.year - 2, 1, 1), date(y.year - 2, 12, 31)
+    if opts.mode == SyncMode.this_year:
+        current_start, _ = year_bounds(utc_today())
+        return date(current_start.year - 1, 1, 1), date(current_start.year - 1, 12, 31)
+    return None
+
+
 def _sync_days_for_mode(opts: SyncOptions, idx, y: date) -> list[date]:
+    semantic_bounds = _semantic_current_bounds(opts, y=y)
+    if semantic_bounds is not None:
+        d0, d1 = semantic_bounds
+        return list(iter_dates_inclusive(d0, d1))
     if opts.mode == SyncMode.incremental:
         parts: list[date] = []
         for sid in _streams_for_types(opts.types):
@@ -116,6 +190,29 @@ def _load_previous_report(cfg: AppConfig) -> dict | None:
         return None
 
 
+def _load_report_file(path: Path) -> dict | None:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _report_period(report: dict | None) -> tuple[date, date] | None:
+    if not isinstance(report, dict):
+        return None
+    period = report.get("report_period")
+    if not isinstance(period, dict):
+        return None
+    start = str(period.get("start") or "").strip()
+    end = str(period.get("end") or "").strip()
+    if not start or not end:
+        return None
+    try:
+        return parse_ymd(start), parse_ymd(end)
+    except ValueError:
+        return None
+
+
 def _find_previous_zone(previous_report: dict | None, zone_id: str) -> dict | None:
     if not isinstance(previous_report, dict):
         return None
@@ -125,12 +222,81 @@ def _find_previous_zone(previous_report: dict | None, zone_id: str) -> dict | No
     return None
 
 
+def _report_has_zone(report: dict | None, zone_id: str) -> bool:
+    return _find_previous_zone(report, zone_id) is not None
+
+
+def _iter_baseline_candidates(cfg: AppConfig) -> list[dict]:
+    out: list[dict] = []
+    seen: set[Path] = set()
+    p = cfg.report_previous_path()
+    if p.is_file():
+        seen.add(p.resolve())
+        rep = _load_report_file(p)
+        if rep is not None:
+            out.append(rep)
+    hist = cfg.report_history_dir()
+    if hist.is_dir():
+        for f in sorted(hist.glob("cf_report_*.json"), reverse=True):
+            rf = f.resolve()
+            if rf in seen:
+                continue
+            seen.add(rf)
+            rep = _load_report_file(f)
+            if rep is not None:
+                out.append(rep)
+    return out
+
+
+def select_previous_report_for_period(
+    cfg: AppConfig,
+    *,
+    current_start: str,
+    current_end: str,
+    zone_id: str,
+    opts: SyncOptions,
+    y: date | None = None,
+) -> dict | None:
+    try:
+        cs = parse_ymd(current_start)
+        ce = parse_ymd(current_end)
+    except ValueError:
+        return None
+    baseline_expected = _semantic_baseline_bounds(opts, y=y or utc_yesterday())
+    current_len = (ce - cs).days + 1
+    best: tuple[date, dict] | None = None
+    for rep in _iter_baseline_candidates(cfg):
+        period = _report_period(rep)
+        if period is None:
+            continue
+        ps, pe = period
+        if pe >= cs:
+            continue
+        if ps == cs and pe == ce:
+            continue
+        if not _report_has_zone(rep, zone_id):
+            continue
+        if baseline_expected is not None:
+            if (ps, pe) != baseline_expected:
+                continue
+        else:
+            if ((pe - ps).days + 1) != current_len:
+                continue
+        if best is None or pe > best[0]:
+            best = (pe, rep)
+    return best[1] if best is not None else None
+
+
 def _report_bounds_from_indices(
     zones: list,
     cache_root: Path,
     y: date,
     opts: SyncOptions,
 ) -> tuple[str, str]:
+    semantic_bounds = _semantic_current_bounds(opts, y=y)
+    if semantic_bounds is not None:
+        d0, d1 = semantic_bounds
+        return format_ymd(d0), format_ymd(d1)
     if opts.mode == SyncMode.last_n and opts.last_n is not None:
         d0, d1 = last_n_complete_days(opts.last_n, yesterday=y)
         return format_ymd(d0), format_ymd(d1)
@@ -236,7 +402,6 @@ def _run_sync_locked(
     default_output_mode = (not write_stdout) and (output_path is None)
     if default_output_mode:
         _rotate_report_outputs(cfg, history_date=utc_today())
-    previous_report = _load_previous_report(cfg)
 
     with CloudflareClient(cfg.api_token, verbose=verbose_http) as client:
         if opts.mode == SyncMode.range and opts.start and opts.end:
@@ -353,6 +518,14 @@ def _run_sync_locked(
             zblock["zone_health"] = zh
             all_warnings.extend(zw)
             zone_warnings.extend(zw)
+            previous_report = select_previous_report_for_period(
+                cfg,
+                current_start=report_start,
+                current_end=report_end,
+                zone_id=z.id,
+                opts=opts,
+                y=y,
+            )
             zblock["executive_summary"] = build_executive_summary(
                 zone_id=z.id,
                 zone_name=z.name,

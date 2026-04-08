@@ -271,8 +271,8 @@ def test_build_cache_section_merges_status_and_paths():
 
 def test_format_helpers():
     assert format_bytes_human(0) == "0B"
-    assert format_bytes_human(1024) == "1.0KB"
-    assert format_bytes_human(1024 * 1024 * 3) == "3.0MB"
+    assert format_bytes_human(1024) == "1KB"
+    assert format_bytes_human(1024 * 1024 * 3) == "3MB"
     assert format_count_human(1500) == "1.5K"
 
 

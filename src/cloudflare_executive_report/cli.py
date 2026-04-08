@@ -162,6 +162,13 @@ def cmd_report(
         None, "--start", help="Start date YYYY-MM-DD (requires --end)."
     ),
     end: str | None = typer.Option(None, "--end", help="End date YYYY-MM-DD (requires --start)."),
+    last_month: bool = typer.Option(False, "--last-month", help="Use previous full UTC month."),
+    last_week: bool = typer.Option(False, "--last-week", help="Use previous full UTC week."),
+    last_year: bool = typer.Option(False, "--last-year", help="Use previous full UTC year."),
+    this_month: bool = typer.Option(False, "--this-month", help="Use current UTC month to date."),
+    this_week: bool = typer.Option(False, "--this-week", help="Use current UTC week to date."),
+    this_year: bool = typer.Option(False, "--this-year", help="Use current UTC year to date."),
+    yesterday: bool = typer.Option(False, "--yesterday", help="Use previous UTC day."),
     refresh: bool = typer.Option(
         False, "--refresh", help="Ignore cache and re-fetch active range (during sync step)."
     ),
@@ -241,6 +248,13 @@ def cmd_report(
             last=last,
             start=start,
             end=end,
+            last_month=last_month,
+            last_week=last_week,
+            last_year=last_year,
+            this_month=this_month,
+            this_week=this_week,
+            this_year=this_year,
+            yesterday=yesterday,
             refresh=refresh,
             include_today=include_today,
             quiet=quiet,
@@ -320,7 +334,7 @@ def cmd_report(
         top=top,
     )
     try:
-        write_report_pdf(output.resolve(), cfg, spec)
+        write_report_pdf(output.resolve(), cfg, spec, sync_opts=sync_opts)
     except ValueError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.INVALID_PARAMS) from None
@@ -435,6 +449,13 @@ def cmd_sync(
         None, "--start", help="Start date YYYY-MM-DD (requires --end)."
     ),
     end: str | None = typer.Option(None, "--end", help="End date YYYY-MM-DD (requires --start)."),
+    last_month: bool = typer.Option(False, "--last-month", help="Use previous full UTC month."),
+    last_week: bool = typer.Option(False, "--last-week", help="Use previous full UTC week."),
+    last_year: bool = typer.Option(False, "--last-year", help="Use previous full UTC year."),
+    this_month: bool = typer.Option(False, "--this-month", help="Use current UTC month to date."),
+    this_week: bool = typer.Option(False, "--this-week", help="Use current UTC week to date."),
+    this_year: bool = typer.Option(False, "--this-year", help="Use current UTC year to date."),
+    yesterday: bool = typer.Option(False, "--yesterday", help="Use previous UTC day."),
     refresh: bool = typer.Option(
         False, "--refresh", help="Ignore cache and re-fetch active range."
     ),
@@ -477,6 +498,13 @@ def cmd_sync(
             last=last,
             start=start,
             end=end,
+            last_month=last_month,
+            last_week=last_week,
+            last_year=last_year,
+            this_month=this_month,
+            this_week=this_week,
+            this_year=this_year,
+            yesterday=yesterday,
             refresh=refresh,
             include_today=include_today,
             quiet=quiet,

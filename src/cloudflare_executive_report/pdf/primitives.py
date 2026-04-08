@@ -293,6 +293,12 @@ def kpi_multi_cell_row(
     div_color = colors.HexColor(theme.border)
 
     def _indicator_color(indicator_text: str) -> str:
+        if indicator_text.startswith("G:"):
+            return "#00AA00"
+        if indicator_text.startswith("R:"):
+            return "#CC0000"
+        if indicator_text.startswith("N:"):
+            return theme.muted
         if indicator_text.startswith("▲"):
             return "#00AA00"
         if indicator_text.startswith("▼"):
@@ -315,8 +321,11 @@ def kpi_multi_cell_row(
             )
             col_widths.append(sep_w)
         value_text = escape(str(value))
-        indicator_text = escape(str(indicator).strip())
-        indicator_color = _indicator_color(indicator_text)
+        raw_indicator = str(indicator).strip()
+        indicator_color = _indicator_color(raw_indicator)
+        if raw_indicator.startswith(("G:", "R:", "N:")):
+            raw_indicator = raw_indicator[2:]
+        indicator_text = escape(raw_indicator)
         value_block: Any
         if indicator_text:
             raw_value = str(value)

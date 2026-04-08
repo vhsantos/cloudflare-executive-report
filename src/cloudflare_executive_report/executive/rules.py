@@ -39,6 +39,19 @@ def _period_days(period: dict[str, Any]) -> int:
         return 0
 
 
+def _period_bounds(period: dict[str, Any]) -> tuple[object, object] | None:
+    start = str(period.get("start") or "")
+    end = str(period.get("end") or "")
+    if not start or not end:
+        return None
+    from cloudflare_executive_report.dates import parse_ymd
+
+    try:
+        return parse_ymd(start), parse_ymd(end)
+    except Exception:
+        return None
+
+
 def _percent_delta(current: float, previous: float) -> float:
     if previous == 0:
         return 0.0
@@ -83,6 +96,21 @@ def evaluate_comparison_gate(
     previous_period = _as_dict(previous_report.get("report_period"))
     current_days = _period_days(current_period)
     previous_days = _period_days(previous_period)
+    previous_bounds = _period_bounds(previous_period)
+    current_bounds = _period_bounds(current_period)
+    if previous_bounds is None or current_bounds is None or previous_bounds[1] >= current_bounds[0]:
+        return ComparisonGate(
+            allowed=False,
+            warning=RuleMessage(
+                phrase_key="no_comparison.period_mismatch",
+                severity="warning",
+                message=render_phrase(
+                    "no_comparison.period_mismatch",
+                    previous_days=previous_days,
+                    current_days=current_days,
+                ),
+            ),
+        )
     if current_days <= 0 or previous_days <= 0 or current_days != previous_days:
         return ComparisonGate(
             allowed=False,
