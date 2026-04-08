@@ -6,7 +6,9 @@ from datetime import date
 from typing import Any
 
 from cloudflare_executive_report.dates import format_date_with_days_from_iso, utc_today
+from cloudflare_executive_report.executive.phrase_catalog import render_phrase
 from cloudflare_executive_report.executive.rules import (
+    RuleMessage,
     build_rule_messages,
     evaluate_comparison_gate,
 )
@@ -264,6 +266,17 @@ def build_executive_summary(
     )
     if gate.warning is not None:
         rule_buckets["warnings"] = [gate.warning, *rule_buckets.get("warnings", [])]
+    elif gate.allowed:
+        prev_period = _as_dict((previous_report or {}).get("report_period"))
+        ps = str(prev_period.get("start") or "").strip()
+        pe = str(prev_period.get("end") or "").strip()
+        if ps and pe:
+            baseline_msg = RuleMessage(
+                phrase_key="comparison.baseline_reference",
+                severity="info",
+                message=render_phrase("comparison.baseline_reference", start=ps, end=pe),
+            )
+            rule_buckets["comparisons"] = [baseline_msg, *rule_buckets.get("comparisons", [])]
 
     takeaway_buckets = ("positive_changes", "warnings", "correlations", "comparisons")
     categorized_takeaways = {

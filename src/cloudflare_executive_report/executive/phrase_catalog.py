@@ -7,7 +7,7 @@ Do not invent phrasing outside these templates.
 from __future__ import annotations
 
 PHRASES: dict[str, str] = {
-    # No comparison scenarios
+    "comparison.baseline_reference": "Comparing to: {start} to {end}",
     "no_comparison.first_report": "First report for this zone - no prior data for comparison",
     "no_comparison.period_mismatch": (
         "Comparison skipped: previous period ({previous_days}d) "

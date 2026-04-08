@@ -191,9 +191,9 @@ def build_rule_messages(
     if dnssec in {"off", "disabled"}:
         warnings.append(_msg("warning.dnssec_off", "warning"))
     if security_level == "low":
-        warnings.append(_msg("warning.security_low", "warning"))
+        warnings.append(_msg("warning.security_low", "critical"))
     elif security_level == "medium":
-        warnings.append(_msg("warning.security_medium", "info"))
+        warnings.append(_msg("warning.security_medium", "warning"))
     if not waf_on:
         warnings.append(_msg("warning.waf_off", "warning"))
     if ddos in {"off", "disabled"}:

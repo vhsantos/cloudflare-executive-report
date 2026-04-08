@@ -247,3 +247,57 @@ def test_build_executive_summary_apex_and_cert_kpi_fields():
     assert out["kpis"]["traffic"]["encrypted_gap_pct"] > 5.0
     assert any("Apex record not proxied" in t for t in out["takeaways"])
     assert any("Enable proxy on apex A/AAAA record - hides origin IP." in a for a in out["actions"])
+
+
+def test_build_executive_summary_includes_baseline_reference_takeaway_when_comparing():
+    previous_report = {
+        "report_period": {"start": "2026-03-25", "end": "2026-03-31"},
+        "zones": [
+            {
+                "zone_id": "z1",
+                "http": {
+                    "total_requests": 1000,
+                    "cache_hit_ratio": 10.0,
+                    "encrypted_requests": 900,
+                },
+                "security": {"mitigated_count": 10, "mitigation_rate_pct": 1.0},
+                "dns": {"total_queries": 500, "average_qps": 0.5},
+                "http_adaptive": {
+                    "status_4xx_rate_pct": 1.0,
+                    "status_5xx_rate_pct": 0.1,
+                    "origin_response_duration_avg_ms": 200.0,
+                    "latency_p95_ms": 100.0,
+                },
+                "dns_records": {
+                    "proxied_records": 1,
+                    "dns_only_records": 1,
+                    "apex_unproxied_a_aaaa": 0,
+                },
+                "zone_health": {"ssl_mode": "strict", "dnssec_status": "active"},
+            }
+        ],
+    }
+    previous_zone = previous_report["zones"][0]
+    out = build_executive_summary(
+        zone_id="z1",
+        zone_name="example.com",
+        zone_health={"zone_status": "active", "ssl_mode": "strict", "dnssec_status": "active"},
+        dns={"total_queries": 600, "average_qps": 0.6},
+        http={"total_requests": 1100, "cache_hit_ratio": 11.0, "encrypted_requests": 950},
+        security={"mitigated_count": 15, "mitigation_rate_pct": 1.2},
+        cache={},
+        http_adaptive={
+            "status_4xx_rate_pct": 0.9,
+            "status_5xx_rate_pct": 0.1,
+            "origin_response_duration_avg_ms": 190.0,
+            "latency_p95_ms": 95.0,
+        },
+        dns_records={"proxied_records": 2, "dns_only_records": 1, "apex_unproxied_a_aaaa": 0},
+        audit={"total_events": 1},
+        certificates={"total_certificate_packs": 1, "expiring_in_30_days": 0},
+        warnings=[],
+        current_period={"start": "2026-04-01", "end": "2026-04-07"},
+        previous_report=previous_report,
+        previous_zone=previous_zone,
+    )
+    assert any("Comparing to: 2026-03-25 to 2026-03-31" in t for t in out["takeaways"])
