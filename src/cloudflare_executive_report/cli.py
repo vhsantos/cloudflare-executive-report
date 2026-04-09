@@ -25,6 +25,10 @@ from cloudflare_executive_report.cli_common import (
     zone_ids_for_report,
     zones_matching_filter,
 )
+from cloudflare_executive_report.common.logging_config import (
+    effective_debug_enabled,
+    setup_logging,
+)
 from cloudflare_executive_report.common.period_resolver import build_data_fingerprint
 from cloudflare_executive_report.config import (
     AppConfig,
@@ -38,7 +42,6 @@ from cloudflare_executive_report.fetchers.registry import (
     default_types_csv,
     registered_stream_ids,
 )
-from cloudflare_executive_report.logging_config import effective_debug_enabled, setup_logging
 from cloudflare_executive_report.sync import pdf_report_period_for_options, run_clean, run_sync
 from cloudflare_executive_report.zones_api import (
     find_zone_by_name,

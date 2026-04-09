@@ -1,6 +1,9 @@
 import logging
 
-from cloudflare_executive_report.logging_config import effective_debug_enabled, setup_logging
+from cloudflare_executive_report.common.logging_config import (
+    effective_debug_enabled,
+    setup_logging,
+)
 
 
 def test_log_level_debug_same_as_verbose_for_effective_debug():

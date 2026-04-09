@@ -1,6 +1,6 @@
 from datetime import date
 
-from cloudflare_executive_report.retention import (
+from cloudflare_executive_report.common.retention import (
     date_outside_dns_retention,
     dns_retention_days,
     http_retention_days,

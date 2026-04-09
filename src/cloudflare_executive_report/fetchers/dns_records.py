@@ -10,7 +10,7 @@ from cloudflare_executive_report.cf_client import (
     CloudflareAuthError,
     CloudflareClient,
 )
-from cloudflare_executive_report.dates import format_ymd, utc_today
+from cloudflare_executive_report.common.dates import format_ymd, utc_today
 
 
 def _type_counts(records: list[dict[str, Any]]) -> list[dict[str, Any]]:

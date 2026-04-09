@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from cloudflare_executive_report.common.dates import parse_ymd
 from cloudflare_executive_report.config import AppConfig, ZoneEntry, load_config
-from cloudflare_executive_report.dates import parse_ymd
 from cloudflare_executive_report.sync.options import SyncMode, SyncOptions
 
 

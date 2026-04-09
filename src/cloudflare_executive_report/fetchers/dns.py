@@ -10,8 +10,11 @@ from cloudflare_executive_report.cf_client import (
     CloudflareClient,
     CloudflareRateLimitError,
 )
-from cloudflare_executive_report.dates import day_bounds_utc, utc_today
-from cloudflare_executive_report.retention import date_outside_dns_retention, dns_retention_days
+from cloudflare_executive_report.common.dates import day_bounds_utc, utc_today
+from cloudflare_executive_report.common.retention import (
+    date_outside_dns_retention,
+    dns_retention_days,
+)
 
 
 def _groups(data: dict[str, Any] | None) -> list[dict[str, Any]]:

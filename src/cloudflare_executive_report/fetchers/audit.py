@@ -10,7 +10,7 @@ from cloudflare_executive_report.cf_client import (
     CloudflareAuthError,
     CloudflareClient,
 )
-from cloudflare_executive_report.dates import day_bounds_utc, format_ymd, utc_today
+from cloudflare_executive_report.common.dates import day_bounds_utc, format_ymd, utc_today
 
 
 def _event_label(row: dict[str, Any]) -> str:

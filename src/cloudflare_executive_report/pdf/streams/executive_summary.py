@@ -6,7 +6,7 @@ from typing import Any
 
 from reportlab.platypus import Paragraph, Spacer
 
-from cloudflare_executive_report.formatting import (
+from cloudflare_executive_report.common.formatting import (
     format_count_compact,
     format_number_compact,
     format_pdf_status_line,

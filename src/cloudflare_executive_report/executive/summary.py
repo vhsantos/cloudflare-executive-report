@@ -5,17 +5,17 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from cloudflare_executive_report.dates import format_date_with_days_from_iso, utc_today
+from cloudflare_executive_report.common.dates import format_date_with_days_from_iso, utc_today
+from cloudflare_executive_report.common.formatting import (
+    format_count_compact,
+    format_count_human,
+    trim_decimal,
+)
 from cloudflare_executive_report.executive.phrase_catalog import render_phrase
 from cloudflare_executive_report.executive.rules import (
     RuleMessage,
     build_rule_messages,
     evaluate_comparison_gate,
-)
-from cloudflare_executive_report.formatting import (
-    format_count_compact,
-    format_count_human,
-    trim_decimal,
 )
 
 _DEFENSIVE_ACTIONS = frozenset(

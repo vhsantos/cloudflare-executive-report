@@ -12,7 +12,7 @@ from cloudflare_executive_report.cf_client import (
     CloudflareClient,
     CloudflareRateLimitError,
 )
-from cloudflare_executive_report.dates import format_ymd
+from cloudflare_executive_report.common.dates import format_ymd
 from cloudflare_executive_report.fetchers.registry import day_cache_path
 from cloudflare_executive_report.fetchers.types import Fetcher
 

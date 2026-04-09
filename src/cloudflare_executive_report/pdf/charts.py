@@ -18,7 +18,7 @@ from matplotlib.colors import to_rgba
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
-from cloudflare_executive_report.formatting import format_bytes_human, trim_decimal
+from cloudflare_executive_report.common.formatting import format_bytes_human, trim_decimal
 from cloudflare_executive_report.pdf.theme import Theme
 
 ChartTimeGranularity = Literal["day", "week", "month"]

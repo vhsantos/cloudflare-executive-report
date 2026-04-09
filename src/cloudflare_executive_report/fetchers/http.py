@@ -10,8 +10,8 @@ from cloudflare_executive_report.cf_client import (
     CloudflareClient,
     CloudflareRateLimitError,
 )
-from cloudflare_executive_report.dates import format_ymd, utc_today
-from cloudflare_executive_report.retention import date_outside_http_retention
+from cloudflare_executive_report.common.dates import format_ymd, utc_today
+from cloudflare_executive_report.common.retention import date_outside_http_retention
 
 
 def _accumulate_content_type_map(

@@ -20,7 +20,11 @@ from cloudflare_executive_report.aggregate import (
     build_security_section,
 )
 from cloudflare_executive_report.cache.envelope import read_day_file
-from cloudflare_executive_report.dates import format_ymd, iter_dates_inclusive, parse_ymd
+from cloudflare_executive_report.common.dates import (
+    format_ymd,
+    iter_dates_inclusive,
+    parse_ymd,
+)
 from cloudflare_executive_report.fetchers.registry import day_cache_path
 
 log = logging.getLogger(__name__)

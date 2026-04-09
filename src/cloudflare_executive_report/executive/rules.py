@@ -31,7 +31,7 @@ def _period_days(period: dict[str, Any]) -> int:
     end = str(period.get("end") or "")
     if not start or not end:
         return 0
-    from cloudflare_executive_report.dates import parse_ymd
+    from cloudflare_executive_report.common.dates import parse_ymd
 
     try:
         return (parse_ymd(end) - parse_ymd(start)).days + 1
@@ -44,7 +44,7 @@ def _period_bounds(period: dict[str, Any]) -> tuple[object, object] | None:
     end = str(period.get("end") or "")
     if not start or not end:
         return None
-    from cloudflare_executive_report.dates import parse_ymd
+    from cloudflare_executive_report.common.dates import parse_ymd
 
     try:
         return parse_ymd(start), parse_ymd(end)

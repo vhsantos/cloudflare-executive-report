@@ -1,4 +1,4 @@
-"""Shared numeric formatting helpers."""
+"""Formatting helpers shared by JSON, rules, and PDF rendering paths."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from typing import Any
 
 
 def trim_decimal(v: float, digits: int = 1) -> str:
+    """Format a float and remove trailing zeros and trailing dot."""
     s = f"{v:.{digits}f}"
     if "." in s:
         s = s.rstrip("0").rstrip(".")
@@ -14,6 +15,7 @@ def trim_decimal(v: float, digits: int = 1) -> str:
 
 
 def format_bytes_human(n: int) -> str:
+    """Format byte counts using binary units (B, KB, MB, GB, TB)."""
     if n < 0:
         n = 0
     units = ("B", "KB", "MB", "GB", "TB")
@@ -28,6 +30,7 @@ def format_bytes_human(n: int) -> str:
 
 
 def format_count_human(n: int) -> str:
+    """Format counts in compact decimal units (K, M, B)."""
     if n < 0:
         n = 0
     if n < 1000:
@@ -40,20 +43,22 @@ def format_count_human(n: int) -> str:
 
 
 def format_count_compact(v: Any) -> str:
+    """Format count-like values for KPI cards."""
     n = float(v or 0)
     if n >= 1_000_000:
         return f"{trim_decimal(n / 1_000_000, 1)}M"
     if n >= 1_000:
-        # Product requirement for KPI cards: rounded integer K.
         return f"{int(round(n / 1_000))}K"
     return str(int(round(n)))
 
 
 def format_percent_compact(v: Any) -> str:
+    """Format a value as compact percentage text."""
     return f"{trim_decimal(float(v or 0.0), 1)}%"
 
 
 def format_number_compact(v: Any) -> str:
+    """Format a number using integer or one-decimal display."""
     x = float(v or 0.0)
     if abs(x) >= 10:
         return str(int(round(x)))
@@ -61,10 +66,7 @@ def format_number_compact(v: Any) -> str:
 
 
 def status_marker_for_pdf(level: str) -> tuple[str, str]:
-    """Return (marker, color) for PDF status labels.
-
-    Uses PDF-safe symbols/text markers and falls back to pure ASCII markers on error.
-    """
+    """Return status marker and color for PDF status text."""
     normalized = str(level or "").strip().lower()
     colors = {
         "positive": "#16A34A",
@@ -98,7 +100,7 @@ def status_marker_for_pdf(level: str) -> tuple[str, str]:
 
 
 def parse_status_prefixed_text(text: str) -> tuple[str, str]:
-    """Parse catalog-style prefixes and return (level, clean_text)."""
+    """Parse status-prefixed text and return (level, cleaned_text)."""
     raw = str(text or "").strip()
     if raw.startswith("[OK] "):
         return "positive", raw[5:].strip()
@@ -112,7 +114,7 @@ def parse_status_prefixed_text(text: str) -> tuple[str, str]:
 
 
 def format_pdf_status_line(text: str, *, level: str | None = None) -> str:
-    """Build escaped, colorized status line markup for ReportLab Paragraph."""
+    """Build escaped and colorized status markup for ReportLab paragraphs."""
     resolved_level, resolved_text = (
         (str(level).strip().lower(), str(text or "").strip())
         if level is not None

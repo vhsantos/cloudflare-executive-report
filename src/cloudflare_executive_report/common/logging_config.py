@@ -1,4 +1,8 @@
-"""Logging: config ``log_level`` and CLI ``--verbose`` / ``--quiet``."""
+"""Logging helpers shared by CLI entry points.
+
+This module centralizes run-level logging setup and debug-state detection used
+by sync/report commands and HTTP client verbosity toggles.
+"""
 
 from __future__ import annotations
 
@@ -8,9 +12,9 @@ import sys
 
 def setup_logging(*, verbose: bool, quiet: bool, log_level: str = "info") -> None:
     """
-    Resolve one effective level: ``--quiet`` > ``--verbose`` > ``log_level`` (config).
+    Configure process logging from CLI/config inputs.
 
-    ``--verbose`` is equivalent to ``log_level: debug`` for that run (overrides config).
+    Precedence: --quiet > --verbose > configured log_level.
     """
     if quiet and verbose:
         verbose = False
@@ -27,7 +31,6 @@ def setup_logging(*, verbose: bool, quiet: bool, log_level: str = "info") -> Non
         stream=sys.stderr,
         force=True,
     )
-    # httpx/httpcore: noisy unless we're in full debug (config or -v).
     deep = effective_debug_enabled()
     httpx_level = logging.DEBUG if deep else logging.WARNING
     logging.getLogger("httpx").setLevel(httpx_level)
@@ -35,5 +38,5 @@ def setup_logging(*, verbose: bool, quiet: bool, log_level: str = "info") -> Non
 
 
 def effective_debug_enabled() -> bool:
-    """True when root logging is DEBUG (after ``setup_logging``)."""
+    """Return True when effective root logging level is DEBUG."""
     return logging.getLogger().getEffectiveLevel() <= logging.DEBUG

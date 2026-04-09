@@ -1,6 +1,6 @@
 from datetime import date
 
-from cloudflare_executive_report.dates import (
+from cloudflare_executive_report.common.dates import (
     format_ymd,
     iter_dates_inclusive,
     last_n_complete_days,

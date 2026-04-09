@@ -11,7 +11,7 @@ from reportlab.lib.units import inch
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.platypus import Flowable, Image, KeepInFrame, Paragraph, Table, TableStyle
 
-from cloudflare_executive_report.formatting import format_count_human
+from cloudflare_executive_report.common.formatting import format_count_human
 from cloudflare_executive_report.pdf.styles import build_styles
 from cloudflare_executive_report.pdf.theme import Theme
 

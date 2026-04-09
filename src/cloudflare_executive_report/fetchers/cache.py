@@ -10,19 +10,19 @@ from cloudflare_executive_report.cf_client import (
     CloudflareClient,
     CloudflareRateLimitError,
 )
-from cloudflare_executive_report.dates import (
+from cloudflare_executive_report.common.dates import (
     day_bounds_utc,
     day_start_iso_z,
     format_ymd,
     utc_now_iso_z,
     utc_today,
 )
+from cloudflare_executive_report.common.retention import date_outside_http_retention
 from cloudflare_executive_report.fetchers.graphql_common import (
     adaptive_groups_rows,
     marginal_counts_and_sums_for_dimension,
     row_sum_int,
 )
-from cloudflare_executive_report.retention import date_outside_http_retention
 
 _LIMIT_CACHE_STATUS = 100
 _LIMIT_PATH_STATUS = 100

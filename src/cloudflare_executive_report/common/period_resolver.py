@@ -1,11 +1,15 @@
-"""Shared period/report metadata resolution for sync and report."""
+"""Shared period and metadata resolution for sync/report flows.
+
+This module provides canonical report type normalization, semantic period
+resolution, baseline period derivation, and deterministic fingerprint building.
+"""
 
 from __future__ import annotations
 
 from datetime import date, timedelta
 from typing import Any, Protocol
 
-from cloudflare_executive_report.dates import (
+from cloudflare_executive_report.common.dates import (
     last_n_complete_days,
     month_bounds,
     week_bounds,
@@ -14,6 +18,8 @@ from cloudflare_executive_report.dates import (
 
 
 class _SyncOptionsLike(Protocol):
+    """Minimal options contract required by resolver helpers."""
+
     mode: Any
     last_n: int | None
     start: str | None
@@ -32,6 +38,7 @@ _SEMANTIC_REPORT_TYPES = {
 
 
 def normalize_report_type(raw: object) -> str | None:
+    """Normalize raw report type text to a supported canonical value."""
     s = str(raw or "").strip().lower()
     if not s:
         return None
@@ -45,10 +52,12 @@ def normalize_report_type(raw: object) -> str | None:
 
 
 def _mode_name(mode: Any) -> str:
+    """Return normalized mode name from enum-like or string values."""
     return str(getattr(mode, "value", mode))
 
 
 def report_type_for_options(opts: _SyncOptionsLike) -> str:
+    """Derive report_type from sync/report option mode values."""
     mode_name = _mode_name(opts.mode)
     if mode_name == "range":
         return "custom"
@@ -66,6 +75,7 @@ def semantic_current_bounds(
     y: date,
     today: date,
 ) -> tuple[date, date] | None:
+    """Resolve current semantic period bounds for a report_type."""
     if report_type == "yesterday":
         return y, y
     if report_type == "last_week":
@@ -96,6 +106,7 @@ def semantic_baseline_bounds(
     y: date,
     today: date,
 ) -> tuple[date, date] | None:
+    """Resolve semantic baseline bounds for comparison against current period."""
     if report_type == "yesterday":
         d = y - timedelta(days=1)
         return d, d
@@ -136,6 +147,7 @@ def resolved_period_for_options(
     y: date,
     today: date,
 ) -> tuple[date, date] | None:
+    """Resolve explicit period bounds from options when mode is period-based."""
     rtype = report_type_for_options(opts)
     semantic = semantic_current_bounds(report_type=rtype, y=y, today=today)
     if semantic is not None:
@@ -157,6 +169,7 @@ def build_data_fingerprint(
     types: list[str] | tuple[str, ...] | set[str] | frozenset[str],
     include_today: bool,
 ) -> dict[str, Any]:
+    """Build canonical fingerprint payload for report reuse checks."""
     return {
         "start": str(start),
         "end": str(end),
