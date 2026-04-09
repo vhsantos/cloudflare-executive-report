@@ -32,6 +32,7 @@ def test_cf_report_report_help() -> None:
     assert " report [OPTIONS]" in out
     assert "COMMAND [ARGS]" not in out
     assert "--last" in out and "--types" in out and "--cache-only" in out
+    assert "--refresh-health" in out
 
 
 @pytest.mark.skipif(not FIXTURE_CACHE.is_dir(), reason="sample cache fixtures missing")
@@ -140,5 +141,32 @@ def test_write_report_pdf_cover_config_smoke(tmp_path: Path) -> None:
     )
     out = tmp_path / "cover.pdf"
     write_report_pdf(out, cfg, spec)
+    assert out.is_file()
+    assert out.stat().st_size > 1000
+
+
+@pytest.mark.skipif(not FIXTURE_CACHE.is_dir(), reason="sample cache fixtures missing")
+def test_write_report_pdf_offline_mode_does_not_fetch_health(tmp_path: Path, monkeypatch) -> None:
+    cfg = AppConfig(
+        api_token="x",
+        cache_dir=str(FIXTURE_CACHE.resolve()),
+        zones=[ZoneEntry(id=ZONE_ID, name="example.com")],
+    )
+    spec = ReportSpec(
+        zone_ids=[ZONE_ID],
+        start="2026-04-01",
+        end="2026-04-01",
+        streams=("dns",),
+        include_executive_summary=False,
+        top=5,
+    )
+
+    def _boom(*args, **kwargs):  # pragma: no cover - should never run
+        raise AssertionError("fetch_zone_health should not run in offline mode")
+
+    monkeypatch.setattr("cloudflare_executive_report.pdf.orchestrate.fetch_zone_health", _boom)
+
+    out = tmp_path / "offline.pdf"
+    write_report_pdf(out, cfg, spec, allow_live_health_fetch=False)
     assert out.is_file()
     assert out.stat().st_size > 1000

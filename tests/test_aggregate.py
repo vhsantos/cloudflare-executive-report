@@ -50,6 +50,7 @@ def test_build_report_shape():
         period_end="2026-03-07",
         requested_start="2026-03-01",
         requested_end="2026-03-07",
+        report_type="custom",
     )
     assert r["report_period"]["timezone"] == "UTC"
     assert "tool_version" in r

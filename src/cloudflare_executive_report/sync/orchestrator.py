@@ -29,17 +29,22 @@ from cloudflare_executive_report.cf_client import (
     CloudflareAuthError,
     CloudflareClient,
 )
+from cloudflare_executive_report.common.period_resolver import (
+    build_data_fingerprint,
+    normalize_report_type,
+    report_type_for_options,
+    resolved_period_for_options,
+    semantic_baseline_bounds,
+    semantic_current_bounds,
+)
 from cloudflare_executive_report.config import AppConfig
 from cloudflare_executive_report.dates import (
     format_ymd,
     iter_dates_inclusive,
     last_n_complete_days,
-    month_bounds,
     parse_ymd,
     utc_today,
     utc_yesterday,
-    week_bounds,
-    year_bounds,
 )
 from cloudflare_executive_report.executive.summary import build_executive_summary
 from cloudflare_executive_report.fetchers.registry import (
@@ -79,76 +84,25 @@ def _streams_for_types(types: frozenset[str]) -> list[str]:
 
 
 def _semantic_current_bounds(opts: SyncOptions, *, y: date) -> tuple[date, date] | None:
-    def _shift_year_keep_day(d: date, years: int) -> date:
-        target_year = d.year + years
-        day = d.day
-        while day > 0:
-            try:
-                return date(target_year, d.month, day)
-            except ValueError:
-                day -= 1
-        return date(target_year, d.month, 1)
-
-    if opts.mode == SyncMode.yesterday:
-        return y, y
-    if opts.mode == SyncMode.last_week:
-        this_week_start, _ = week_bounds(y)
-        prev_week_end = this_week_start - timedelta(days=1)
-        return week_bounds(prev_week_end)
-    if opts.mode == SyncMode.this_week:
-        start, _ = week_bounds(utc_today())
-        return start, utc_today()
-    if opts.mode == SyncMode.last_month:
-        this_month_start, _ = month_bounds(y)
-        prev_month_day = this_month_start - timedelta(days=1)
-        return month_bounds(prev_month_day)
-    if opts.mode == SyncMode.this_month:
-        start, _ = month_bounds(utc_today())
-        return start, utc_today()
-    if opts.mode == SyncMode.last_year:
-        t = utc_today()
-        return date(t.year - 1, 1, 1), _shift_year_keep_day(t, -1)
-    if opts.mode == SyncMode.this_year:
-        start, _ = year_bounds(utc_today())
-        return start, utc_today()
-    return None
+    return semantic_current_bounds(
+        report_type=report_type_for_options(opts),
+        y=y,
+        today=utc_today(),
+    )
 
 
 def _semantic_baseline_bounds(opts: SyncOptions, *, y: date) -> tuple[date, date] | None:
-    if opts.mode == SyncMode.yesterday:
-        d = y - timedelta(days=1)
-        return d, d
-    if opts.mode == SyncMode.last_week:
-        this_week_start, _ = week_bounds(y)
-        prev_week_end = this_week_start - timedelta(days=1)
-        prev_week_start, _ = week_bounds(prev_week_end)
-        return prev_week_start - timedelta(days=7), prev_week_start - timedelta(days=1)
-    if opts.mode == SyncMode.this_week:
-        this_week_start, _ = week_bounds(utc_today())
-        prev_week_end = this_week_start - timedelta(days=1)
-        return week_bounds(prev_week_end)
-    if opts.mode == SyncMode.last_month:
-        this_month_start, _ = month_bounds(y)
-        prev_month_day = this_month_start - timedelta(days=1)
-        prev_month_start, _ = month_bounds(prev_month_day)
-        month_before_prev = prev_month_start - timedelta(days=1)
-        return month_bounds(month_before_prev)
-    if opts.mode == SyncMode.this_month:
-        this_month_start, _ = month_bounds(utc_today())
-        prev_month_day = this_month_start - timedelta(days=1)
-        return month_bounds(prev_month_day)
-    if opts.mode == SyncMode.last_year:
-        return date(y.year - 2, 1, 1), date(y.year - 2, 12, 31)
-    if opts.mode == SyncMode.this_year:
-        current_start, _ = year_bounds(utc_today())
-        return date(current_start.year - 1, 1, 1), date(current_start.year - 1, 12, 31)
-    return None
+    return semantic_baseline_bounds(
+        report_type=report_type_for_options(opts),
+        y=y,
+        today=utc_today(),
+    )
 
 
 def _sync_days_for_mode(opts: SyncOptions, idx, y: date) -> list[date]:
-    semantic_bounds = _semantic_current_bounds(opts, y=y)
-    if semantic_bounds is not None:
-        d0, d1 = semantic_bounds
+    resolved = resolved_period_for_options(opts=opts, y=y, today=utc_today())
+    if resolved is not None:
+        d0, d1 = resolved
         return list(iter_dates_inclusive(d0, d1))
     if opts.mode == SyncMode.incremental:
         parts: list[date] = []
@@ -262,7 +216,12 @@ def select_previous_report_for_period(
         ce = parse_ymd(current_end)
     except ValueError:
         return None
-    baseline_expected = _semantic_baseline_bounds(opts, y=y or utc_yesterday())
+    current_report_type = report_type_for_options(opts)
+    baseline_expected = semantic_baseline_bounds(
+        report_type=current_report_type,
+        y=y or utc_yesterday(),
+        today=utc_today(),
+    )
     current_len = (ce - cs).days + 1
     best: tuple[date, dict] | None = None
     for rep in _iter_baseline_candidates(cfg):
@@ -276,6 +235,16 @@ def select_previous_report_for_period(
             continue
         if not _report_has_zone(rep, zone_id):
             continue
+        candidate_type = normalize_report_type(rep.get("report_type"))
+        if baseline_expected is not None:
+            if candidate_type is None:
+                continue
+            if candidate_type not in {
+                current_report_type,
+                "custom",
+                "incremental",
+            } and not candidate_type.startswith("last_"):
+                continue
         if baseline_expected is not None:
             if (ps, pe) != baseline_expected:
                 continue
@@ -293,9 +262,9 @@ def _report_bounds_from_indices(
     y: date,
     opts: SyncOptions,
 ) -> tuple[str, str]:
-    semantic_bounds = _semantic_current_bounds(opts, y=y)
-    if semantic_bounds is not None:
-        d0, d1 = semantic_bounds
+    resolved = resolved_period_for_options(opts=opts, y=y, today=utc_today())
+    if resolved is not None:
+        d0, d1 = resolved
         return format_ymd(d0), format_ymd(d1)
     if opts.mode == SyncMode.last_n and opts.last_n is not None:
         d0, d1 = last_n_complete_days(opts.last_n, yesterday=y)
@@ -354,6 +323,7 @@ def run_sync(
     zone_filter: str | None = None,
     output_path: Path | None = None,
     write_stdout: bool = False,
+    write_report_json: bool = True,
 ) -> int:
     cache_root = cfg.cache_path()
     zones = list(cfg.zones)
@@ -380,6 +350,7 @@ def run_sync(
                 y,
                 output_path=output_path,
                 write_stdout=write_stdout,
+                write_report_json=write_report_json,
             )
     except CacheLockTimeout as e:
         log.error("%s", e)
@@ -395,12 +366,13 @@ def _run_sync_locked(
     *,
     output_path: Path | None,
     write_stdout: bool,
+    write_report_json: bool,
 ) -> int:
     rate_fail = False
     verbose_http = effective_debug_enabled()
     streams = _streams_for_types(opts.types)
     default_output_mode = (not write_stdout) and (output_path is None)
-    if default_output_mode:
+    if write_report_json and default_output_mode:
         _rotate_report_outputs(cfg, history_date=utc_today())
 
     with CloudflareClient(cfg.api_token, verbose=verbose_http) as client:
@@ -463,6 +435,11 @@ def _run_sync_locked(
                     for sid in streams:
                         new_idx = merge_stream_bounds(new_idx, None, yy, sid)
             save_zone_index(cache_root, new_idx)
+
+        if not write_report_json:
+            if rate_fail:
+                return exits.RATE_LIMIT_EXCEEDED
+            return exits.SUCCESS
 
         report_start, report_end = _report_bounds_from_indices(zones, cache_root, y, opts)
         requested_start, requested_end = report_start, report_end
@@ -554,6 +531,16 @@ def _run_sync_locked(
             period_end=report_end,
             requested_start=requested_start,
             requested_end=requested_end,
+            report_type=report_type_for_options(opts),
+            data_fingerprint=build_data_fingerprint(
+                start=report_start,
+                end=report_end,
+                zones=[z.id for z in zones],
+                top=opts.top,
+                types=opts.types,
+                include_today=opts.include_today,
+            ),
+            zone_health_fetched_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         )
         text = json.dumps(rep, indent=2, ensure_ascii=False) + "\n"
 

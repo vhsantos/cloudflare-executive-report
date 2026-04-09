@@ -718,9 +718,12 @@ def build_report(
     period_end: str,
     requested_start: str,
     requested_end: str,
+    report_type: str,
+    data_fingerprint: dict[str, Any] | None = None,
+    zone_health_fetched_at: str | None = None,
 ) -> dict[str, Any]:
     now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    return {
+    out = {
         "report_period": {
             "start": period_start,
             "end": period_end,
@@ -730,9 +733,14 @@ def build_report(
         },
         "generated_at": now,
         "tool_version": __version__,
+        "report_type": str(report_type),
         "zones": zones_out,
         "warnings": warnings,
     }
+    if data_fingerprint is not None:
+        out["data_fingerprint"] = data_fingerprint
+    out["zone_health_fetched_at"] = str(zone_health_fetched_at or now)
+    return out
 
 
 def collect_days_payloads(
@@ -755,19 +763,21 @@ def collect_days_payloads(
         ds = format_ymd(d)
         raw = cache_read_fn(zone_id, ds)
         if not raw:
-            warnings.append(f"No {label} cache entry for zone {zone_name} on {ds}")
+            warnings.append(f"{label} for zone {zone_name} on {ds} unavailable (cache miss)")
             continue
         src = raw.get("_source")
         if src == "null":
-            warnings.append(
-                f"{label} data for zone {zone_name} on {ds} is unavailable "
-                "(outside retention or not exposed for this plan)"
-            )
+            warnings.append(f"{label} for zone {zone_name} on {ds} unavailable (cached null)")
             continue
         if src == "error":
-            warnings.append(f"{label} data for zone {zone_name} on {ds} failed (cached error)")
+            warnings.append(f"{label} for zone {zone_name} on {ds} failed (cached error)")
             continue
         data = raw.get("data")
         if isinstance(data, dict):
             api_days.append(data)
+        else:
+            warnings.append(
+                f"{label} for zone {zone_name} on {ds} unavailable "
+                "(cached entry has no data object)"
+            )
     return api_days, warnings

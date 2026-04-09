@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import getpass
+import json
 import sys
 from pathlib import Path
 
@@ -24,6 +25,7 @@ from cloudflare_executive_report.cli_common import (
     zone_ids_for_report,
     zones_matching_filter,
 )
+from cloudflare_executive_report.common.period_resolver import build_data_fingerprint
 from cloudflare_executive_report.config import (
     AppConfig,
     ZoneEntry,
@@ -76,6 +78,25 @@ def _parse_sync_types(raw: str) -> frozenset[str]:
 def _config_log_level(cfg: AppConfig) -> str:
     s = (cfg.log_level or "").strip()
     return s if s else "info"
+
+
+def _load_current_report(cfg: AppConfig) -> dict | None:
+    p = cfg.report_current_path()
+    if not p.is_file():
+        return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _fingerprint_matches(report: dict | None, expected: dict) -> bool:
+    if not isinstance(report, dict):
+        return False
+    got = report.get("data_fingerprint")
+    if not isinstance(got, dict):
+        return False
+    return got == expected
 
 
 def _pdf_streams_from_types(type_set: frozenset[str]) -> tuple[str, ...]:
@@ -181,6 +202,14 @@ def cmd_report(
         help=(
             "Skip sync; build PDF from cache only. Date span matches sync JSON "
             "(indices for --types, or --last / --start/--end when set)."
+        ),
+    ),
+    refresh_health: bool = typer.Option(
+        False,
+        "--refresh-health",
+        help=(
+            "Refresh live zone health for this report window and rebuild output JSON "
+            "(takes precedence over --cache-only reuse)."
         ),
     ),
     output: Path | None = typer.Option(
@@ -299,7 +328,58 @@ def cmd_report(
             )
             raise typer.Exit(exits.INVALID_PARAMS)
 
-    if not cache_only:
+    try:
+        period_start, period_end = pdf_report_period_for_options(
+            cfg, sync_opts, zone_filter=zone_effective
+        )
+    except ValueError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(exits.INVALID_PARAMS) from None
+    requested_fingerprint = build_data_fingerprint(
+        start=period_start,
+        end=period_end,
+        zones=[z.id for z in scoped_zones],
+        top=top,
+        types=type_set,
+        include_today=include_today,
+    )
+    current_report = _load_current_report(cfg)
+
+    if _fingerprint_matches(current_report, requested_fingerprint) and not refresh_health:
+        try:
+            from cloudflare_executive_report.pdf.layout_spec import ReportSpec
+            from cloudflare_executive_report.pdf.orchestrate import write_report_pdf
+        except ImportError as e:
+            typer.echo("Failed to import PDF report modules.", err=True)
+            typer.echo(str(e), err=True)
+            raise typer.Exit(exits.GENERAL_ERROR) from None
+        spec = ReportSpec(
+            zone_ids=zone_keys,
+            start=period_start,
+            end=period_end,
+            streams=pdf_streams,
+            top=top,
+        )
+        try:
+            write_report_pdf(
+                output.resolve(),
+                cfg,
+                spec,
+                sync_opts=sync_opts,
+                report_snapshot=current_report,
+                allow_live_health_fetch=False,
+            )
+        except ValueError as e:
+            typer.echo(str(e), err=True)
+            raise typer.Exit(exits.INVALID_PARAMS) from None
+        except Exception as e:
+            typer.echo(f"PDF generation failed: {e}", err=True)
+            raise typer.Exit(exits.GENERAL_ERROR) from None
+        typer.echo(f"Wrote {output.resolve()}")
+        return
+
+    should_run_sync = (not cache_only) or refresh_health
+    if should_run_sync:
         code = run_sync(
             cfg,
             sync_opts,
@@ -309,14 +389,13 @@ def cmd_report(
         )
         if code != exits.SUCCESS:
             raise typer.Exit(code)
-
-    try:
-        period_start, period_end = pdf_report_period_for_options(
-            cfg, sync_opts, zone_filter=zone_effective
-        )
-    except ValueError as e:
-        typer.echo(str(e), err=True)
-        raise typer.Exit(exits.INVALID_PARAMS) from None
+        try:
+            period_start, period_end = pdf_report_period_for_options(
+                cfg, sync_opts, zone_filter=zone_effective
+            )
+        except ValueError as e:
+            typer.echo(str(e), err=True)
+            raise typer.Exit(exits.INVALID_PARAMS) from None
 
     try:
         from cloudflare_executive_report.pdf.layout_spec import ReportSpec
@@ -334,7 +413,14 @@ def cmd_report(
         top=top,
     )
     try:
-        write_report_pdf(output.resolve(), cfg, spec, sync_opts=sync_opts)
+        write_report_pdf(
+            output.resolve(),
+            cfg,
+            spec,
+            sync_opts=sync_opts,
+            report_snapshot=None,
+            allow_live_health_fetch=(not cache_only) or refresh_health,
+        )
     except ValueError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.INVALID_PARAMS) from None
@@ -488,6 +574,13 @@ def cmd_sync(
     ),
     config: Path | None = typer.Option(None, "--config", help="Override config path."),
 ) -> None:
+    if output is not None:
+        typer.echo(
+            "Error: `sync` is data-only in this model; use `report` to write output JSON/PDF.",
+            err=True,
+        )
+        raise typer.Exit(exits.INVALID_PARAMS)
+
     """Incremental sync by default; use --last N or --start/--end for explicit windows."""
     verbose = ctx.obj.get("verbose", False)
     quiet = ctx.obj.get("quiet", False)
@@ -533,8 +626,9 @@ def cmd_sync(
         cfg,
         opts,
         zone_filter=zone_effective,
-        output_path=output,
+        output_path=None,
         write_stdout=False,
+        write_report_json=False,
     )
     raise typer.Exit(code)
 

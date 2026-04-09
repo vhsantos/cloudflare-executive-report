@@ -208,11 +208,10 @@ __marimo__/
 
 plan_idea
 cache
+outputs
 !src/cloudflare_executive_report/cache/
 !docs/sample-data
 !docs/sample-data/cache/
-src/cloudflare_executive_report/pdf_poc_dns.py
 *.pdf
-.gitignore
-cf_report_output.json
-.gitignore
+logos/
+.cursorrules

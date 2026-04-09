@@ -26,6 +26,19 @@ from cloudflare_executive_report.fetchers.registry import day_cache_path
 log = logging.getLogger(__name__)
 
 
+def _cache_state_warning(stream_label: str, zone_name: str, ds: str, state: str) -> str:
+    base = f"{stream_label} for zone {zone_name} on {ds}"
+    if state == "miss":
+        return f"{base} unavailable (cache miss)"
+    if state == "null":
+        return f"{base} unavailable (cached null)"
+    if state == "error":
+        return f"{base} failed (cached error)"
+    if state == "no_data":
+        return f"{base} unavailable (cached entry has no data object)"
+    return f"{base} unavailable (cached state unknown)"
+
+
 @dataclass
 class DnsLoadResult:
     rollup: dict[str, Any]
@@ -119,24 +132,24 @@ def _load_cached_stream_days(
         path = day_cache_path(cache_root, zone_id, ds, stream_id)
         raw = read_day_file(path)
         if not raw:
-            warnings.append(f"No {stream_label} cache for zone {zone_name} on {ds}")
+            warnings.append(_cache_state_warning(stream_label, zone_name, ds, "miss"))
             missing_dates.append(ds)
             daily_metric.append((d, None))
             continue
         src = raw.get("_source")
         if src == "null":
-            warnings.append(f"{stream_label} for zone {zone_name} on {ds} unavailable (null)")
+            warnings.append(_cache_state_warning(stream_label, zone_name, ds, "null"))
             missing_dates.append(ds)
             daily_metric.append((d, None))
             continue
         if src == "error":
-            warnings.append(f"{stream_label} for zone {zone_name} on {ds} failed (cached error)")
+            warnings.append(_cache_state_warning(stream_label, zone_name, ds, "error"))
             missing_dates.append(ds)
             daily_metric.append((d, None))
             continue
         data = raw.get("data")
         if not isinstance(data, dict):
-            warnings.append(f"{stream_label} for zone {zone_name} on {ds} has no data object")
+            warnings.append(_cache_state_warning(stream_label, zone_name, ds, "no_data"))
             missing_dates.append(ds)
             daily_metric.append((d, None))
             continue
@@ -196,7 +209,7 @@ def _load_http_days_for_range(
         path = day_cache_path(cache_root, zone_id, ds, "http")
         raw = read_day_file(path)
         if not raw:
-            warnings.append(f"No HTTP cache for zone {zone_name} on {ds}")
+            warnings.append(_cache_state_warning("HTTP", zone_name, ds, "miss"))
             missing_dates.append(ds)
             daily_total.append((d, None))
             daily_rc.append((d, None))
@@ -207,7 +220,7 @@ def _load_http_days_for_range(
             continue
         src = raw.get("_source")
         if src == "null":
-            warnings.append(f"HTTP for zone {zone_name} on {ds} unavailable (null)")
+            warnings.append(_cache_state_warning("HTTP", zone_name, ds, "null"))
             missing_dates.append(ds)
             daily_total.append((d, None))
             daily_rc.append((d, None))
@@ -217,7 +230,7 @@ def _load_http_days_for_range(
             daily_uv.append((d, None))
             continue
         if src == "error":
-            warnings.append(f"HTTP for zone {zone_name} on {ds} failed (cached error)")
+            warnings.append(_cache_state_warning("HTTP", zone_name, ds, "error"))
             missing_dates.append(ds)
             daily_total.append((d, None))
             daily_rc.append((d, None))
@@ -228,7 +241,7 @@ def _load_http_days_for_range(
             continue
         data = raw.get("data")
         if not isinstance(data, dict):
-            warnings.append(f"HTTP for zone {zone_name} on {ds} has no data object")
+            warnings.append(_cache_state_warning("HTTP", zone_name, ds, "no_data"))
             missing_dates.append(ds)
             daily_total.append((d, None))
             daily_rc.append((d, None))
@@ -475,24 +488,24 @@ def _load_security_days_for_range(
         path = day_cache_path(cache_root, zone_id, ds, "security")
         raw = read_day_file(path)
         if not raw:
-            warnings.append(f"No security cache for zone {zone_name} on {ds}")
+            warnings.append(_cache_state_warning("Security", zone_name, ds, "miss"))
             missing_dates.append(ds)
             daily_triple.append((d, (None, None, None)))
             continue
         src = raw.get("_source")
         if src == "null":
-            warnings.append(f"Security for zone {zone_name} on {ds} unavailable (null)")
+            warnings.append(_cache_state_warning("Security", zone_name, ds, "null"))
             missing_dates.append(ds)
             daily_triple.append((d, (None, None, None)))
             continue
         if src == "error":
-            warnings.append(f"Security for zone {zone_name} on {ds} failed (cached error)")
+            warnings.append(_cache_state_warning("Security", zone_name, ds, "error"))
             missing_dates.append(ds)
             daily_triple.append((d, (None, None, None)))
             continue
         data = raw.get("data")
         if not isinstance(data, dict):
-            warnings.append(f"Security for zone {zone_name} on {ds} has no data object")
+            warnings.append(_cache_state_warning("Security", zone_name, ds, "no_data"))
             missing_dates.append(ds)
             daily_triple.append((d, (None, None, None)))
             continue
@@ -611,24 +624,24 @@ def _load_cache_days_for_range(
         path = day_cache_path(cache_root, zone_id, ds, "cache")
         raw = read_day_file(path)
         if not raw:
-            warnings.append(f"No cache data for zone {zone_name} on {ds}")
+            warnings.append(_cache_state_warning("Cache", zone_name, ds, "miss"))
             missing_dates.append(ds)
             daily_pair.append((d, (None, None)))
             continue
         src = raw.get("_source")
         if src == "null":
-            warnings.append(f"Cache for zone {zone_name} on {ds} unavailable (null)")
+            warnings.append(_cache_state_warning("Cache", zone_name, ds, "null"))
             missing_dates.append(ds)
             daily_pair.append((d, (None, None)))
             continue
         if src == "error":
-            warnings.append(f"Cache for zone {zone_name} on {ds} failed (cached error)")
+            warnings.append(_cache_state_warning("Cache", zone_name, ds, "error"))
             missing_dates.append(ds)
             daily_pair.append((d, (None, None)))
             continue
         data = raw.get("data")
         if not isinstance(data, dict):
-            warnings.append(f"Cache for zone {zone_name} on {ds} has no data object")
+            warnings.append(_cache_state_warning("Cache", zone_name, ds, "no_data"))
             missing_dates.append(ds)
             daily_pair.append((d, (None, None)))
             continue

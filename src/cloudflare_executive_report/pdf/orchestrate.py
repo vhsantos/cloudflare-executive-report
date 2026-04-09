@@ -11,6 +11,7 @@ from typing import Any
 from reportlab.platypus import PageBreak, Spacer
 
 from cloudflare_executive_report.cf_client import CloudflareClient
+from cloudflare_executive_report.common.period_resolver import report_type_for_options
 from cloudflare_executive_report.config import AppConfig
 from cloudflare_executive_report.dates import parse_ymd
 from cloudflare_executive_report.executive.summary import build_executive_summary
@@ -84,12 +85,39 @@ def _find_previous_zone(
     return None
 
 
+def _find_zone_snapshot(
+    report_snapshot: dict[str, Any] | None, zone_id: str
+) -> dict[str, Any] | None:
+    if not isinstance(report_snapshot, dict):
+        return None
+    for zone in report_snapshot.get("zones") or []:
+        if isinstance(zone, dict) and str(zone.get("zone_id") or "") == zone_id:
+            return zone
+    return None
+
+
+def _report_type_for_pdf(
+    *,
+    report_snapshot: dict[str, Any] | None,
+    sync_opts: SyncOptions | None,
+) -> str | None:
+    if isinstance(report_snapshot, dict):
+        raw = str(report_snapshot.get("report_type") or "").strip()
+        if raw:
+            return raw
+    if sync_opts is not None:
+        return report_type_for_options(sync_opts)
+    return None
+
+
 def write_report_pdf(
     output_path: Path,
     cfg: AppConfig,
     spec: ReportSpec,
     *,
     sync_opts: SyncOptions | None = None,
+    report_snapshot: dict[str, Any] | None = None,
+    allow_live_health_fetch: bool = True,
     theme: Theme | None = None,
 ) -> None:
     if theme is not None:
@@ -201,11 +229,34 @@ def write_report_pdf(
             )
             zone_warnings.extend(loaded_certificates.warnings)
 
+        snapshot_zone = _find_zone_snapshot(report_snapshot, zone_id)
         zone_health: dict[str, Any]
-        health_warnings: list[str]
-        with CloudflareClient(cfg.api_token) as client:
-            zone_health, health_warnings = fetch_zone_health(client, zone_id, zone_name, skip=False)
-        zone_warnings.extend(health_warnings)
+        health_warnings: list[str] = []
+        if snapshot_zone and isinstance(snapshot_zone.get("zone_health"), dict):
+            zone_health = dict(snapshot_zone.get("zone_health") or {})
+        else:
+            if allow_live_health_fetch:
+                with CloudflareClient(cfg.api_token) as client:
+                    zone_health, health_warnings = fetch_zone_health(
+                        client, zone_id, zone_name, skip=False
+                    )
+                zone_warnings.extend(health_warnings)
+            else:
+                zone_health = {
+                    "zone_name": zone_name,
+                    "zone_status": "unknown",
+                    "ssl_mode": "unknown",
+                    "always_use_https": None,
+                    "waf_enabled": None,
+                    "dnssec_status": "unknown",
+                    "min_tls_version": None,
+                    "under_attack_mode": None,
+                    "caching_level": None,
+                    "edge_cert_status": None,
+                }
+                zone_warnings.append(
+                    "Zone health unavailable in offline mode (no reusable snapshot found)."
+                )
 
         if spec.include_executive_summary:
             if sync_opts is None:
@@ -218,30 +269,37 @@ def write_report_pdf(
                     zone_id=zone_id,
                     opts=sync_opts,
                 )
-            executive_summary = build_executive_summary(
-                zone_id=zone_id,
-                zone_name=zone_name,
-                zone_health=zone_health,
-                dns=loaded_dns.rollup if loaded_dns else None,
-                http=loaded_http.rollup if loaded_http else None,
-                security=loaded_security.rollup if loaded_security else None,
-                cache=loaded_cache.rollup if loaded_cache else None,
-                http_adaptive=loaded_http_adaptive.rollup if loaded_http_adaptive else None,
-                dns_records=loaded_dns_records.rollup if loaded_dns_records else None,
-                audit=loaded_audit.rollup if loaded_audit else None,
-                certificates=loaded_certificates.rollup if loaded_certificates else None,
-                warnings=zone_warnings,
-                as_of_date=parse_ymd(spec.end),
-                current_period={"start": spec.start, "end": spec.end},
-                previous_report=previous_report,
-                previous_zone=_find_previous_zone(previous_report, zone_id),
-            )
+            if snapshot_zone and isinstance(snapshot_zone.get("executive_summary"), dict):
+                executive_summary = dict(snapshot_zone.get("executive_summary") or {})
+            else:
+                executive_summary = build_executive_summary(
+                    zone_id=zone_id,
+                    zone_name=zone_name,
+                    zone_health=zone_health,
+                    dns=loaded_dns.rollup if loaded_dns else None,
+                    http=loaded_http.rollup if loaded_http else None,
+                    security=loaded_security.rollup if loaded_security else None,
+                    cache=loaded_cache.rollup if loaded_cache else None,
+                    http_adaptive=loaded_http_adaptive.rollup if loaded_http_adaptive else None,
+                    dns_records=loaded_dns_records.rollup if loaded_dns_records else None,
+                    audit=loaded_audit.rollup if loaded_audit else None,
+                    certificates=loaded_certificates.rollup if loaded_certificates else None,
+                    warnings=zone_warnings,
+                    as_of_date=parse_ymd(spec.end),
+                    current_period={"start": spec.start, "end": spec.end},
+                    previous_report=previous_report,
+                    previous_zone=_find_previous_zone(previous_report, zone_id),
+                )
             append_executive_summary(
                 story,
                 zone_name=zone_name,
                 period_start=spec.start,
                 period_end=spec.end,
                 summary=executive_summary,
+                report_type=_report_type_for_pdf(
+                    report_snapshot=report_snapshot,
+                    sync_opts=sync_opts,
+                ),
                 theme=th,
             )
 
@@ -253,6 +311,8 @@ def write_report_pdf(
                 loaded = loaded_dns
                 if loaded is None:
                     continue
+                if snapshot_zone and isinstance(snapshot_zone.get("dns"), dict):
+                    loaded.rollup = dict(snapshot_zone.get("dns") or {})
                 if loaded.api_day_count == 0:
                     _warn_skip_no_api_data("DNS", zone_name, spec.start, spec.end)
                     continue
@@ -272,6 +332,8 @@ def write_report_pdf(
                 loaded = loaded_http
                 if loaded is None:
                     continue
+                if snapshot_zone and isinstance(snapshot_zone.get("http"), dict):
+                    loaded.rollup = dict(snapshot_zone.get("http") or {})
                 if loaded.api_day_count == 0:
                     _warn_skip_no_api_data("HTTP", zone_name, spec.start, spec.end)
                     continue
@@ -295,6 +357,8 @@ def write_report_pdf(
                 loaded = loaded_security
                 if loaded is None:
                     continue
+                if snapshot_zone and isinstance(snapshot_zone.get("security"), dict):
+                    loaded.rollup = dict(snapshot_zone.get("security") or {})
                 if loaded.api_day_count == 0:
                     _warn_skip_no_api_data("Security", zone_name, spec.start, spec.end)
                     continue
@@ -315,6 +379,8 @@ def write_report_pdf(
                 loaded = loaded_cache
                 if loaded is None:
                     continue
+                if snapshot_zone and isinstance(snapshot_zone.get("cache"), dict):
+                    loaded.rollup = dict(snapshot_zone.get("cache") or {})
                 if loaded.api_day_count == 0:
                     _warn_skip_no_api_data("Cache", zone_name, spec.start, spec.end)
                     continue

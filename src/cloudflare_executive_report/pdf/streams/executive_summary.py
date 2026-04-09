@@ -16,6 +16,30 @@ from cloudflare_executive_report.pdf.primitives import kpi_multi_cell_row, make_
 from cloudflare_executive_report.pdf.theme import Theme
 
 
+def _report_type_suffix(report_type: str | None) -> str:
+    rt = str(report_type or "").strip().lower()
+    if not rt or rt in {"custom", "incremental"}:
+        return ""
+    fixed = {
+        "last_month": "Last Month",
+        "this_month": "This Month (to date)",
+        "last_week": "Last Week",
+        "this_week": "This Week (to date)",
+        "yesterday": "Yesterday",
+        "last_year": "Last Year",
+        "this_year": "This Year (to date)",
+    }
+    if rt in fixed:
+        return f" - {fixed[rt]}"
+    if rt.startswith("last_"):
+        n = rt[5:]
+        if n.isdigit() and int(n) > 0:
+            days = int(n)
+            unit = "Day" if days == 1 else "Days"
+            return f" - Last {days} {unit}"
+    return ""
+
+
 def _indicator_for(summary: dict[str, Any], key: str) -> str:
     indicators = summary.get("kpi_indicators")
     if isinstance(indicators, dict):
@@ -30,6 +54,7 @@ def append_executive_summary(
     period_start: str,
     period_end: str,
     summary: dict[str, Any],
+    report_type: str | None,
     theme: Theme,
 ) -> None:
     styles = make_styles(theme)
@@ -40,7 +65,8 @@ def append_executive_summary(
     story.append(
         Paragraph(
             f"<font color='{theme.primary}'><b>{zone_name}</b></font>"
-            f"<font color='{theme.muted}'> · {period_start} to {period_end} (UTC)</font>",
+            f"<font color='{theme.muted}'> · {period_start} to {period_end} (UTC)"
+            f"{_report_type_suffix(report_type)}</font>",
             styles["RepSubtitle"],
         )
     )
