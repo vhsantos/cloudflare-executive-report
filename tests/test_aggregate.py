@@ -8,9 +8,8 @@ from cloudflare_executive_report.aggregate import (
     build_http_section,
     build_report,
     build_security_section,
-    format_bytes_human,
-    format_count_human,
 )
+from cloudflare_executive_report.common.formatting import format_bytes_human, format_count_human
 
 
 def test_build_dns_section_merges_days():

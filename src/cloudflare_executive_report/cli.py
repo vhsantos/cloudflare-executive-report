@@ -41,7 +41,7 @@ from cloudflare_executive_report.fetchers.registry import (
     registered_stream_ids,
 )
 from cloudflare_executive_report.report.command_flow import run_report_pdf_command
-from cloudflare_executive_report.sync import run_clean, run_sync
+from cloudflare_executive_report.sync.orchestrator import run_clean, run_sync
 
 
 def _valid_sync_types() -> frozenset[str]:
