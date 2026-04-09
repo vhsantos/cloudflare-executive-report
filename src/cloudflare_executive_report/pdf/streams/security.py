@@ -111,7 +111,7 @@ def append_security_stream(
         png_t, sub_t = prepare_triple_line_daily_metric_series(
             daily_security_triple,
             theme,
-            chart_title="Daily sampled requests (by category)",
+            chart_title="Daily requests",
             legend_mit="Mitigated",
             legend_cf="Served by Cloudflare",
             legend_or="Served by origin",
@@ -121,7 +121,7 @@ def append_security_stream(
             styles,
             theme,
             blocks,
-            heading="Daily trend",
+            heading=None,
             png=png_t,
             subtitle=sub_t,
         )

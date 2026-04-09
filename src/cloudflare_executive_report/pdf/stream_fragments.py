@@ -81,6 +81,7 @@ def append_timeseries_if_enabled(
     *,
     chart_title: str,
     y_axis_label: str,
+    heading: str | None = "Time series",
 ) -> None:
     if "timeseries" not in blocks:
         return
@@ -94,7 +95,8 @@ def append_timeseries_if_enabled(
         return
     w_content = theme.content_width_in()
     story.append(Spacer(1, 14))
-    story.append(Paragraph("Time series", styles["RepSection"]))
+    if heading:
+        story.append(Paragraph(heading, styles["RepSection"]))
     if sub:
         story.append(Paragraph(f"<i>{sub}</i>", styles["RepFootnote"]))
     tw = min(w_content, 7.1)
@@ -108,16 +110,17 @@ def append_png_chart_section(
     theme: Theme,
     blocks: set[str],
     *,
-    heading: str,
+    heading: str | None = None,
     png: bytes,
     subtitle: str = "",
 ) -> None:
-    """Append a titled chart image when ``timeseries`` is enabled and ``png`` is non-empty."""
+    """Append a chart image when ``timeseries`` is enabled and ``png`` is non-empty."""
     if "timeseries" not in blocks or not png:
         return
     w_content = theme.content_width_in()
     story.append(Spacer(1, 14))
-    story.append(Paragraph(heading, styles["RepSection"]))
+    if heading:
+        story.append(Paragraph(heading, styles["RepSection"]))
     if subtitle:
         story.append(Paragraph(f"<i>{subtitle}</i>", styles["RepFootnote"]))
     tw = min(w_content, 7.1)

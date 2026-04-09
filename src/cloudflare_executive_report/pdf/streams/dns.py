@@ -186,6 +186,7 @@ def append_dns_stream(
         theme,
         blocks,
         daily_queries,
-        chart_title="DNS queries over period",
+        chart_title="DNS queries",
         y_axis_label="Queries",
+        heading=None,
     )

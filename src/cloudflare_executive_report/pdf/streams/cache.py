@@ -98,7 +98,7 @@ def append_cache_stream(
         png_t, sub_t = prepare_dual_line_daily_metric_series(
             daily_cache_cf_origin,
             theme,
-            chart_title="Daily requests by traffic split",
+            chart_title="Daily requests",
             legend_a="Served by Cloudflare",
             legend_b="Served by origin",
         )
@@ -107,7 +107,7 @@ def append_cache_stream(
             styles,
             theme,
             blocks,
-            heading="Daily trend",
+            heading=None,
             png=png_t,
             subtitle=sub_t,
         )

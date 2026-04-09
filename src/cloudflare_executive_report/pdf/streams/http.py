@@ -178,7 +178,7 @@ def append_http_stream(
         png_r, sub_r = prepare_stacked_daily_metric_series(
             req_pairs,
             theme,
-            chart_title="HTTP requests over period",
+            chart_title="HTTP requests",
             bottom_legend="Cached",
             top_legend="Uncached",
         )
@@ -187,7 +187,7 @@ def append_http_stream(
             styles,
             theme,
             blocks,
-            heading="Requests (cached vs uncached)",
+            heading=None,
             png=png_r,
             subtitle=sub_r,
         )
@@ -196,7 +196,7 @@ def append_http_stream(
         png_b, sub_b = prepare_stacked_daily_metric_series(
             bw_pairs,
             theme,
-            chart_title="HTTP bandwidth over period",
+            chart_title="HTTP bandwidth",
             bottom_legend="Cached",
             top_legend="Uncached",
             y_scale="bytes",
@@ -206,7 +206,7 @@ def append_http_stream(
             styles,
             theme,
             blocks,
-            heading="Bandwidth (cached vs uncached)",
+            heading=None,
             png=png_b,
             subtitle=sub_b,
         )
@@ -214,7 +214,7 @@ def append_http_stream(
         png_u, sub_u = prepare_daily_metric_series(
             daily_uniques,
             theme,
-            chart_title="Unique visitors over period",
+            chart_title="Unique visitors",
             y_axis_label="Unique visitors",
         )
         append_png_chart_section(
@@ -222,7 +222,7 @@ def append_http_stream(
             styles,
             theme,
             blocks,
-            heading="Unique visitors (per day)",
+            heading=None,
             png=png_u,
             subtitle=sub_u,
         )
