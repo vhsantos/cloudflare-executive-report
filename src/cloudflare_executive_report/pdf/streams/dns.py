@@ -8,6 +8,10 @@ from typing import Any
 from reportlab.lib.units import inch
 from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
 
+from cloudflare_executive_report.common.constants import (
+    PDF_SPACE_LARGE_PT,
+    PDF_SPACE_MEDIUM_PT,
+)
 from cloudflare_executive_report.pdf.layout_spec import DnsStreamLayout
 from cloudflare_executive_report.pdf.maps import map_height_in_for_width, world_map_from_colos_bytes
 from cloudflare_executive_report.pdf.primitives import (
@@ -78,7 +82,7 @@ def append_dns_stream(
                 content_width_in=w_content,
             )
         )
-        story.append(Spacer(1, 18))
+        story.append(Spacer(1, PDF_SPACE_LARGE_PT))
 
     top_colos = list(dns.get("top_data_centers") or [])
     map_w = w_content
@@ -88,14 +92,14 @@ def append_dns_stream(
         story.append(Paragraph("Queries by country", styles["RepSectionTight"]))
         map_png = world_map_from_colos_bytes(top_colos[:top], theme=theme, width_in=map_w)
         story.append(figure_from_bytes(map_png, width_in=map_w, height_in=map_h))
-        story.append(Spacer(1, 10))
+        story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))
 
     if "colo_table" in blocks:
         colo_rows = ranked_rows_from_dicts(top_colos, top, "colo")
         story.append(
             colo_table_wrap(colo_rows, total_width_in=w_content, theme=theme, styles=styles)
         )
-        story.append(Spacer(1, 18))
+        story.append(Spacer(1, PDF_SPACE_LARGE_PT))
 
     qnames = ranked_rows_from_dicts(list(dns.get("top_query_names") or []), top, "name")
     rtypes = ranked_rows_from_dicts(list(dns.get("top_record_types") or []), top, "type")
@@ -121,7 +125,7 @@ def append_dns_stream(
         two_col = Table([[left, right]], colWidths=[w_half, w_half])
         two_col.setStyle(two_column_gap_style(theme))
         story.append(two_col)
-        story.append(Spacer(1, 16))
+        story.append(Spacer(1, PDF_SPACE_LARGE_PT))
 
     proto = ranked_rows_from_dicts(list(dns.get("protocols") or []), top, "protocol")
     ip_v = ranked_rows_from_dicts(list(dns.get("ip_versions") or []), top, "version")
@@ -168,7 +172,7 @@ def append_dns_stream(
             )
         )
         story.append(triple)
-        story.append(Spacer(1, 16))
+        story.append(Spacer(1, PDF_SPACE_LARGE_PT))
     elif "ip_versions" in blocks:
         ip_block = table_with_bars(
             "IP versions",

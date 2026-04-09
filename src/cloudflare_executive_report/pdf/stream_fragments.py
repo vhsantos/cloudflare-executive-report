@@ -9,6 +9,9 @@ from typing import Any
 from reportlab.lib.units import inch
 from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
 
+from cloudflare_executive_report.common.constants import (
+    PDF_SPACE_MEDIUM_PT,
+)
 from cloudflare_executive_report.pdf.charts import prepare_daily_metric_series
 from cloudflare_executive_report.pdf.primitives import figure_from_bytes
 from cloudflare_executive_report.pdf.theme import Theme
@@ -49,7 +52,7 @@ def append_stream_header(
         )
     )
     story.append(head)
-    story.append(Spacer(1, 14))
+    story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))
 
 
 def append_missing_dates_note(
@@ -69,7 +72,7 @@ def append_missing_dates_note(
             styles["RepFootnote"],
         )
     )
-    story.append(Spacer(1, 8))
+    story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))
 
 
 def append_timeseries_if_enabled(
@@ -94,7 +97,6 @@ def append_timeseries_if_enabled(
     if not png:
         return
     w_content = theme.content_width_in()
-    story.append(Spacer(1, 14))
     if heading:
         story.append(Paragraph(heading, styles["RepSection"]))
     if sub:
@@ -118,7 +120,6 @@ def append_png_chart_section(
     if "timeseries" not in blocks or not png:
         return
     w_content = theme.content_width_in()
-    story.append(Spacer(1, 14))
     if heading:
         story.append(Paragraph(heading, styles["RepSection"]))
     if subtitle:

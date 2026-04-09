@@ -7,6 +7,10 @@ from typing import Any
 
 from reportlab.platypus import Paragraph, Spacer
 
+from cloudflare_executive_report.common.constants import (
+    PDF_SPACE_LARGE_PT,
+    PDF_SPACE_MEDIUM_PT,
+)
 from cloudflare_executive_report.pdf.charts import (
     prepare_daily_metric_series,
     prepare_stacked_daily_metric_series,
@@ -109,7 +113,7 @@ def append_http_stream(
                 content_width_in=w_content,
             )
         )
-        story.append(Spacer(1, 10))
+        story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))
         story.append(
             kpi_multi_cell_row(
                 [
@@ -123,7 +127,7 @@ def append_http_stream(
                 content_width_in=w_content,
             )
         )
-        story.append(Spacer(1, 10))
+        story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))
         story.append(
             kpi_multi_cell_row(
                 [
@@ -136,7 +140,7 @@ def append_http_stream(
                 content_width_in=w_content,
             )
         )
-        story.append(Spacer(1, 18))
+        story.append(Spacer(1, PDF_SPACE_LARGE_PT))
 
     country_totals = _country_totals_from_rollup(http)
     map_w = w_content
@@ -146,7 +150,7 @@ def append_http_stream(
         story.append(Paragraph("Requests by country", styles["RepSectionTight"]))
         map_png = world_map_from_country_totals_bytes(country_totals, theme=theme, width_in=map_w)
         story.append(figure_from_bytes(map_png, width_in=map_w, height_in=map_h))
-        story.append(Spacer(1, 10))
+        story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))
 
     if "countries" in blocks:
         rows_raw = list(http.get("top_countries") or [])

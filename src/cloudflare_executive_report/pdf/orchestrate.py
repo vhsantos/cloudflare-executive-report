@@ -11,6 +11,7 @@ from typing import Any
 from reportlab.platypus import PageBreak, Spacer
 
 from cloudflare_executive_report.cf_client import CloudflareClient
+from cloudflare_executive_report.common.constants import PDF_SPACE_SMALL_PT
 from cloudflare_executive_report.common.dates import parse_ymd
 from cloudflare_executive_report.common.period_resolver import report_type_for_options
 from cloudflare_executive_report.config import AppConfig
@@ -128,7 +129,7 @@ def write_report_pdf(
         zone_id, zone_name = resolve_zone(cfg, zone_key)
         if zi > 0:
             story.append(PageBreak())
-        story.append(Spacer(1, 6))
+        story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
         loaded_dns = None
         loaded_http = None

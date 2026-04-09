@@ -7,6 +7,11 @@ from typing import Any
 
 from reportlab.platypus import Paragraph, Spacer, Table
 
+from cloudflare_executive_report.common.constants import (
+    PDF_SPACE_LARGE_PT,
+    PDF_SPACE_MEDIUM_PT,
+    PDF_SPACE_SMALL_PT,
+)
 from cloudflare_executive_report.pdf.charts import prepare_dual_line_daily_metric_series
 from cloudflare_executive_report.pdf.layout_spec import CacheStreamLayout
 from cloudflare_executive_report.pdf.primitives import (
@@ -80,7 +85,7 @@ def append_cache_stream(
                 content_width_in=w_content,
             )
         )
-        story.append(Spacer(1, 10))
+        story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))
         story.append(
             kpi_multi_cell_row(
                 [
@@ -92,7 +97,7 @@ def append_cache_stream(
                 content_width_in=w_content,
             )
         )
-        story.append(Spacer(1, 18))
+        story.append(Spacer(1, PDF_SPACE_LARGE_PT))
 
     if "timeseries" in blocks:
         png_t, sub_t = prepare_dual_line_daily_metric_series(
@@ -142,7 +147,7 @@ def append_cache_stream(
                 theme=theme,
             )
             if status_rows
-            else Spacer(1, 1)
+            else Spacer(1, PDF_SPACE_SMALL_PT)
         )
         right = (
             table_with_bars(
@@ -154,13 +159,12 @@ def append_cache_stream(
                 theme=theme,
             )
             if mime_rows
-            else Spacer(1, 1)
+            else Spacer(1, PDF_SPACE_SMALL_PT)
         )
         two_col = Table([[left, right]], colWidths=[w_half, w_half])
         two_col.setStyle(two_column_gap_style(theme))
         story.append(two_col)
-        story.append(Spacer(1, 4))
-        story.append(Spacer(1, 12))
+        story.append(Spacer(1, PDF_SPACE_LARGE_PT))
     else:
         if "status" in blocks and status_rows:
             story.append(
@@ -173,7 +177,7 @@ def append_cache_stream(
                     theme=theme,
                 )
             )
-            story.append(Spacer(1, 16))
+            story.append(Spacer(1, PDF_SPACE_LARGE_PT))
         if "mime_http_1d" in blocks and mime_rows:
             story.append(
                 table_with_bars(
@@ -185,7 +189,7 @@ def append_cache_stream(
                     theme=theme,
                 )
             )
-            story.append(Spacer(1, 4))
+            story.append(Spacer(1, PDF_SPACE_SMALL_PT))
             story.append(
                 Paragraph(
                     "<i>From cached <tt>http.json</tt> (httpRequests1dGroups "
@@ -193,7 +197,7 @@ def append_cache_stream(
                     styles["RepFootnote"],
                 )
             )
-            story.append(Spacer(1, 12))
+            story.append(Spacer(1, PDF_SPACE_LARGE_PT))
 
     path_rows = ranked_rows_from_dicts(list(cache.get("top_paths") or []), top, "path")
     if "paths" in blocks and path_rows:

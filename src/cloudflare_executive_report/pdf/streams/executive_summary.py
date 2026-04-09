@@ -6,6 +6,11 @@ from typing import Any
 
 from reportlab.platypus import Paragraph, Spacer
 
+from cloudflare_executive_report.common.constants import (
+    PDF_SPACE_LARGE_PT,
+    PDF_SPACE_MEDIUM_PT,
+    PDF_SPACE_SMALL_PT,
+)
 from cloudflare_executive_report.common.formatting import (
     format_count_compact,
     format_number_compact,
@@ -70,7 +75,7 @@ def append_executive_summary(
             styles["RepSubtitle"],
         )
     )
-    story.append(Spacer(1, 4))
+    story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
     kpis = summary.get("kpis") or {}
     platform = kpis.get("platform") or {}
@@ -94,7 +99,7 @@ def append_executive_summary(
             content_width_in=w_content,
         )
     )
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))
     story.append(
         kpi_multi_cell_row(
             [
@@ -129,7 +134,7 @@ def append_executive_summary(
             content_width_in=w_content,
         )
     )
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))
     p50 = traffic.get("latency_p50_ms")
     p95 = traffic.get("latency_p95_ms")
     lat_txt = (
@@ -162,7 +167,7 @@ def append_executive_summary(
             content_width_in=w_content,
         )
     )
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))
     dr_un = bool(dns_records.get("unavailable"))
     au_un = bool(audit_k.get("unavailable"))
     ce_un = bool(certificates_k.get("unavailable"))
@@ -199,7 +204,7 @@ def append_executive_summary(
             content_width_in=w_content,
         )
     )
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))
     cert_human = str(certificates_k.get("cert_expires_human") or "-")
     cert_exp30 = int(certificates_k.get("expiring_in_30_days") or 0)
     if cert_human != "-" and "(" in cert_human and ")" in cert_human:
@@ -229,7 +234,7 @@ def append_executive_summary(
             content_width_in=w_content,
         )
     )
-    story.append(Spacer(1, 16))
+    story.append(Spacer(1, PDF_SPACE_LARGE_PT))
 
     takeaways = [str(x) for x in (summary.get("takeaways") or []) if str(x).strip()]
     actions = [str(x) for x in (summary.get("actions") or []) if str(x).strip()]
@@ -237,7 +242,7 @@ def append_executive_summary(
         story.append(Paragraph("Takeaways", styles["RepSection"]))
         for row in takeaways[:8]:
             story.append(Paragraph(format_pdf_status_line(row), styles["RepTableCell"]))
-        story.append(Spacer(1, 10))
+        story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))
     if actions:
         story.append(Paragraph("Actions", styles["RepSection"]))
         for row in actions:
