@@ -42,11 +42,6 @@ from cloudflare_executive_report.fetchers.registry import (
 )
 from cloudflare_executive_report.report.command_flow import run_report_pdf_command
 from cloudflare_executive_report.sync import run_clean, run_sync
-from cloudflare_executive_report.zones_api import (
-    find_zone_by_name,
-    get_zone,
-    list_all_zones,
-)
 
 
 def _valid_sync_types() -> frozenset[str]:
@@ -345,7 +340,7 @@ def zones_list(ctx: typer.Context) -> None:
     setup_logging(verbose=verbose, quiet=quiet, log_level=_config_log_level(cfg))
     try:
         with CloudflareClient(cfg.api_token, verbose=effective_debug_enabled()) as c:
-            zs = list_all_zones(c)
+            zs = c.list_zones()
     except CloudflareAuthError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.AUTH_FAILED) from None
@@ -377,10 +372,10 @@ def zones_add(
     try:
         with CloudflareClient(cfg.api_token, verbose=effective_debug_enabled()) as c:
             if zone_id:
-                z = get_zone(c, zone_id)
+                z = c.get_zone(zone_id)
             else:
                 assert name
-                z = find_zone_by_name(c, name)
+                z = c.find_zone_by_name(name)
                 if not z:
                     typer.echo(f"Zone not found: {name}", err=True)
                     raise typer.Exit(exits.GENERAL_ERROR) from None

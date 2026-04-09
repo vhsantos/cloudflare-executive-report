@@ -58,7 +58,6 @@ from cloudflare_executive_report.report.zone_block import (
 )
 from cloudflare_executive_report.sync.day_processor import process_day
 from cloudflare_executive_report.sync.options import SyncMode, SyncOptions
-from cloudflare_executive_report.zones_api import get_zone
 
 log = logging.getLogger(__name__)
 
@@ -185,7 +184,7 @@ def _run_sync_locked(
         zmeta_by_zone_id: dict[str, dict] = {}
         for z in zones:
             try:
-                zmeta_by_zone_id[z.id] = get_zone(client, z.id)
+                zmeta_by_zone_id[z.id] = client.get_zone(z.id)
             except CloudflareAuthError as e:
                 log.error("%s", e)
                 return exits.AUTH_FAILED
