@@ -44,15 +44,20 @@ def test_build_dns_section_merges_days():
 
 def test_build_report_shape():
     r = build_report(
-        zones_out=[],
+        zones_out=[{"zone_id": "z1", "zone_name": "z.example"}],
         warnings=[],
         period_start="2026-03-01",
         period_end="2026-03-07",
         requested_start="2026-03-01",
         requested_end="2026-03-07",
         report_type="custom",
+        partial=False,
+        missing_days=[],
     )
     assert r["report_period"]["timezone"] == "UTC"
+    assert r["schema_version"] == 1
+    assert r["partial"] is False
+    assert r["missing_days"] == []
     assert "tool_version" in r
 
 

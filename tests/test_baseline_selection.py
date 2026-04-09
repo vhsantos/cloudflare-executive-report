@@ -4,8 +4,8 @@ import json
 from datetime import date
 
 from cloudflare_executive_report.config import AppConfig, ZoneEntry
+from cloudflare_executive_report.report.baseline_selection import select_previous_report_for_period
 from cloudflare_executive_report.sync.options import SyncMode, SyncOptions
-from cloudflare_executive_report.sync.orchestrator import select_previous_report_for_period
 
 
 def _write_report(

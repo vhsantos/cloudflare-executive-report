@@ -9,6 +9,7 @@ from typing import Any
 import pycountry
 
 from cloudflare_executive_report import __version__
+from cloudflare_executive_report.common.constants import REPORT_JSON_SCHEMA_VERSION
 from cloudflare_executive_report.common.dates import (
     format_ymd,
     iter_dates_inclusive,
@@ -428,18 +429,6 @@ def _cache_served_cf_origin_from_status_rows(day: dict[str, Any]) -> tuple[int, 
     return served_cf, origin
 
 
-def _cache_status_counts(day: dict[str, Any]) -> dict[str, int]:
-    out: dict[str, int] = {}
-    for row in day.get("by_cache_status") or []:
-        if not isinstance(row, dict):
-            continue
-        status = _norm_cache_status(str(row.get("value") or ""))
-        if not status:
-            continue
-        out[status] = out.get(status, 0) + int(row.get("count") or 0)
-    return out
-
-
 def build_cache_section(
     daily_api_data: list[dict[str, Any]],
     *,
@@ -724,9 +713,17 @@ def build_report(
     report_type: str,
     data_fingerprint: dict[str, Any] | None = None,
     zone_health_fetched_at: str | None = None,
+    partial: bool = False,
+    missing_days: list[str] | None = None,
+    schema_version: int = REPORT_JSON_SCHEMA_VERSION,
 ) -> dict[str, Any]:
+    """Assemble the top-level report dict including schema and partial-cache metadata."""
     now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    out = {
+    days = list(missing_days) if missing_days is not None else []
+    out: dict[str, Any] = {
+        "schema_version": int(schema_version),
+        "partial": bool(partial),
+        "missing_days": days,
         "report_period": {
             "start": period_start,
             "end": period_end,

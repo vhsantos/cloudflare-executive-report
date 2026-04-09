@@ -40,22 +40,24 @@ from cloudflare_executive_report.common.dates import (
 from cloudflare_executive_report.common.logging_config import effective_debug_enabled
 from cloudflare_executive_report.common.period_resolver import (
     build_data_fingerprint,
-    normalize_report_type,
     report_type_for_options,
     resolved_period_for_options,
-    semantic_baseline_bounds,
-    semantic_current_bounds,
+)
+from cloudflare_executive_report.common.report_cache import missing_stream_days_for_zone
+from cloudflare_executive_report.common.report_period import (
+    report_bounds_from_indices,
+    streams_for_sync_types,
 )
 from cloudflare_executive_report.config import AppConfig
-from cloudflare_executive_report.executive.summary import build_executive_summary
 from cloudflare_executive_report.fetchers.registry import (
     FETCHER_REGISTRY,
     day_cache_path,
-    registered_stream_ids,
+)
+from cloudflare_executive_report.report.zone_block import (
+    update_zone_json_block_health_and_executive,
 )
 from cloudflare_executive_report.sync.day_processor import process_day
 from cloudflare_executive_report.sync.options import SyncMode, SyncOptions
-from cloudflare_executive_report.zone_health import fetch_zone_health
 from cloudflare_executive_report.zones_api import get_zone
 
 log = logging.getLogger(__name__)
@@ -79,26 +81,6 @@ def _dates_incremental(idx_latest: str | None, y: date) -> list[date]:
     return out
 
 
-def _streams_for_types(types: frozenset[str]) -> list[str]:
-    return [sid for sid in registered_stream_ids() if sid in types]
-
-
-def _semantic_current_bounds(opts: SyncOptions, *, y: date) -> tuple[date, date] | None:
-    return semantic_current_bounds(
-        report_type=report_type_for_options(opts),
-        y=y,
-        today=utc_today(),
-    )
-
-
-def _semantic_baseline_bounds(opts: SyncOptions, *, y: date) -> tuple[date, date] | None:
-    return semantic_baseline_bounds(
-        report_type=report_type_for_options(opts),
-        y=y,
-        today=utc_today(),
-    )
-
-
 def _sync_days_for_mode(opts: SyncOptions, idx, y: date) -> list[date]:
     resolved = resolved_period_for_options(opts=opts, y=y, today=utc_today())
     if resolved is not None:
@@ -106,7 +88,7 @@ def _sync_days_for_mode(opts: SyncOptions, idx, y: date) -> list[date]:
         return list(iter_dates_inclusive(d0, d1))
     if opts.mode == SyncMode.incremental:
         parts: list[date] = []
-        for sid in _streams_for_types(opts.types):
+        for sid in streams_for_sync_types(opts.types):
             parts.extend(_dates_incremental(stream_latest(idx, sid), y))
         return sorted(set(parts))
     if opts.mode == SyncMode.last_n:
@@ -132,188 +114,6 @@ def _rotate_report_outputs(cfg: AppConfig, *, history_date: date) -> None:
     hist_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(current, prev)
     shutil.copy2(current, hist)
-
-
-def _load_previous_report(cfg: AppConfig) -> dict | None:
-    path = cfg.report_previous_path()
-    if not path.is_file():
-        return None
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-
-
-def _load_report_file(path: Path) -> dict | None:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-
-
-def _report_period(report: dict | None) -> tuple[date, date] | None:
-    if not isinstance(report, dict):
-        return None
-    period = report.get("report_period")
-    if not isinstance(period, dict):
-        return None
-    start = str(period.get("start") or "").strip()
-    end = str(period.get("end") or "").strip()
-    if not start or not end:
-        return None
-    try:
-        return parse_ymd(start), parse_ymd(end)
-    except ValueError:
-        return None
-
-
-def _find_previous_zone(previous_report: dict | None, zone_id: str) -> dict | None:
-    if not isinstance(previous_report, dict):
-        return None
-    for zone in previous_report.get("zones") or []:
-        if isinstance(zone, dict) and str(zone.get("zone_id") or "") == zone_id:
-            return zone
-    return None
-
-
-def _report_has_zone(report: dict | None, zone_id: str) -> bool:
-    return _find_previous_zone(report, zone_id) is not None
-
-
-def _iter_baseline_candidates(cfg: AppConfig) -> list[dict]:
-    out: list[dict] = []
-    seen: set[Path] = set()
-    p = cfg.report_previous_path()
-    if p.is_file():
-        seen.add(p.resolve())
-        rep = _load_report_file(p)
-        if rep is not None:
-            out.append(rep)
-    hist = cfg.report_history_dir()
-    if hist.is_dir():
-        for f in sorted(hist.glob("cf_report_*.json"), reverse=True):
-            rf = f.resolve()
-            if rf in seen:
-                continue
-            seen.add(rf)
-            rep = _load_report_file(f)
-            if rep is not None:
-                out.append(rep)
-    return out
-
-
-def select_previous_report_for_period(
-    cfg: AppConfig,
-    *,
-    current_start: str,
-    current_end: str,
-    zone_id: str,
-    opts: SyncOptions,
-    y: date | None = None,
-) -> dict | None:
-    try:
-        cs = parse_ymd(current_start)
-        ce = parse_ymd(current_end)
-    except ValueError:
-        return None
-    current_report_type = report_type_for_options(opts)
-    baseline_expected = semantic_baseline_bounds(
-        report_type=current_report_type,
-        y=y or utc_yesterday(),
-        today=utc_today(),
-    )
-    current_len = (ce - cs).days + 1
-    best: tuple[date, dict] | None = None
-    for rep in _iter_baseline_candidates(cfg):
-        period = _report_period(rep)
-        if period is None:
-            continue
-        ps, pe = period
-        if pe >= cs:
-            continue
-        if ps == cs and pe == ce:
-            continue
-        if not _report_has_zone(rep, zone_id):
-            continue
-        candidate_type = normalize_report_type(rep.get("report_type"))
-        if baseline_expected is not None:
-            if candidate_type is None:
-                continue
-            if candidate_type not in {
-                current_report_type,
-                "custom",
-                "incremental",
-            } and not candidate_type.startswith("last_"):
-                continue
-        if baseline_expected is not None:
-            if (ps, pe) != baseline_expected:
-                continue
-        else:
-            if ((pe - ps).days + 1) != current_len:
-                continue
-        if best is None or pe > best[0]:
-            best = (pe, rep)
-    return best[1] if best is not None else None
-
-
-def _report_bounds_from_indices(
-    zones: list,
-    cache_root: Path,
-    y: date,
-    opts: SyncOptions,
-) -> tuple[str, str]:
-    resolved = resolved_period_for_options(opts=opts, y=y, today=utc_today())
-    if resolved is not None:
-        d0, d1 = resolved
-        return format_ymd(d0), format_ymd(d1)
-    if opts.mode == SyncMode.last_n and opts.last_n is not None:
-        d0, d1 = last_n_complete_days(opts.last_n, yesterday=y)
-        return format_ymd(d0), format_ymd(d1)
-    if opts.mode == SyncMode.range and opts.start and opts.end:
-        return opts.start, opts.end
-
-    earliests: list[str] = []
-    latests: list[str] = []
-    for z in zones:
-        ix = load_zone_index(cache_root, z.id, z.name)
-        for sid in _streams_for_types(opts.types):
-            st = ix.streams.get(sid)
-            if not st:
-                continue
-            if st.earliest:
-                earliests.append(st.earliest)
-            if st.latest:
-                latests.append(st.latest)
-    if not earliests:
-        earliests.append(format_ymd(y))
-    if not latests:
-        latests.append(format_ymd(y))
-    return min(earliests), max(latests)
-
-
-def pdf_report_period_for_options(
-    cfg: AppConfig,
-    opts: SyncOptions,
-    *,
-    zone_filter: str | None = None,
-) -> tuple[str, str]:
-    """Return ``(report_start, report_end)`` for the PDF span (same logic as JSON ``run_sync``)."""
-    cache_root = cfg.cache_path()
-    zones = list(cfg.zones)
-    if zone_filter:
-        zf = zone_filter.strip()
-        zones = [z for z in zones if z.id == zf or z.name == zf]
-        if not zones:
-            msg = f"Zone not found in config: {zone_filter!r}"
-            raise ValueError(msg)
-    if not zones:
-        msg = "No zones configured. Use `cf-report zones add` or set `zones` in config."
-        raise ValueError(msg)
-    y = utc_yesterday()
-    report_start, report_end = _report_bounds_from_indices(zones, cache_root, y, opts)
-    if opts.include_today:
-        report_end = format_ymd(utc_today())
-    return report_start, report_end
 
 
 def run_sync(
@@ -370,7 +170,7 @@ def _run_sync_locked(
 ) -> int:
     rate_fail = False
     verbose_http = effective_debug_enabled()
-    streams = _streams_for_types(opts.types)
+    streams = streams_for_sync_types(opts.types)
     default_output_mode = (not write_stdout) and (output_path is None)
     if write_report_json and default_output_mode:
         _rotate_report_outputs(cfg, history_date=utc_today())
@@ -441,11 +241,21 @@ def _run_sync_locked(
                 return exits.RATE_LIMIT_EXCEEDED
             return exits.SUCCESS
 
-        report_start, report_end = _report_bounds_from_indices(zones, cache_root, y, opts)
+        report_start, report_end = report_bounds_from_indices(zones, cache_root, y, opts)
         requested_start, requested_end = report_start, report_end
         if opts.include_today:
             report_end = format_ymd(utc_today())
             requested_end = report_end
+
+        cache_end_for_missing = format_ymd(y) if opts.include_today else report_end
+        stream_ids_merge = streams_for_sync_types(opts.types)
+        all_missing_days: set[str] = set()
+        for z in zones:
+            all_missing_days |= missing_stream_days_for_zone(
+                cache_root, z.id, report_start, cache_end_for_missing, stream_ids_merge
+            )
+        missing_days_sorted = sorted(all_missing_days)
+        partial = len(missing_days_sorted) > 0
 
         zones_out: list[dict] = []
         all_warnings: list[str] = []
@@ -458,7 +268,7 @@ def _run_sync_locked(
             zblock: dict = {"zone_id": z.id, "zone_name": z.name}
             zone_warnings: list[str] = []
 
-            for sid in _streams_for_types(opts.types):
+            for sid in streams_for_sync_types(opts.types):
                 fetcher = FETCHER_REGISTRY[sid]
                 builder = SECTION_BUILDERS[sid]
 
@@ -485,42 +295,20 @@ def _run_sync_locked(
                 all_warnings.extend(warns)
                 zone_warnings.extend(warns)
 
-            zh, zw = fetch_zone_health(
-                client,
-                z.id,
-                z.name,
-                skip=opts.skip_zone_health,
-                zone_meta=zmeta,
-            )
-            zblock["zone_health"] = zh
-            all_warnings.extend(zw)
-            zone_warnings.extend(zw)
-            previous_report = select_previous_report_for_period(
-                cfg,
-                current_start=report_start,
-                current_end=report_end,
-                zone_id=z.id,
+            zw = update_zone_json_block_health_and_executive(
+                cfg=cfg,
                 opts=opts,
-                y=y,
-            )
-            zblock["executive_summary"] = build_executive_summary(
+                client=client,
                 zone_id=z.id,
                 zone_name=z.name,
-                zone_health=zh,
-                dns=zblock.get("dns"),
-                http=zblock.get("http"),
-                security=zblock.get("security"),
-                cache=zblock.get("cache"),
-                http_adaptive=zblock.get("http_adaptive"),
-                dns_records=zblock.get("dns_records"),
-                audit=zblock.get("audit"),
-                certificates=zblock.get("certificates"),
-                warnings=zone_warnings,
-                as_of_date=parse_ymd(report_end),
-                current_period={"start": report_start, "end": report_end},
-                previous_report=previous_report,
-                previous_zone=_find_previous_zone(previous_report, z.id),
+                zone_meta=zmeta,
+                zone_block=zblock,
+                report_start=report_start,
+                report_end=report_end,
+                y=y,
+                summary_warnings=zone_warnings,
             )
+            all_warnings.extend(zw)
 
             zones_out.append(zblock)
 
@@ -541,6 +329,8 @@ def _run_sync_locked(
                 include_today=opts.include_today,
             ),
             zone_health_fetched_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            partial=partial,
+            missing_days=missing_days_sorted,
         )
         text = json.dumps(rep, indent=2, ensure_ascii=False) + "\n"
 

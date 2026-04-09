@@ -7,8 +7,8 @@ from click.exceptions import Exit
 
 from cloudflare_executive_report import exits
 from cloudflare_executive_report.cli import _check_last_argv
+from cloudflare_executive_report.report.period import pdf_report_period_for_options
 from cloudflare_executive_report.sync.options import SyncMode, SyncOptions
-from cloudflare_executive_report.sync.orchestrator import pdf_report_period_for_options
 
 
 def test_check_last_requires_number():

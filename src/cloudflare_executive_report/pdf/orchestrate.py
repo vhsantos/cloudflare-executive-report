@@ -39,8 +39,11 @@ from cloudflare_executive_report.pdf.streams.executive_summary import append_exe
 from cloudflare_executive_report.pdf.streams.http import append_http_stream
 from cloudflare_executive_report.pdf.streams.security import append_security_stream
 from cloudflare_executive_report.pdf.theme import Theme
+from cloudflare_executive_report.report.baseline_selection import (
+    find_previous_zone_in_report,
+    select_previous_report_for_period,
+)
 from cloudflare_executive_report.sync.options import SyncOptions
-from cloudflare_executive_report.sync.orchestrator import select_previous_report_for_period
 from cloudflare_executive_report.zone_health import fetch_zone_health
 
 log = logging.getLogger(__name__)
@@ -72,17 +75,6 @@ def _load_previous_report(cfg: AppConfig) -> dict[str, Any] | None:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
-
-
-def _find_previous_zone(
-    previous_report: dict[str, Any] | None, zone_id: str
-) -> dict[str, Any] | None:
-    if not isinstance(previous_report, dict):
-        return None
-    for zone in previous_report.get("zones") or []:
-        if isinstance(zone, dict) and str(zone.get("zone_id") or "") == zone_id:
-            return zone
-    return None
 
 
 def _find_zone_snapshot(
@@ -191,6 +183,8 @@ def write_report_pdf(
                 )
                 zone_warnings.extend(loaded_cache.warnings)
 
+        snapshot_zone = _find_zone_snapshot(report_snapshot, zone_id)
+
         if spec.include_executive_summary:
             loaded_http_adaptive = load_http_adaptive_for_range(
                 cache_root,
@@ -229,36 +223,24 @@ def write_report_pdf(
             )
             zone_warnings.extend(loaded_certificates.warnings)
 
-        snapshot_zone = _find_zone_snapshot(report_snapshot, zone_id)
-        zone_health: dict[str, Any]
-        health_warnings: list[str] = []
-        if snapshot_zone and isinstance(snapshot_zone.get("zone_health"), dict):
-            zone_health = dict(snapshot_zone.get("zone_health") or {})
-        else:
-            if allow_live_health_fetch:
-                with CloudflareClient(cfg.api_token) as client:
-                    zone_health, health_warnings = fetch_zone_health(
-                        client, zone_id, zone_name, skip=False
-                    )
-                zone_warnings.extend(health_warnings)
+            zone_health: dict[str, Any]
+            health_warnings: list[str] = []
+            if snapshot_zone and isinstance(snapshot_zone.get("zone_health"), dict):
+                zone_health = dict(snapshot_zone.get("zone_health") or {})
             else:
-                zone_health = {
-                    "zone_name": zone_name,
-                    "zone_status": "unknown",
-                    "ssl_mode": "unknown",
-                    "always_use_https": None,
-                    "waf_enabled": None,
-                    "dnssec_status": "unknown",
-                    "min_tls_version": None,
-                    "under_attack_mode": None,
-                    "caching_level": None,
-                    "edge_cert_status": None,
-                }
-                zone_warnings.append(
-                    "Zone health unavailable in offline mode (no reusable snapshot found)."
-                )
+                if allow_live_health_fetch:
+                    with CloudflareClient(cfg.api_token) as client:
+                        zone_health, health_warnings = fetch_zone_health(
+                            client, zone_id, zone_name, skip=False
+                        )
+                    zone_warnings.extend(health_warnings)
+                else:
+                    raise ValueError(
+                        "Zone health is not available from the report snapshot and live fetch is "
+                        f"disabled (zone {zone_name}). Use a valid matching cf_report.json or run "
+                        "without --cache-only."
+                    )
 
-        if spec.include_executive_summary:
             if sync_opts is None:
                 previous_report = _load_previous_report(cfg)
             else:
@@ -288,7 +270,7 @@ def write_report_pdf(
                     as_of_date=parse_ymd(spec.end),
                     current_period={"start": spec.start, "end": spec.end},
                     previous_report=previous_report,
-                    previous_zone=_find_previous_zone(previous_report, zone_id),
+                    previous_zone=find_previous_zone_in_report(previous_report, zone_id),
                 )
             append_executive_summary(
                 story,
