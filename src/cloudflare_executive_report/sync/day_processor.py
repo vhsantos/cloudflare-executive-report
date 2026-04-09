@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 from cloudflare_executive_report.cache import read_day_file, write_day_file
 from cloudflare_executive_report.cf_client import (
@@ -43,6 +44,7 @@ def process_day(
     day: date,
     *,
     plan_legacy_id: str | None,
+    zone_meta: dict[str, Any] | None,
     force_fetch: bool,
     refresh: bool,
     quiet: bool,
@@ -66,7 +68,7 @@ def process_day(
         return False
 
     try:
-        data = fetcher.fetch(client, zone_id, day)
+        data = fetcher.fetch(client, zone_id, day, zone_meta=zone_meta)
         write_day_file(path, source="api", data=data)
         _progress(f"  {zone_name} {ds} {name} ok", quiet=quiet)
         return False

@@ -17,7 +17,14 @@ class Fetcher(Protocol):
     def outside_retention(self, day: date, *, plan_legacy_id: str | None) -> bool:
         """True if this calendar day is outside the API retention window."""
 
-    def fetch(self, client: CloudflareClient, zone_id: str, day: date) -> Any:
+    def fetch(
+        self,
+        client: CloudflareClient,
+        zone_id: str,
+        day: date,
+        *,
+        zone_meta: dict[str, Any] | None,
+    ) -> Any:
         """Fetch payload stored under envelope `data` for this UTC day."""
 
     def append_live_today(
@@ -27,6 +34,7 @@ class Fetcher(Protocol):
         zone_name: str,
         *,
         plan_legacy_id: str | None,
+        zone_meta: dict[str, Any] | None,
     ) -> tuple[list[dict[str, Any]], list[str], bool]:
         """
         Optional partial-day fetch for the current UTC date (report only).

@@ -141,7 +141,15 @@ class CacheFetcher:
         _ = plan_legacy_id
         return date_outside_http_retention(day)
 
-    def fetch(self, client: CloudflareClient, zone_id: str, day: date) -> dict[str, Any]:
+    def fetch(
+        self,
+        client: CloudflareClient,
+        zone_id: str,
+        day: date,
+        *,
+        zone_meta: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        _ = zone_meta
         return fetch_cache_for_date(client, zone_id, day)
 
     def append_live_today(
@@ -151,8 +159,9 @@ class CacheFetcher:
         zone_name: str,
         *,
         plan_legacy_id: str | None,
+        zone_meta: dict[str, Any] | None,
     ) -> tuple[list[dict[str, Any]], list[str], bool]:
-        _ = plan_legacy_id
+        _ = (plan_legacy_id, zone_meta)
         t = utc_today()
         if date_outside_http_retention(t):
             return [], [], False

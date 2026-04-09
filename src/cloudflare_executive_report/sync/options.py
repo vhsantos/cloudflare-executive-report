@@ -8,6 +8,13 @@ class SyncMode(StrEnum):
     incremental = "incremental"
     last_n = "last_n"
     range = "range"
+    last_month = "last_month"
+    last_week = "last_week"
+    last_year = "last_year"
+    this_month = "this_month"
+    this_week = "this_week"
+    this_year = "this_year"
+    yesterday = "yesterday"
 
 
 def _default_sync_types() -> frozenset[str]:

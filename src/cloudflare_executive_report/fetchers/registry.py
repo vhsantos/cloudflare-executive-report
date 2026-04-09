@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from cloudflare_executive_report.fetchers.audit import AuditFetcher
 from cloudflare_executive_report.fetchers.cache import CacheFetcher
+from cloudflare_executive_report.fetchers.certificates import CertificatesFetcher
 from cloudflare_executive_report.fetchers.dns import DnsFetcher
+from cloudflare_executive_report.fetchers.dns_records import DnsRecordsFetcher
 from cloudflare_executive_report.fetchers.http import HttpFetcher
+from cloudflare_executive_report.fetchers.http_adaptive import HttpAdaptiveFetcher
 from cloudflare_executive_report.fetchers.security import SecurityFetcher
 from cloudflare_executive_report.fetchers.types import Fetcher
 
@@ -14,8 +18,12 @@ from cloudflare_executive_report.fetchers.types import Fetcher
 FETCHER_REGISTRY: dict[str, Fetcher] = {
     "dns": DnsFetcher(),
     "http": HttpFetcher(),
+    "http_adaptive": HttpAdaptiveFetcher(),
     "security": SecurityFetcher(),
     "cache": CacheFetcher(),
+    "dns_records": DnsRecordsFetcher(),
+    "audit": AuditFetcher(),
+    "certificates": CertificatesFetcher(),
 }
 
 

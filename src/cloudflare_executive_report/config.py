@@ -35,26 +35,77 @@ class ZoneEntry:
 
 
 @dataclass
+class CoverConfig:
+    enabled: bool = True
+    company_name: str = ""
+    logo_path: str = ""
+    title: str = "Cloudflare Executive Report"
+    subtitle: str = "Security & Performance Overview"
+    notes: str = ""
+    prepared_for: str = ""
+    classification: str = ""
+    date_format: str = "%d/%b/%Y"
+
+    def resolved_logo_path(self) -> Path | None:
+        raw = self.logo_path.strip()
+        if not raw:
+            return None
+        try:
+            return expand_path(raw)
+        except Exception:
+            return None
+
+
+@dataclass
 class AppConfig:
     api_token: str = ""
     cache_dir: str = "~/.cache/cf-report"
+    output_dir: str = "~/.cf-report"
     default_zone: str = ""
     log_level: str = "info"
     # low | medium | high - matplotlib DPI for PDF maps/charts (smaller file vs sharper plots)
     pdf_image_quality: str = "medium"
     zones: list[ZoneEntry] = field(default_factory=list)
+    cover: CoverConfig = field(default_factory=CoverConfig)
 
     def cache_path(self) -> Path:
         return expand_path(self.cache_dir)
+
+    def output_path(self) -> Path:
+        return expand_path(self.output_dir)
+
+    def report_outputs_dir(self) -> Path:
+        return self.output_path() / "outputs"
+
+    def report_current_path(self) -> Path:
+        return self.report_outputs_dir() / "cf_report.json"
+
+    def report_previous_path(self) -> Path:
+        return self.report_outputs_dir() / "cf_report.previous.json"
+
+    def report_history_dir(self) -> Path:
+        return self.report_outputs_dir() / "history"
 
     def to_yaml_dict(self) -> dict[str, Any]:
         return {
             "api_token": self.api_token,
             "cache_dir": self.cache_dir,
+            "output_dir": self.output_dir,
             "default_zone": self.default_zone,
             "log_level": self.log_level,
             "pdf_image_quality": self.pdf_image_quality,
             "zones": [{"id": z.id, "name": z.name} for z in self.zones],
+            "cover": {
+                "enabled": self.cover.enabled,
+                "company_name": self.cover.company_name,
+                "logo_path": self.cover.logo_path,
+                "title": self.cover.title,
+                "subtitle": self.cover.subtitle,
+                "notes": self.cover.notes,
+                "prepared_for": self.cover.prepared_for,
+                "classification": self.cover.classification,
+                "date_format": self.cover.date_format,
+            },
         }
 
     @classmethod
@@ -65,13 +116,29 @@ class AppConfig:
         pdf_image_quality = parse_pdf_image_quality(
             str(pq_raw) if pq_raw is not None else None
         ).value
+        cover_raw = data.get("cover") or {}
+        if not isinstance(cover_raw, dict):
+            cover_raw = {}
+        cover = CoverConfig(
+            enabled=bool(cover_raw.get("enabled", True)),
+            company_name=str(cover_raw.get("company_name") or ""),
+            logo_path=str(cover_raw.get("logo_path") or ""),
+            title=str(cover_raw.get("title") or "Cloudflare Executive Report"),
+            subtitle=str(cover_raw.get("subtitle") or "Security & Performance Overview"),
+            notes=str(cover_raw.get("notes") or ""),
+            prepared_for=str(cover_raw.get("prepared_for") or ""),
+            classification=str(cover_raw.get("classification") or ""),
+            date_format=str(cover_raw.get("date_format") or "%d/%b/%Y"),
+        )
         return cls(
             api_token=str(data.get("api_token") or ""),
             cache_dir=str(data.get("cache_dir") or "~/.cache/cf-report"),
+            output_dir=str(data.get("output_dir") or "~/.cf-report"),
             default_zone=str(data.get("default_zone") or ""),
             log_level=str(data.get("log_level") or "info"),
             pdf_image_quality=pdf_image_quality,
             zones=zones,
+            cover=cover,
         )
 
 
@@ -104,8 +171,10 @@ def template_config() -> AppConfig:
     return AppConfig(
         api_token="cfat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
         cache_dir="~/.cache/cf-report",
+        output_dir="~/.cf-report",
         default_zone="",
         log_level="info",
         pdf_image_quality="medium",
         zones=[],
+        cover=CoverConfig(),
     )

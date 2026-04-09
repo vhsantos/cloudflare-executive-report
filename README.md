@@ -57,27 +57,32 @@ zones:
 
 ## What gets collected
 
-| Piece       | Source                                                  | Cached per day                |
-| ----------- | ------------------------------------------------------- | ----------------------------- |
-| DNS         | GraphQL `dnsAnalyticsAdaptiveGroups`                    | `dns.json`                    |
-| HTTP        | GraphQL `httpRequests1dGroups`                          | `http.json`                   |
-| Security    | GraphQL `httpRequestsAdaptiveGroups` (security-focused) | `security.json`               |
-| Cache       | GraphQL `httpRequestsAdaptiveGroups` (cache-focused)    | `cache.json`                  |
-| Zone health | REST (settings, DNSSEC, firewall rules)                 | Not cached (live each report) |
+| Piece         | Source                                                  | Cached per day                |
+| ------------- | ------------------------------------------------------- | ----------------------------- |
+| DNS           | GraphQL `dnsAnalyticsAdaptiveGroups`                    | `dns.json`                    |
+| HTTP (daily)  | GraphQL `httpRequests1dGroups`                          | `http.json`                   |
+| HTTP adaptive | GraphQL `httpRequestsAdaptiveGroups` (status + latency) | `http_adaptive.json`          |
+| Security      | GraphQL `httpRequestsAdaptiveGroups` (security-focused) | `security.json`               |
+| Cache         | GraphQL `httpRequestsAdaptiveGroups` (cache-focused)    | `cache.json`                  |
+| DNS records   | SDK (`dns.records.list`, snapshot)                      | `dns_records.json`            |
+| Audit logs    | SDK (`audit_logs.list`, snapshot)                       | `audit.json`                  |
+| Certificates  | SDK (`ssl.certificate_packs.list`, snapshot)            | `certificates.json`           |
+| Zone health   | REST (settings, DNSSEC, firewall rules)                 | Not cached (live each report) |
 
 ## Executive summary (v1)
 
-Each zone in `cf_report_output.json` includes `executive_summary`, derived from existing sections (`dns`, `http`, `security`, `cache`, `zone_health`) without extra fetchers.
+Each zone in `cf_report_output.json` includes `executive_summary`, derived from synced rollups plus live `zone_health`: `dns`, `http`, `http_adaptive`, `security`, `cache`, `dns_records`, `audit`, `certificates`, and `zone_health`.
 
-- Core fields include `verdict`, `verdict_reasons`, `kpis`, `takeaways`, and `actions`.
+- Core fields include `verdict`, `verdict_reasons`, `kpis`, `takeaways`, and `actions` (up to five).
 - The same shared builder (`build_executive_summary`) is used by both JSON sync output and PDF rendering.
+- Reliability wording for adaptive HTTP uses shared thresholds in `executive/constants.py`.
 - Executive security wording is business-facing:
-  - `Threats blocked/challenged`
+  - `Blocked/Challenged`
   - `Mitigation rate`
 
 PDF reports render this executive summary first (per zone) before stream detail pages.
 
-Analytics are **sampled** by Cloudflare; totals and rankings are **approximate** and may differ slightly from the dashboard ("based on X% sample" messages are expected).
+Analytics from Cloudflare may use different aggregation windows than raw logs; totals and rankings are approximate and may differ slightly from the dashboard.
 
 ## Retention (UTC calendar days)
 
@@ -120,18 +125,16 @@ Illustrative cache layout and interim JSON report: **[docs/sample-data/](docs/sa
 
 ### `cf-report sync`
 
-| Option               | Meaning                                                                                                             |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| *(default)*          | **Incremental:** fetch missing UTC days from index through **yesterday** (respects cache unless missing/error).     |
-| `--last N`           | Restrict work to the last **N** complete UTC days (through yesterday); **still uses cache** unless **`--refresh`**. |
-| `--start` / `--end`  | Fixed inclusive date range; **`--end`** must not be after yesterday unless **`--include-today`**.                   |
-| `--refresh`          | Refetch everything in the active window (ignore good cache).                                                        |
-| `--include-today`    | Include today in the report (live API; not cached as a day file).                                                   |
-| `--output` / `-o`    | Report path (default: `./cf_report_output.json`).                                                                   |
-| `--zone`             | One zone id or name from config; if omitted, **`default_zone`** is used when set.                                   |
-| `--types`            | Comma-separated streams: `dns`, `http`, `security`, `cache` (default: all registered).                              |
-| `--top N`            | Length of ranked lists in the report (default: 10).                                                                 |
-| `--skip-zone-health` | Omit zone health REST calls.                                                                                        |
+- *(default)*: **Incremental** fetch of missing UTC days through **yesterday** (uses cache unless missing/error).
+- `--last N`: restrict work to last **N** complete UTC days (still uses cache unless `--refresh`).
+- `--start` / `--end`: fixed inclusive date range; `--end` cannot be after yesterday unless `--include-today`.
+- `--refresh`: refetch active window (ignore good cache).
+- `--include-today`: include today in report (live API; not cached as day file).
+- `--output` / `-o`: report path (default `./cf_report_output.json`).
+- `--zone`: one zone id/name from config; if omitted, uses `default_zone` when set.
+- `--types`: comma-separated streams: `dns`, `http`, `http_adaptive`, `security`, `cache`, `dns_records`, `audit`, `certificates` (default all registered).
+- `--top N`: ranked-list length (default 10).
+- `--skip-zone-health`: omit zone health REST calls.
 
 Global: **`--verbose` / `-v`** (debug for this run), **`--quiet` / -q** (errors only). Config **`log_level`** applies when not overridden.
 

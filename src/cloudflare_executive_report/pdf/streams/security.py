@@ -8,7 +8,7 @@ from typing import Any
 from reportlab.lib.units import inch
 from reportlab.platypus import Paragraph, Spacer, Table
 
-from cloudflare_executive_report.aggregate import format_count_human
+from cloudflare_executive_report.formatting import format_count_human
 from cloudflare_executive_report.pdf.charts import prepare_triple_line_daily_metric_series
 from cloudflare_executive_report.pdf.layout_spec import SecurityStreamLayout
 from cloudflare_executive_report.pdf.primitives import (

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from cloudflare import PermissionDeniedError
+from cloudflare import APIStatusError, PermissionDeniedError
 
 from cloudflare_executive_report.cf_client import CloudflareClient
 
@@ -68,23 +68,63 @@ def _dnssec_status(sdk: Any, zone_id: str, warnings: list[str]) -> str:
         return UNAVAILABLE
 
 
-def _firewall_rules_active_count(sdk: Any, zone_id: str, warnings: list[str]) -> int:
-    try:
-        n = 0
-        for rule in sdk.firewall.rules.list(zone_id=zone_id):
-            if getattr(rule, "paused", None) is True:
+def _is_missing_phase_entrypoint_error(exc: Exception) -> bool:
+    """True when zone phase has no entrypoint ruleset configured yet."""
+    if isinstance(exc, APIStatusError):
+        if getattr(exc, "status_code", None) != 404:
+            return False
+        body = getattr(exc, "body", None)
+        if isinstance(body, dict):
+            for err in body.get("errors", []):
+                if str(err.get("code")) == "10003":
+                    return True
+        msg = str(exc)
+        return "10003" in msg
+    return False
+
+
+def _ruleset_rules_active_count(sdk: Any, zone_id: str, warnings: list[str]) -> int:
+    """
+    Count enabled rules from Ruleset Engine zone entrypoint phases.
+
+    Replaces deprecated Firewall Rules API usage.
+    """
+    phases = (
+        "http_request_firewall_custom",
+        "http_ratelimit",
+    )
+    total = 0
+    fetched_any = False
+    handled_missing_phase = False
+    for phase in phases:
+        try:
+            entry = sdk.rulesets.phases.get(phase, zone_id=zone_id)
+            fetched_any = True
+            rules = getattr(entry, "rules", None) or []
+            for rule in rules:
+                enabled = getattr(rule, "enabled", None)
+                if enabled is None:
+                    dumped = rule.model_dump() if hasattr(rule, "model_dump") else {}
+                    enabled = bool(dumped.get("enabled"))
+                if enabled is False:
+                    continue
+                total += 1
+        except PermissionDeniedError:
+            _warn(
+                warnings,
+                "Zone health security_rules_active unavailable (permission denied)",
+            )
+            return -1
+        except Exception as e:
+            if _is_missing_phase_entrypoint_error(e):
+                handled_missing_phase = True
                 continue
-            n += 1
-        return n
-    except PermissionDeniedError:
-        _warn(
-            warnings,
-            "Zone health security_rules_active unavailable (permission denied)",
-        )
+            # Missing phase/entrypoint or unavailable product should not fail whole health snapshot.
+            _warn(warnings, f"Zone health security_rules_active phase {phase} unavailable: {e}")
+            continue
+    if not fetched_any and not handled_missing_phase:
         return -1
-    except Exception as e:
-        _warn(warnings, f"Zone health security_rules_active unavailable: {e}")
-        return -1
+    return total
 
 
 def fetch_zone_health(
@@ -93,6 +133,7 @@ def fetch_zone_health(
     zone_name: str,
     *,
     skip: bool,
+    zone_meta: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     warnings: list[str] = []
     if skip:
@@ -110,19 +151,23 @@ def fetch_zone_health(
     sdk = client.sdk
     out: dict[str, Any] = {}
 
-    try:
-        z = sdk.zones.get(zone_id=zone_id)
-        if z is None:
+    if zone_meta is not None:
+        st = zone_meta.get("status")
+        out["zone_status"] = str(st) if st is not None else UNAVAILABLE
+    else:
+        try:
+            z = sdk.zones.get(zone_id=zone_id)
+            if z is None:
+                out["zone_status"] = UNAVAILABLE
+            else:
+                st = getattr(z, "status", None)
+                out["zone_status"] = str(st) if st is not None else UNAVAILABLE
+        except PermissionDeniedError:
+            _warn(warnings, f"Zone health zone_status unavailable for {zone_name}")
             out["zone_status"] = UNAVAILABLE
-        else:
-            st = getattr(z, "status", None)
-            out["zone_status"] = str(st) if st is not None else UNAVAILABLE
-    except PermissionDeniedError:
-        _warn(warnings, f"Zone health zone_status unavailable for {zone_name}")
-        out["zone_status"] = UNAVAILABLE
-    except Exception as e:
-        _warn(warnings, f"Zone health zone_status unavailable: {e}")
-        out["zone_status"] = UNAVAILABLE
+        except Exception as e:
+            _warn(warnings, f"Zone health zone_status unavailable: {e}")
+            out["zone_status"] = UNAVAILABLE
 
     out["ssl_mode"] = _setting_value(sdk, zone_id, "ssl", warnings, label="ssl_mode")
     out["always_https"] = _setting_value(
@@ -136,7 +181,7 @@ def fetch_zone_health(
         sdk, zone_id, "advanced_ddos", warnings, label="ddos_protection"
     )
 
-    cnt = _firewall_rules_active_count(sdk, zone_id, warnings)
+    cnt = _ruleset_rules_active_count(sdk, zone_id, warnings)
     if cnt < 0:
         out["security_rules_active"] = UNAVAILABLE
     else:

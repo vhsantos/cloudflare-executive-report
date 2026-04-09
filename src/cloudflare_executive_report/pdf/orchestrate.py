@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from reportlab.platypus import PageBreak, Paragraph, Spacer
+from reportlab.platypus import PageBreak, Spacer
 
 from cloudflare_executive_report.cf_client import CloudflareClient
 from cloudflare_executive_report.config import AppConfig
-from cloudflare_executive_report.executive_summary import build_executive_summary
+from cloudflare_executive_report.dates import parse_ymd
+from cloudflare_executive_report.executive.summary import build_executive_summary
+from cloudflare_executive_report.pdf.cover import append_cover_page
 from cloudflare_executive_report.pdf.document import build_simple_doc, footer_canvas_factory
 from cloudflare_executive_report.pdf.figure_quality import (
     parse_pdf_image_quality,
@@ -19,8 +22,12 @@ from cloudflare_executive_report.pdf.figure_quality import (
 )
 from cloudflare_executive_report.pdf.layout_spec import ReportSpec
 from cloudflare_executive_report.pdf.loader import (
+    load_audit_for_range,
     load_cache_for_range,
+    load_certificates_for_range,
     load_dns_for_range,
+    load_dns_records_for_range,
+    load_http_adaptive_for_range,
     load_http_for_range,
     load_security_for_range,
 )
@@ -31,6 +38,8 @@ from cloudflare_executive_report.pdf.streams.executive_summary import append_exe
 from cloudflare_executive_report.pdf.streams.http import append_http_stream
 from cloudflare_executive_report.pdf.streams.security import append_security_stream
 from cloudflare_executive_report.pdf.theme import Theme
+from cloudflare_executive_report.sync.options import SyncOptions
+from cloudflare_executive_report.sync.orchestrator import select_previous_report_for_period
 from cloudflare_executive_report.zone_health import fetch_zone_health
 
 log = logging.getLogger(__name__)
@@ -54,11 +63,33 @@ def resolve_zone(cfg: AppConfig, key: str) -> tuple[str, str]:
     return key, key
 
 
+def _load_previous_report(cfg: AppConfig) -> dict[str, Any] | None:
+    path = cfg.report_previous_path()
+    if not path.is_file():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _find_previous_zone(
+    previous_report: dict[str, Any] | None, zone_id: str
+) -> dict[str, Any] | None:
+    if not isinstance(previous_report, dict):
+        return None
+    for zone in previous_report.get("zones") or []:
+        if isinstance(zone, dict) and str(zone.get("zone_id") or "") == zone_id:
+            return zone
+    return None
+
+
 def write_report_pdf(
     output_path: Path,
     cfg: AppConfig,
     spec: ReportSpec,
     *,
+    sync_opts: SyncOptions | None = None,
     theme: Theme | None = None,
 ) -> None:
     if theme is not None:
@@ -69,6 +100,7 @@ def write_report_pdf(
     cache_root = cfg.cache_path()
     styles = make_styles(th)
     story: list[Any] = []
+    append_cover_page(story, cover=cfg.cover, spec=spec, styles=styles, theme=th)
 
     cache_stream_in_report = any(s.strip().lower() == "cache" for s in spec.streams)
 
@@ -76,17 +108,14 @@ def write_report_pdf(
         zone_id, zone_name = resolve_zone(cfg, zone_key)
         if zi > 0:
             story.append(PageBreak())
-        story.append(
-            Paragraph(
-                f"<font color='{th.slate}'><b>{zone_name}</b></font> "
-                f"<font color='{th.muted}'>({zone_id})</font>",
-                styles["RepZoneTitle"],
-            )
-        )
         story.append(Spacer(1, 6))
 
         loaded_dns = None
         loaded_http = None
+        loaded_http_adaptive = None
+        loaded_dns_records = None
+        loaded_audit = None
+        loaded_certificates = None
         loaded_security = None
         loaded_cache = None
         zone_warnings: list[str] = []
@@ -134,6 +163,44 @@ def write_report_pdf(
                 )
                 zone_warnings.extend(loaded_cache.warnings)
 
+        if spec.include_executive_summary:
+            loaded_http_adaptive = load_http_adaptive_for_range(
+                cache_root,
+                zone_id,
+                zone_name,
+                spec.start,
+                spec.end,
+                top=spec.top,
+            )
+            zone_warnings.extend(loaded_http_adaptive.warnings)
+            loaded_dns_records = load_dns_records_for_range(
+                cache_root,
+                zone_id,
+                zone_name,
+                spec.start,
+                spec.end,
+                top=spec.top,
+            )
+            zone_warnings.extend(loaded_dns_records.warnings)
+            loaded_audit = load_audit_for_range(
+                cache_root,
+                zone_id,
+                zone_name,
+                spec.start,
+                spec.end,
+                top=spec.top,
+            )
+            zone_warnings.extend(loaded_audit.warnings)
+            loaded_certificates = load_certificates_for_range(
+                cache_root,
+                zone_id,
+                zone_name,
+                spec.start,
+                spec.end,
+                top=spec.top,
+            )
+            zone_warnings.extend(loaded_certificates.warnings)
+
         zone_health: dict[str, Any]
         health_warnings: list[str]
         with CloudflareClient(cfg.api_token) as client:
@@ -141,14 +208,33 @@ def write_report_pdf(
         zone_warnings.extend(health_warnings)
 
         if spec.include_executive_summary:
+            if sync_opts is None:
+                previous_report = _load_previous_report(cfg)
+            else:
+                previous_report = select_previous_report_for_period(
+                    cfg,
+                    current_start=spec.start,
+                    current_end=spec.end,
+                    zone_id=zone_id,
+                    opts=sync_opts,
+                )
             executive_summary = build_executive_summary(
+                zone_id=zone_id,
                 zone_name=zone_name,
                 zone_health=zone_health,
                 dns=loaded_dns.rollup if loaded_dns else None,
                 http=loaded_http.rollup if loaded_http else None,
                 security=loaded_security.rollup if loaded_security else None,
                 cache=loaded_cache.rollup if loaded_cache else None,
+                http_adaptive=loaded_http_adaptive.rollup if loaded_http_adaptive else None,
+                dns_records=loaded_dns_records.rollup if loaded_dns_records else None,
+                audit=loaded_audit.rollup if loaded_audit else None,
+                certificates=loaded_certificates.rollup if loaded_certificates else None,
                 warnings=zone_warnings,
+                as_of_date=parse_ymd(spec.end),
+                current_period={"start": spec.start, "end": spec.end},
+                previous_report=previous_report,
+                previous_zone=_find_previous_zone(previous_report, zone_id),
             )
             append_executive_summary(
                 story,

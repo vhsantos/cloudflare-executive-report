@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import calendar
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
 
@@ -38,6 +39,33 @@ def utc_now_iso_z() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def parse_iso_datetime_z(value: object) -> datetime | None:
+    """Parse ISO datetime strings, accepting both Z and offset forms."""
+    s = str(value or "").strip()
+    if not s:
+        return None
+    try:
+        if s.endswith("Z"):
+            return datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return datetime.fromisoformat(s)
+    except ValueError:
+        return None
+
+
+def format_date_with_days_from_iso(iso_value: object, *, as_of: date) -> str:
+    """Format ISO datetime as YYYY-MM-DD plus day delta from as_of."""
+    dt = parse_iso_datetime_z(iso_value)
+    if dt is None:
+        return "-"
+    exp = dt.astimezone(UTC).date()
+    days = (exp - as_of).days
+    if days < 0:
+        return f"{exp.isoformat()} ({abs(days)} days ago)"
+    if days == 0:
+        return f"{exp.isoformat()} (today)"
+    return f"{exp.isoformat()} ({days} days)"
+
+
 def iter_dates_inclusive(start: date, end: date) -> Iterator[date]:
     if end < start:
         return
@@ -54,3 +82,23 @@ def last_n_complete_days(n: int, *, yesterday: date | None = None) -> tuple[date
     y = yesterday if yesterday is not None else utc_yesterday()
     start = y - timedelta(days=n - 1)
     return start, y
+
+
+def week_bounds(d: date) -> tuple[date, date]:
+    """Return Monday..Sunday bounds for the week containing d."""
+    start = d - timedelta(days=d.weekday())
+    end = start + timedelta(days=6)
+    return start, end
+
+
+def month_bounds(d: date) -> tuple[date, date]:
+    """Return first..last day bounds for the month containing d."""
+    last_day = calendar.monthrange(d.year, d.month)[1]
+    start = date(d.year, d.month, 1)
+    end = date(d.year, d.month, last_day)
+    return start, end
+
+
+def year_bounds(d: date) -> tuple[date, date]:
+    """Return first..last day bounds for the year containing d."""
+    return date(d.year, 1, 1), date(d.year, 12, 31)
