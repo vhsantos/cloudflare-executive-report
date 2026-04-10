@@ -488,8 +488,8 @@ def kpi_multi_cell_row(
         ("LINEBELOW", (0, 0), (-1, -1), 1.5, colors.HexColor(theme.primary)),
         ("LEFTPADDING", (0, 0), (-1, -1), 8),
         ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-        ("TOPPADDING", (0, 0), (-1, -1), 12),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
     ]
     for c in range(1, len(col_widths), 2):
         style_cmds.extend(

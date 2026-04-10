@@ -11,8 +11,8 @@ from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
 
 from cloudflare_executive_report.common.constants import (
     PDF_MAP_SIDE_BY_SIDE_MAP_WIDTH_SHARE,
-    PDF_SPACE_LARGE_PT,
     PDF_SPACE_MEDIUM_PT,
+    PDF_SPACE_SMALL_PT,
 )
 from cloudflare_executive_report.pdf.charts import prepare_daily_metric_series
 from cloudflare_executive_report.pdf.maps import map_height_in_for_width
@@ -174,7 +174,7 @@ def append_map_and_ranked_table(
             show_outer_card=False,
         )
         story.append(map_side_by_side_table(map_fig, side_table, content_width_in=w_content))
-        story.append(Spacer(1, PDF_SPACE_LARGE_PT))
+        story.append(Spacer(1, PDF_SPACE_SMALL_PT))
         return
 
     if has_map:
@@ -195,4 +195,4 @@ def append_map_and_ranked_table(
         )
         story.append(full_table)
         if append_space_after_table_only:
-            story.append(Spacer(1, PDF_SPACE_LARGE_PT))
+            story.append(Spacer(1, PDF_SPACE_SMALL_PT))

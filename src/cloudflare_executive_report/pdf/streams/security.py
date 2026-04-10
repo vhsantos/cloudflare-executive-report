@@ -9,7 +9,6 @@ from reportlab.lib.units import inch
 from reportlab.platypus import Paragraph, Spacer, Table
 
 from cloudflare_executive_report.common.constants import (
-    PDF_SPACE_LARGE_PT,
     PDF_SPACE_MEDIUM_PT,
     PDF_SPACE_SMALL_PT,
 )
@@ -110,7 +109,7 @@ def append_security_stream(
                 content_width_in=w_content,
             )
         )
-        story.append(Spacer(1, PDF_SPACE_LARGE_PT))
+        story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
     if "timeseries" in blocks:
         png_t, sub_t = prepare_triple_line_daily_metric_series(
@@ -182,7 +181,7 @@ def append_security_stream(
         two_col = Table([[left, right]], colWidths=[w_half, w_half])
         two_col.setStyle(two_column_gap_style(theme))
         story.append(two_col)
-        story.append(Spacer(1, PDF_SPACE_LARGE_PT))
+        story.append(Spacer(1, PDF_SPACE_SMALL_PT))
     else:
         if "actions" in blocks and rows_top:
             story.append(
@@ -195,7 +194,7 @@ def append_security_stream(
                     theme=theme,
                 )
             )
-            story.append(Spacer(1, PDF_SPACE_LARGE_PT))
+            story.append(Spacer(1, PDF_SPACE_SMALL_PT))
         if "services" in blocks and svc_rows:
             story.append(
                 table_with_bars(
@@ -207,7 +206,7 @@ def append_security_stream(
                     theme=theme,
                 )
             )
-            story.append(Spacer(1, PDF_SPACE_LARGE_PT))
+            story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
     atk_items: list[dict[str, Any]] = []
     for r in security.get("top_attack_sources") or []:
@@ -250,7 +249,7 @@ def append_security_stream(
                 styles["RepFootnote"],
             )
         )
-        story.append(Spacer(1, PDF_SPACE_LARGE_PT))
+        story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
     if "attack_paths" in blocks:
         path_items = list(security.get("top_attack_paths") or [])
@@ -266,7 +265,7 @@ def append_security_stream(
                     theme=theme,
                 )
             )
-            story.append(Spacer(1, PDF_SPACE_LARGE_PT))
+            story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
     if "countries" in blocks:
         c_rows = ranked_rows_from_dicts(
@@ -286,7 +285,7 @@ def append_security_stream(
                     theme=theme,
                 )
             )
-            story.append(Spacer(1, PDF_SPACE_LARGE_PT))
+            story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
     cache_rows = ranked_rows_from_dicts(
         apply_row_label_formatter(
@@ -330,7 +329,7 @@ def append_security_stream(
         two_col = Table([[left, right]], colWidths=[w_half, w_half])
         two_col.setStyle(two_column_gap_style(theme))
         story.append(two_col)
-        story.append(Spacer(1, PDF_SPACE_LARGE_PT))
+        story.append(Spacer(1, PDF_SPACE_SMALL_PT))
     else:
         if show_cache_perf and cache_rows:
             story.append(
@@ -343,7 +342,7 @@ def append_security_stream(
                     theme=theme,
                 )
             )
-            story.append(Spacer(1, PDF_SPACE_LARGE_PT))
+            story.append(Spacer(1, PDF_SPACE_SMALL_PT))
         if "methods" in blocks and method_rows:
             story.append(
                 table_with_bars(

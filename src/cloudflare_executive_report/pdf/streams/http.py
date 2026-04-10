@@ -9,8 +9,8 @@ from reportlab.platypus import Spacer
 
 from cloudflare_executive_report.common.constants import (
     PDF_MAP_SIDE_TABLE_MAX_ROWS,
-    PDF_SPACE_LARGE_PT,
     PDF_SPACE_MEDIUM_PT,
+    PDF_SPACE_SMALL_PT,
 )
 from cloudflare_executive_report.pdf.charts import (
     prepare_daily_metric_series,
@@ -139,7 +139,7 @@ def append_http_stream(
                 content_width_in=w_content,
             )
         )
-        story.append(Spacer(1, PDF_SPACE_LARGE_PT))
+        story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
     country_totals = _country_totals_from_rollup(http)
     side_row_limit = min(top, PDF_MAP_SIDE_TABLE_MAX_ROWS)

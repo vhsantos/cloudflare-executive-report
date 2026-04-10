@@ -10,7 +10,7 @@ from reportlab.platypus import Spacer, Table, TableStyle
 
 from cloudflare_executive_report.common.constants import (
     PDF_MAP_SIDE_TABLE_MAX_ROWS,
-    PDF_SPACE_LARGE_PT,
+    PDF_SPACE_SMALL_PT,
 )
 from cloudflare_executive_report.pdf.layout_spec import DnsStreamLayout
 from cloudflare_executive_report.pdf.maps import world_map_from_colos_bytes
@@ -81,7 +81,7 @@ def append_dns_stream(
                 content_width_in=w_content,
             )
         )
-        story.append(Spacer(1, PDF_SPACE_LARGE_PT))
+        story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
     top_colos = list(dns.get("top_data_centers") or [])
     side_row_limit = min(top, PDF_MAP_SIDE_TABLE_MAX_ROWS)
@@ -131,7 +131,7 @@ def append_dns_stream(
         two_col = Table([[left, right]], colWidths=[w_half, w_half])
         two_col.setStyle(two_column_gap_style(theme))
         story.append(two_col)
-        story.append(Spacer(1, PDF_SPACE_LARGE_PT))
+        story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
     proto = ranked_rows_from_dicts(list(dns.get("protocols") or []), top, "protocol")
     ip_v = ranked_rows_from_dicts(list(dns.get("ip_versions") or []), top, "version")
@@ -178,7 +178,7 @@ def append_dns_stream(
             )
         )
         story.append(triple)
-        story.append(Spacer(1, PDF_SPACE_LARGE_PT))
+        story.append(Spacer(1, PDF_SPACE_SMALL_PT))
     elif "ip_versions" in blocks:
         ip_block = table_with_bars(
             "IP versions",

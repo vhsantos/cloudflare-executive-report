@@ -7,7 +7,6 @@ from typing import Any
 from reportlab.platypus import Paragraph, Spacer
 
 from cloudflare_executive_report.common.constants import (
-    PDF_SPACE_LARGE_PT,
     PDF_SPACE_MEDIUM_PT,
     PDF_SPACE_SMALL_PT,
 )
@@ -234,7 +233,7 @@ def append_executive_summary(
             content_width_in=w_content,
         )
     )
-    story.append(Spacer(1, PDF_SPACE_LARGE_PT))
+    story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
     takeaways = [str(x) for x in (summary.get("takeaways") or []) if str(x).strip()]
     actions = [str(x) for x in (summary.get("actions") or []) if str(x).strip()]

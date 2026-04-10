@@ -8,7 +8,6 @@ from typing import Any
 from reportlab.platypus import Paragraph, Spacer, Table
 
 from cloudflare_executive_report.common.constants import (
-    PDF_SPACE_LARGE_PT,
     PDF_SPACE_MEDIUM_PT,
     PDF_SPACE_SMALL_PT,
 )
@@ -97,7 +96,7 @@ def append_cache_stream(
                 content_width_in=w_content,
             )
         )
-        story.append(Spacer(1, PDF_SPACE_LARGE_PT))
+        story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
     if "timeseries" in blocks:
         png_t, sub_t = prepare_dual_line_daily_metric_series(
@@ -164,7 +163,7 @@ def append_cache_stream(
         two_col = Table([[left, right]], colWidths=[w_half, w_half])
         two_col.setStyle(two_column_gap_style(theme))
         story.append(two_col)
-        story.append(Spacer(1, PDF_SPACE_LARGE_PT))
+        story.append(Spacer(1, PDF_SPACE_SMALL_PT))
     else:
         if "status" in blocks and status_rows:
             story.append(
@@ -177,7 +176,7 @@ def append_cache_stream(
                     theme=theme,
                 )
             )
-            story.append(Spacer(1, PDF_SPACE_LARGE_PT))
+            story.append(Spacer(1, PDF_SPACE_SMALL_PT))
         if "mime_http_1d" in blocks and mime_rows:
             story.append(
                 table_with_bars(
@@ -197,7 +196,7 @@ def append_cache_stream(
                     styles["RepFootnote"],
                 )
             )
-            story.append(Spacer(1, PDF_SPACE_LARGE_PT))
+            story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
     path_rows = ranked_rows_from_dicts(list(cache.get("top_paths") or []), top, "path")
     if "paths" in blocks and path_rows:
