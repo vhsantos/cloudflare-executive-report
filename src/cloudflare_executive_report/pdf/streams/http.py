@@ -26,9 +26,9 @@ from cloudflare_executive_report.pdf.primitives import (
     ranked_rows_from_dicts,
 )
 from cloudflare_executive_report.pdf.stream_fragments import (
+    append_chart_section,
     append_map_and_ranked_table,
     append_missing_dates_note,
-    append_png_chart_section,
     append_stream_header,
 )
 from cloudflare_executive_report.pdf.theme import Theme
@@ -179,25 +179,25 @@ def append_http_stream(
 
     if "timeseries" in blocks:
         req_pairs = _zip_cached_uncached_pairs(daily_requests_cached, daily_requests_uncached)
-        png_r, sub_r = prepare_stacked_daily_metric_series(
+        chart_bytes_requests, sub_r = prepare_stacked_daily_metric_series(
             req_pairs,
             theme,
             chart_title="HTTP requests",
             bottom_legend="Cached",
             top_legend="Uncached",
         )
-        append_png_chart_section(
+        append_chart_section(
             story,
             styles,
             theme,
             blocks,
             heading=None,
-            png=png_r,
+            chart_bytes=chart_bytes_requests,
             subtitle=sub_r,
         )
 
         bw_pairs = _zip_cached_uncached_pairs(daily_bytes_cached, daily_bytes_uncached)
-        png_b, sub_b = prepare_stacked_daily_metric_series(
+        chart_bytes_bandwidth, sub_b = prepare_stacked_daily_metric_series(
             bw_pairs,
             theme,
             chart_title="HTTP bandwidth",
@@ -205,28 +205,28 @@ def append_http_stream(
             top_legend="Uncached",
             y_scale="bytes",
         )
-        append_png_chart_section(
+        append_chart_section(
             story,
             styles,
             theme,
             blocks,
             heading=None,
-            png=png_b,
+            chart_bytes=chart_bytes_bandwidth,
             subtitle=sub_b,
         )
 
-        png_u, sub_u = prepare_daily_metric_series(
+        chart_bytes_uniques, sub_u = prepare_daily_metric_series(
             daily_uniques,
             theme,
             chart_title="Unique visitors",
             y_axis_label="Unique visitors",
         )
-        append_png_chart_section(
+        append_chart_section(
             story,
             styles,
             theme,
             blocks,
             heading=None,
-            png=png_u,
+            chart_bytes=chart_bytes_uniques,
             subtitle=sub_u,
         )

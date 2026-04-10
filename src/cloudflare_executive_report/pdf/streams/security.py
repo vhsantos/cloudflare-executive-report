@@ -30,9 +30,9 @@ from cloudflare_executive_report.pdf.security_display import (
     format_security_source_label,
 )
 from cloudflare_executive_report.pdf.stream_fragments import (
+    append_chart_section,
     append_map_and_ranked_table,
     append_missing_dates_note,
-    append_png_chart_section,
     append_stream_header,
 )
 from cloudflare_executive_report.pdf.theme import Theme
@@ -281,7 +281,7 @@ def append_security_stream(
             story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
     if "timeseries" in blocks:
-        png_t, sub_t = prepare_triple_line_daily_metric_series(
+        chart_bytes_timeseries, sub_t = prepare_triple_line_daily_metric_series(
             daily_security_triple,
             theme,
             chart_title="Daily requests",
@@ -289,13 +289,13 @@ def append_security_stream(
             legend_cf="Served by Cloudflare",
             legend_or="Served by origin",
         )
-        append_png_chart_section(
+        append_chart_section(
             story,
             styles,
             theme,
             blocks,
             heading=None,
-            png=png_t,
+            chart_bytes=chart_bytes_timeseries,
             subtitle=sub_t,
         )
         story.append(Spacer(1, PDF_SPACE_SMALL_PT))

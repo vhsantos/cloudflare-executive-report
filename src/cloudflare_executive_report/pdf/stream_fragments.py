@@ -95,13 +95,13 @@ def append_timeseries_if_enabled(
 ) -> None:
     if "timeseries" not in blocks:
         return
-    png, sub = prepare_daily_metric_series(
+    chart_bytes, sub = prepare_daily_metric_series(
         daily_points,
         theme,
         chart_title=chart_title,
         y_axis_label=y_axis_label,
     )
-    if not png:
+    if not chart_bytes:
         return
     w_content = theme.content_width_in()
     if heading:
@@ -110,21 +110,21 @@ def append_timeseries_if_enabled(
         story.append(Paragraph(f"<i>{sub}</i>", styles["RepFootnote"]))
     tw = w_content - (10.0 / inch)
     th = tw * 0.38
-    story.append(figure_from_bytes(png, width_in=tw, height_in=th))
+    story.append(figure_from_bytes(chart_bytes, width_in=tw, height_in=th))
 
 
-def append_png_chart_section(
+def append_chart_section(
     story: list[Any],
     styles: Any,
     theme: Theme,
     blocks: set[str],
     *,
     heading: str | None = None,
-    png: bytes,
+    chart_bytes: bytes,
     subtitle: str = "",
 ) -> None:
-    """Append a chart image when ``timeseries`` is enabled and ``png`` is non-empty."""
-    if "timeseries" not in blocks or not png:
+    """Append a chart image when ``timeseries`` is enabled and bytes are non-empty."""
+    if "timeseries" not in blocks or not chart_bytes:
         return
     w_content = theme.content_width_in()
     if heading:
@@ -133,7 +133,7 @@ def append_png_chart_section(
         story.append(Paragraph(f"<i>{subtitle}</i>", styles["RepFootnote"]))
     tw = w_content - (10.0 / inch)
     th = tw * 0.38
-    story.append(figure_from_bytes(png, width_in=tw, height_in=th))
+    story.append(figure_from_bytes(chart_bytes, width_in=tw, height_in=th))
 
 
 def append_map_and_ranked_table(
