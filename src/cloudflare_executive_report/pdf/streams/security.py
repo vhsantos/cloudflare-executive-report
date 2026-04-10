@@ -54,10 +54,9 @@ def append_security_stream(
 ) -> None:
     styles = make_styles(theme)
     w_content = theme.content_width_in()
-    w_full = w_content * inch
-    w_third = w_full / 3
     third_inner = theme.third_inner_width_in()
     gap_pt = theme.col_gap_in * inch
+    w_cell_triple = third_inner * inch
 
     blocks = set(layout.blocks)
     # Same breakdown as the dedicated Cache page (from security aggregate); skip when both run.
@@ -229,7 +228,7 @@ def append_security_stream(
         gutter = Spacer(gap_pt, 1)
         triple = Table(
             [[col_methods, gutter, col_services, gutter, col_actions]],
-            colWidths=[w_third, gap_pt, w_third, gap_pt, w_third],
+            colWidths=[w_cell_triple, gap_pt, w_cell_triple, gap_pt, w_cell_triple],
         )
         triple.setStyle(
             TableStyle(

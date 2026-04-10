@@ -109,7 +109,7 @@ def append_timeseries_if_enabled(
     if sub:
         story.append(Paragraph(f"<i>{sub}</i>", styles["RepFootnote"]))
     tw = w_content - (10.0 / inch)
-    th = tw * 0.38
+    th = tw * 0.33
     story.append(figure_from_bytes(chart_bytes, width_in=tw, height_in=th))
 
 
@@ -132,7 +132,7 @@ def append_chart_section(
     if subtitle:
         story.append(Paragraph(f"<i>{subtitle}</i>", styles["RepFootnote"]))
     tw = w_content - (10.0 / inch)
-    th = tw * 0.38
+    th = tw * 0.33
     story.append(figure_from_bytes(chart_bytes, width_in=tw, height_in=th))
 
 
