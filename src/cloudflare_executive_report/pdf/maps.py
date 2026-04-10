@@ -6,40 +6,17 @@ import io
 import logging
 from typing import Any
 
+from cloudflare_executive_report.common.colo_locations import COLO_TO_ISO2
 from cloudflare_executive_report.pdf.theme import Theme
 
 log = logging.getLogger(__name__)
-
-# Colo → ISO 3166-1 alpha-2 for choropleth (extend as needed).
-_COLO_TO_ISO2: dict[str, str] = {
-    "IAD": "US",
-    "SEA": "US",
-    "ATL": "US",
-    "DFW": "US",
-    "SJC": "US",
-    "ORD": "US",
-    "LAX": "US",
-    "EWR": "US",
-    "MIA": "US",
-    "SFO": "US",
-    "SCL": "CL",
-    "FRA": "DE",
-    "SIN": "SG",
-    "LHR": "GB",
-    "NRT": "JP",
-    "SYD": "AU",
-    "GRU": "BR",
-    "CDG": "FR",
-    "AMS": "NL",
-    "MAD": "ES",
-}
 
 
 def dns_queries_by_country(top_colos: list[dict[str, Any]]) -> dict[str, int]:
     out: dict[str, int] = {}
     for row in top_colos:
         colo = str(row.get("colo", "")).upper()
-        iso = _COLO_TO_ISO2.get(colo)
+        iso = COLO_TO_ISO2.get(colo)
         if iso is None:
             continue
         c = int(row.get("count", 0))

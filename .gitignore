@@ -215,3 +215,4 @@ outputs
 *.pdf
 logos/
 .cursorrules
+tools/
