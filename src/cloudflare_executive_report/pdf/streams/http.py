@@ -5,9 +5,10 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from reportlab.platypus import Paragraph, Spacer
+from reportlab.platypus import Spacer
 
 from cloudflare_executive_report.common.constants import (
+    PDF_MAP_SIDE_TABLE_MAX_ROWS,
     PDF_SPACE_LARGE_PT,
     PDF_SPACE_MEDIUM_PT,
 )
@@ -17,17 +18,15 @@ from cloudflare_executive_report.pdf.charts import (
 )
 from cloudflare_executive_report.pdf.layout_spec import HttpStreamLayout
 from cloudflare_executive_report.pdf.maps import (
-    map_height_in_for_width,
     world_map_from_country_totals_bytes,
 )
 from cloudflare_executive_report.pdf.primitives import (
-    figure_from_bytes,
     kpi_multi_cell_row,
     make_styles,
     ranked_rows_from_dicts,
-    table_with_bars,
 )
 from cloudflare_executive_report.pdf.stream_fragments import (
+    append_map_and_ranked_table,
     append_missing_dates_note,
     append_png_chart_section,
     append_stream_header,
@@ -143,39 +142,40 @@ def append_http_stream(
         story.append(Spacer(1, PDF_SPACE_LARGE_PT))
 
     country_totals = _country_totals_from_rollup(http)
-    map_w = w_content
-    map_h = map_height_in_for_width(map_w)
+    side_row_limit = min(top, PDF_MAP_SIDE_TABLE_MAX_ROWS)
 
-    if "map" in blocks:
-        story.append(Paragraph("Requests by country", styles["RepSectionTight"]))
-        map_png = world_map_from_country_totals_bytes(country_totals, theme=theme, width_in=map_w)
-        story.append(figure_from_bytes(map_png, width_in=map_w, height_in=map_h))
-        story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))
-
-    if "countries" in blocks:
-        rows_raw = list(http.get("top_countries") or [])
-        ranked: list[dict[str, Any]] = []
-        for r in rows_raw[:top]:
-            if not isinstance(r, dict):
-                continue
-            ranked.append(
-                {
-                    "name": str(r.get("country") or r.get("code") or ""),
-                    "count": int(r.get("requests") or 0),
-                    "percentage": float(r.get("percentage") or 0.0),
-                }
-            )
-        bar_rows = ranked_rows_from_dicts(ranked, top, "name")
-        if bar_rows:
-            tbl = table_with_bars(
-                "Top countries",
-                bar_rows,
-                styles,
-                ratios=(0.42, 0.18, 0.40),
-                total_width_in=w_content,
-                theme=theme,
-            )
-            story.append(tbl)
+    rows_raw = list(http.get("top_countries") or [])
+    ranked: list[dict[str, Any]] = []
+    for r in rows_raw[:top]:
+        if not isinstance(r, dict):
+            continue
+        ranked.append(
+            {
+                "name": str(r.get("country") or r.get("code") or ""),
+                "count": int(r.get("requests") or 0),
+                "percentage": float(r.get("percentage") or 0.0),
+            }
+        )
+    bar_rows_full = ranked_rows_from_dicts(ranked, top, "name")
+    bar_rows_side = ranked_rows_from_dicts(ranked, side_row_limit, "name")
+    append_map_and_ranked_table(
+        story,
+        styles,
+        theme,
+        blocks,
+        map_block_name="map",
+        table_block_name="countries",
+        table_rows_side=bar_rows_side,
+        table_rows_full=bar_rows_full,
+        table_title="Top requests",
+        side_table_ratios=(0.40, 0.16, 0.44),
+        full_table_ratios=(0.42, 0.18, 0.40),
+        build_map_png_for_width=lambda map_width_in: world_map_from_country_totals_bytes(
+            country_totals,
+            theme=theme,
+            width_in=map_width_in,
+        ),
+    )
 
     if "timeseries" in blocks:
         req_pairs = _zip_cached_uncached_pairs(daily_requests_cached, daily_requests_uncached)

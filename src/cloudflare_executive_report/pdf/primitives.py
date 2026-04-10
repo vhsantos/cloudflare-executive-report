@@ -11,6 +11,13 @@ from reportlab.lib.units import inch
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.platypus import Flowable, Image, KeepInFrame, Paragraph, Table, TableStyle
 
+from cloudflare_executive_report.common.constants import (
+    PDF_MAP_SIDE_BY_SIDE_MAP_WIDTH_SHARE,
+    PDF_RANKED_BAR_COLUMN_MAX_SHARE,
+    PDF_RANKED_BAR_TRACK_HEIGHT_PT,
+    PDF_RANKED_TABLE_ROW_PAD_PT,
+    PDF_SPACE_MEDIUM_PT,
+)
 from cloudflare_executive_report.common.formatting import format_count_human
 from cloudflare_executive_report.pdf.styles import build_styles
 from cloudflare_executive_report.pdf.theme import Theme
@@ -106,6 +113,40 @@ def figure_from_bytes(png: bytes, *, width_in: float, height_in: float) -> Image
     return Image(io.BytesIO(png), width=width_in * inch, height=height_in * inch)
 
 
+def map_side_by_side_table(
+    map_flowable: Flowable,
+    side_table_flowable: Flowable,
+    *,
+    content_width_in: float,
+) -> Table:
+    """Lay out map and ranked table in one row (two thirds / one third of content width).
+
+    Args:
+        map_flowable: Left cell (typically the world map image).
+        side_table_flowable: Right cell (typically ``colo_table_wrap`` or ``table_with_bars``).
+        content_width_in: Full content width in inches; column widths sum to this width.
+    """
+    w_total_pt = content_width_in * inch
+    w_map_pt = w_total_pt * PDF_MAP_SIDE_BY_SIDE_MAP_WIDTH_SHARE
+    w_table_pt = w_total_pt - w_map_pt
+    side_gutter_pt = PDF_SPACE_MEDIUM_PT
+    outer = Table([[map_flowable, side_table_flowable]], colWidths=[w_map_pt, w_table_pt])
+    outer.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (0, 0), 0),
+                ("LEFTPADDING", (1, 0), (1, 0), side_gutter_pt),
+                ("RIGHTPADDING", (1, 0), (1, 0), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]
+        )
+    )
+    return outer
+
+
 def two_column_gap_style(theme: Theme) -> TableStyle:
     gap_pt = theme.col_gap_in * inch
     half = gap_pt / 2
@@ -151,16 +192,36 @@ def _scale_ratios_to_pt(total_pt: float, ratios: tuple[float, ...]) -> list[floa
     return col_pt
 
 
+def _ranked_column_ratios_with_capped_bar(
+    ratios: tuple[float, float, float],
+    max_bar_share: float,
+) -> tuple[float, float, float]:
+    """Normalize (label, count, bar) ratios so the bar column is at most ``max_bar_share``."""
+    a, b, c = ratios
+    s = a + b + c
+    if s <= 0:
+        return ratios
+    a, b, c = a / s, b / s, c / s
+    if c <= max_bar_share:
+        return (a, b, c)
+    freed = c - max_bar_share
+    ab = a + b
+    if ab <= 1e-12:
+        return (0.0, 0.0, 1.0)
+    return (a + freed * (a / ab), b + freed * (b / ab), max_bar_share)
+
+
 def _bar_cell_table(bar_total_pt: float, bar_w: float, theme: Theme) -> Table:
     total = max(bar_total_pt, 1.0)
     bw = min(1.0, max(0.0, bar_w))
     w1 = total * bw
     w2 = total - w1
-    min_vis = min(2.0, total * 0.03)
+    min_vis = min(1.0, total * 0.015)
     if w1 > 0 and w1 < min_vis and w2 > min_vis:
-        w1 = min(min_vis, total * 0.5)
+        w1 = min(min_vis, total * 0.35)
         w2 = total - w1
-    t = Table([["", ""]], colWidths=[w1, w2], rowHeights=[9])
+    bar_h = PDF_RANKED_BAR_TRACK_HEIGHT_PT
+    t = Table([["", ""]], colWidths=[w1, w2], rowHeights=[bar_h])
     t.setStyle(
         TableStyle(
             [
@@ -181,6 +242,7 @@ def _ranked_inner_table_style(num_rows: int, theme: Theme) -> list:
     if num_rows <= 0:
         return []
     last = num_rows - 1
+    vpad = PDF_RANKED_TABLE_ROW_PAD_PT
     styles: list[tuple] = [
         ("FONT", (1, 0), (1, last), "Helvetica", 9),
         ("TEXTCOLOR", (0, 0), (-1, last), colors.HexColor(theme.slate)),
@@ -188,8 +250,8 @@ def _ranked_inner_table_style(num_rows: int, theme: Theme) -> list:
         ("ALIGN", (1, 0), (1, last), "RIGHT"),
         ("VALIGN", (0, 0), (-1, last), "MIDDLE"),
         ("ROWBACKGROUNDS", (0, 0), (-1, -1), [colors.white, colors.HexColor(theme.row_alt)]),
-        ("TOPPADDING", (0, 0), (-1, last), 5),
-        ("BOTTOMPADDING", (0, 0), (-1, last), 5),
+        ("TOPPADDING", (0, 0), (-1, last), vpad),
+        ("BOTTOMPADDING", (0, 0), (-1, last), vpad),
         ("LEFTPADDING", (0, 0), (1, last), 8),
         ("RIGHTPADDING", (0, 0), (1, last), 6),
         ("LEFTPADDING", (2, 0), (2, last), 0),
@@ -208,9 +270,11 @@ def table_with_bars(
     ratios: tuple[float, float, float],
     total_width_in: float,
     theme: Theme,
+    show_outer_card: bool = True,
 ) -> Table:
     inner_w_pt = _inner_grid_width_pt(total_width_in, theme)
-    col_pt = _scale_ratios_to_pt(inner_w_pt, ratios)
+    ratios_capped = _ranked_column_ratios_with_capped_bar(ratios, PDF_RANKED_BAR_COLUMN_MAX_SHARE)
+    col_pt = _scale_ratios_to_pt(inner_w_pt, ratios_capped)
     bar_total_pt = col_pt[2]
     data_rows: list[list[Any]] = []
     for label, cnt_s, bar_w in rows:
@@ -221,23 +285,40 @@ def table_with_bars(
     title_p = Paragraph(f"<font color='{theme.slate}'>{title}</font>", styles["RepCardTitle"])
     pad = theme.outer_card_pad_pt
     outer = Table([[title_p], [inner]], colWidths=[total_width_in * inch])
-    outer.setStyle(
-        TableStyle(
-            [
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(theme.card_bg)),
-                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor(theme.border)),
-                ("TOPPADDING", (0, 0), (0, 0), pad),
-                ("BOTTOMPADDING", (0, 0), (0, 0), 0),
-                ("LEFTPADDING", (0, 0), (0, 0), pad),
-                ("RIGHTPADDING", (0, 0), (0, 0), pad),
-                ("TOPPADDING", (0, 1), (0, 1), 0),
-                ("BOTTOMPADDING", (0, 1), (0, 1), pad),
-                ("LEFTPADDING", (0, 1), (0, 1), pad),
-                ("RIGHTPADDING", (0, 1), (0, 1), pad),
-            ]
+    if show_outer_card:
+        outer.setStyle(
+            TableStyle(
+                [
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(theme.card_bg)),
+                    ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor(theme.border)),
+                    ("TOPPADDING", (0, 0), (0, 0), pad),
+                    ("BOTTOMPADDING", (0, 0), (0, 0), 0),
+                    ("LEFTPADDING", (0, 0), (0, 0), pad),
+                    ("RIGHTPADDING", (0, 0), (0, 0), pad),
+                    ("TOPPADDING", (0, 1), (0, 1), 0),
+                    ("BOTTOMPADDING", (0, 1), (0, 1), pad),
+                    ("LEFTPADDING", (0, 1), (0, 1), pad),
+                    ("RIGHTPADDING", (0, 1), (0, 1), pad),
+                ]
+            )
         )
-    )
+    else:
+        outer.setStyle(
+            TableStyle(
+                [
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("TOPPADDING", (0, 0), (0, 0), 0),
+                    ("BOTTOMPADDING", (0, 0), (0, 0), 4),
+                    ("LEFTPADDING", (0, 0), (0, 0), 0),
+                    ("RIGHTPADDING", (0, 0), (0, 0), 0),
+                    ("TOPPADDING", (0, 1), (0, 1), 0),
+                    ("BOTTOMPADDING", (0, 1), (0, 1), 0),
+                    ("LEFTPADDING", (0, 1), (0, 1), 0),
+                    ("RIGHTPADDING", (0, 1), (0, 1), 0),
+                ]
+            )
+        )
     return outer
 
 
@@ -249,8 +330,9 @@ def colo_table_wrap(
     styles: Any,
 ) -> Table:
     inner_w_pt = _inner_grid_width_pt(total_width_in, theme)
-    ratios = (0.18, 0.16, 0.66)
-    col_pt = _scale_ratios_to_pt(inner_w_pt, ratios)
+    ratios = (0.28, 0.26, 0.46)
+    ratios_capped = _ranked_column_ratios_with_capped_bar(ratios, PDF_RANKED_BAR_COLUMN_MAX_SHARE)
+    col_pt = _scale_ratios_to_pt(inner_w_pt, ratios_capped)
     bar_total_pt = col_pt[2]
     data_rows: list[list[Any]] = []
     for label, cnt_s, bar_w in colo_rows:

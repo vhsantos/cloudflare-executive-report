@@ -6,17 +6,15 @@ from datetime import date
 from typing import Any
 
 from reportlab.lib.units import inch
-from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import Spacer, Table, TableStyle
 
 from cloudflare_executive_report.common.constants import (
+    PDF_MAP_SIDE_TABLE_MAX_ROWS,
     PDF_SPACE_LARGE_PT,
-    PDF_SPACE_MEDIUM_PT,
 )
 from cloudflare_executive_report.pdf.layout_spec import DnsStreamLayout
-from cloudflare_executive_report.pdf.maps import map_height_in_for_width, world_map_from_colos_bytes
+from cloudflare_executive_report.pdf.maps import world_map_from_colos_bytes
 from cloudflare_executive_report.pdf.primitives import (
-    colo_table_wrap,
-    figure_from_bytes,
     kpi_two_cell_row,
     make_styles,
     ranked_rows_from_dicts,
@@ -24,6 +22,7 @@ from cloudflare_executive_report.pdf.primitives import (
     two_column_gap_style,
 )
 from cloudflare_executive_report.pdf.stream_fragments import (
+    append_map_and_ranked_table,
     append_missing_dates_note,
     append_stream_header,
     append_timeseries_if_enabled,
@@ -85,21 +84,28 @@ def append_dns_stream(
         story.append(Spacer(1, PDF_SPACE_LARGE_PT))
 
     top_colos = list(dns.get("top_data_centers") or [])
-    map_w = w_content
-    map_h = map_height_in_for_width(map_w)
-
-    if "map" in blocks:
-        story.append(Paragraph("Queries by country", styles["RepSectionTight"]))
-        map_png = world_map_from_colos_bytes(top_colos[:top], theme=theme, width_in=map_w)
-        story.append(figure_from_bytes(map_png, width_in=map_w, height_in=map_h))
-        story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))
-
-    if "colo_table" in blocks:
-        colo_rows = ranked_rows_from_dicts(top_colos, top, "colo")
-        story.append(
-            colo_table_wrap(colo_rows, total_width_in=w_content, theme=theme, styles=styles)
-        )
-        story.append(Spacer(1, PDF_SPACE_LARGE_PT))
+    side_row_limit = min(top, PDF_MAP_SIDE_TABLE_MAX_ROWS)
+    colo_rows_side = ranked_rows_from_dicts(top_colos, side_row_limit, "colo")
+    colo_rows_full = ranked_rows_from_dicts(top_colos, top, "colo")
+    append_map_and_ranked_table(
+        story,
+        styles,
+        theme,
+        blocks,
+        map_block_name="map",
+        table_block_name="colo_table",
+        table_rows_side=colo_rows_side,
+        table_rows_full=colo_rows_full,
+        table_title="Top queries",
+        side_table_ratios=(0.28, 0.26, 0.46),
+        full_table_ratios=(0.28, 0.26, 0.46),
+        build_map_png_for_width=lambda map_width_in: world_map_from_colos_bytes(
+            top_colos[:top],
+            theme=theme,
+            width_in=map_width_in,
+        ),
+        append_space_after_table_only=True,
+    )
 
     qnames = ranked_rows_from_dicts(list(dns.get("top_query_names") or []), top, "name")
     rtypes = ranked_rows_from_dicts(list(dns.get("top_record_types") or []), top, "type")
