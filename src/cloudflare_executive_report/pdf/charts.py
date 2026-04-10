@@ -30,14 +30,14 @@ StackedPoint = tuple[float | None, float | None]
 StackedTriplePoint = tuple[float | None, float | None, float | None]
 
 
-def _save_figure_bytes(fig: Any, *, theme: Theme, pad_inches: float = 0.15) -> bytes:
+def _save_figure_bytes(fig: Any, *, theme: Theme) -> bytes:
     """Save a matplotlib figure to bytes honoring configured chart format."""
     buf = io.BytesIO()
     save_kwargs: dict[str, Any] = {
         "format": theme.chart_format,
         "bbox_inches": "tight",
         "facecolor": "white",
-        "pad_inches": pad_inches,
+        "pad_inches": 0,
     }
     if theme.chart_format == "png":
         save_kwargs["dpi"] = theme.chart_dpi
