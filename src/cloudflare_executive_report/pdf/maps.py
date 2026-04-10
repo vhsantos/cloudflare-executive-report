@@ -123,9 +123,11 @@ def _choropleth_cartopy(
     import matplotlib.pyplot as plt
 
     max_v = max(country_totals.values()) if country_totals else 1
-    norm = mcolors.Normalize(vmin=0.0, vmax=float(max_v))
+    # Improve visibility when one country dominates totals.
+    norm = mcolors.PowerNorm(gamma=0.45, vmin=0.0, vmax=float(max_v))
     cmap = plt.cm.Blues
     land_no_data = "#f1f5f9"
+    nonzero_floor = 0.33
     h_fig = width_in / 2.0
     fig = plt.figure(figsize=(width_in, h_fig), facecolor="white")
     ax = fig.add_axes((0, 0, 1, 1), projection=ccrs.PlateCarree())
@@ -149,7 +151,7 @@ def _choropleth_cartopy(
         iso = _iso2(record.attributes)
         val = country_totals.get(iso, 0) if iso else 0
         if val > 0:
-            face = cmap(norm(float(val)))
+            face = cmap(max(float(norm(float(val))), nonzero_floor))
         else:
             face = land_no_data
         ax.add_geometries(
