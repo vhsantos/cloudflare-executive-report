@@ -14,13 +14,14 @@ from cloudflare_executive_report.fetchers.http_adaptive import HttpAdaptiveFetch
 from cloudflare_executive_report.fetchers.security import SecurityFetcher
 from cloudflare_executive_report.fetchers.types import Fetcher
 
-# Order preserved: sync and report iterate in this order.
+# Insertion order is used everywhere (sync, CLI, PDF): PDF sections are the first four ids;
+# remaining streams follow (no PDF page for those).
 FETCHER_REGISTRY: dict[str, Fetcher] = {
     "dns": DnsFetcher(),
     "http": HttpFetcher(),
-    "http_adaptive": HttpAdaptiveFetcher(),
-    "security": SecurityFetcher(),
     "cache": CacheFetcher(),
+    "security": SecurityFetcher(),
+    "http_adaptive": HttpAdaptiveFetcher(),
     "dns_records": DnsRecordsFetcher(),
     "audit": AuditFetcher(),
     "certificates": CertificatesFetcher(),
