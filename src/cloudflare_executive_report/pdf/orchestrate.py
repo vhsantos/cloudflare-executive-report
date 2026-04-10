@@ -345,6 +345,7 @@ def write_report_pdf(
                     layout=spec.http_layout,
                     theme=th,
                     top=spec.top,
+                    cache_stream_in_report=cache_stream_in_report,
                 )
             elif sid == "security":
                 loaded = loaded_security

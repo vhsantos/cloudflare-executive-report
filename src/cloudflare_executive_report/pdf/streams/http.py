@@ -14,7 +14,7 @@ from cloudflare_executive_report.common.constants import (
 )
 from cloudflare_executive_report.pdf.charts import (
     prepare_daily_metric_series,
-    prepare_stacked_daily_metric_series,
+    prepare_dual_line_daily_metric_series,
 )
 from cloudflare_executive_report.pdf.layout_spec import HttpStreamLayout
 from cloudflare_executive_report.pdf.maps import (
@@ -69,6 +69,7 @@ def append_http_stream(
     layout: HttpStreamLayout,
     theme: Theme,
     top: int,
+    cache_stream_in_report: bool = False,
 ) -> None:
     styles = make_styles(theme)
     w_content = theme.content_width_in()
@@ -103,8 +104,8 @@ def append_http_stream(
             kpi_multi_cell_row(
                 [
                     ("Total requests", tr),
-                    ("Cached requests", cr),
-                    ("Uncached requests", ur),
+                    ("Strict hits", cr),
+                    ("Non-hits", ur),
                     ("Cache hit ratio", f"{ch:.1f}%"),
                 ],
                 styles,
@@ -179,41 +180,6 @@ def append_http_stream(
 
     if "timeseries" in blocks:
         req_pairs = _zip_cached_uncached_pairs(daily_requests_cached, daily_requests_uncached)
-        chart_bytes_requests, sub_r = prepare_stacked_daily_metric_series(
-            req_pairs,
-            theme,
-            chart_title="HTTP requests",
-            bottom_legend="Cached",
-            top_legend="Uncached",
-        )
-        append_chart_section(
-            story,
-            styles,
-            theme,
-            blocks,
-            heading=None,
-            chart_bytes=chart_bytes_requests,
-            subtitle=sub_r,
-        )
-
-        bw_pairs = _zip_cached_uncached_pairs(daily_bytes_cached, daily_bytes_uncached)
-        chart_bytes_bandwidth, sub_b = prepare_stacked_daily_metric_series(
-            bw_pairs,
-            theme,
-            chart_title="HTTP bandwidth",
-            bottom_legend="Cached",
-            top_legend="Uncached",
-            y_scale="bytes",
-        )
-        append_chart_section(
-            story,
-            styles,
-            theme,
-            blocks,
-            heading=None,
-            chart_bytes=chart_bytes_bandwidth,
-            subtitle=sub_b,
-        )
 
         chart_bytes_uniques, sub_u = prepare_daily_metric_series(
             daily_uniques,
@@ -229,4 +195,40 @@ def append_http_stream(
             heading=None,
             chart_bytes=chart_bytes_uniques,
             subtitle=sub_u,
+        )
+
+        if not cache_stream_in_report:
+            chart_bytes_requests, sub_r = prepare_dual_line_daily_metric_series(
+                req_pairs,
+                theme,
+                chart_title="HTTP requests",
+                legend_a="Strict hits",
+                legend_b="Non-hits",
+            )
+            append_chart_section(
+                story,
+                styles,
+                theme,
+                blocks,
+                heading=None,
+                chart_bytes=chart_bytes_requests,
+                subtitle=sub_r,
+            )
+
+        bw_pairs = _zip_cached_uncached_pairs(daily_bytes_cached, daily_bytes_uncached)
+        chart_bytes_bandwidth, sub_b = prepare_dual_line_daily_metric_series(
+            bw_pairs,
+            theme,
+            chart_title="HTTP bandwidth",
+            legend_a="Strict hits",
+            legend_b="Non-hits",
+        )
+        append_chart_section(
+            story,
+            styles,
+            theme,
+            blocks,
+            heading=None,
+            chart_bytes=chart_bytes_bandwidth,
+            subtitle=sub_b,
         )

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from cloudflare_executive_report.common.aggregation_helpers import (
+    CACHE_ORIGIN_FETCH_STATUSES,
     cache_served_cf_origin_from_status_rows,
     norm_cache_status,
     pct_of_total,
@@ -64,6 +65,25 @@ def build_cache_section(
             }
         )
 
+    def status_row(key: str, count: int) -> dict[str, Any]:
+        return {
+            "status": key,
+            "count": count,
+            "bytes": int(status_bytes.get(key) or 0),
+            "percentage": pct_of_total(count, total_requests),
+        }
+
+    edge_pairs = sorted(
+        ((k, v) for k, v in status_counts.items() if k not in CACHE_ORIGIN_FETCH_STATUSES),
+        key=lambda x: -x[1],
+    )[:5]
+    origin_pairs = sorted(
+        ((k, v) for k, v in status_counts.items() if k in CACHE_ORIGIN_FETCH_STATUSES),
+        key=lambda x: -x[1],
+    )
+    by_cache_status_edge = [status_row(k, c) for k, c in edge_pairs]
+    by_cache_status_origin = [status_row(k, c) for k, c in origin_pairs]
+
     return {
         "total_requests_sampled": total_requests,
         "total_requests_sampled_human": format_count_human(total_requests),
@@ -81,6 +101,8 @@ def build_cache_section(
         "served_origin_count": served_origin_total,
         "served_origin_count_human": format_count_human(served_origin_total),
         "by_cache_status": by_status,
+        "by_cache_status_edge": by_cache_status_edge,
+        "by_cache_status_origin": by_cache_status_origin,
         "top_paths": top_pct(path_counts, total_requests, top, name_key="path")
         if total_requests > 0
         else [],

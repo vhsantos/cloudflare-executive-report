@@ -5,8 +5,13 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from reportlab.platypus import Paragraph, Spacer, Table
+from reportlab.lib.units import inch
+from reportlab.platypus import Spacer, Table, TableStyle
 
+from cloudflare_executive_report.common.aggregation_helpers import (
+    CACHE_ORIGIN_FETCH_STATUSES,
+    norm_cache_status,
+)
 from cloudflare_executive_report.common.constants import (
     PDF_SPACE_MEDIUM_PT,
     PDF_SPACE_SMALL_PT,
@@ -30,6 +35,49 @@ from cloudflare_executive_report.pdf.stream_fragments import (
     append_stream_header,
 )
 from cloudflare_executive_report.pdf.theme import Theme
+
+
+def _edge_and_origin_status_items(
+    cache: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Return Edge and Origin cache status rows.
+
+    Prefer split keys, else derive from ``by_cache_status``.
+    """
+    edge = cache.get("by_cache_status_edge")
+    origin = cache.get("by_cache_status_origin")
+    if isinstance(edge, list) and isinstance(origin, list):
+        return [r for r in edge if isinstance(r, dict)], [r for r in origin if isinstance(r, dict)]
+
+    edge_out: list[dict[str, Any]] = []
+    origin_out: list[dict[str, Any]] = []
+    for row in cache.get("by_cache_status") or []:
+        if not isinstance(row, dict):
+            continue
+        key = norm_cache_status(str(row.get("status") or row.get("value") or ""))
+        if not key:
+            continue
+        if key in CACHE_ORIGIN_FETCH_STATUSES:
+            origin_out.append(row)
+        else:
+            edge_out.append(row)
+    edge_out.sort(key=lambda r: -int(r.get("count") or 0))
+    origin_out.sort(key=lambda r: -int(r.get("count") or 0))
+    return edge_out[:5], origin_out[:3]
+
+
+def _cache_ranked_cell(
+    title: str,
+    rows: list[list[Any]],
+    *,
+    styles: Any,
+    theme: Theme,
+    ratios: tuple[float, float, float],
+    width_in: float,
+) -> Any:
+    if not rows:
+        return Spacer(1, PDF_SPACE_SMALL_PT)
+    return table_with_bars(title, rows, styles, ratios=ratios, total_width_in=width_in, theme=theme)
 
 
 def append_cache_stream(
@@ -116,84 +164,114 @@ def append_cache_stream(
             subtitle=sub_t,
         )
 
-    cache_ratios = (0.42, 0.18, 0.40)
-    mime_ratios = (0.40, 0.18, 0.42)
+    pair_ratios = (0.42, 0.18, 0.40)
+    mime_full_ratios = (0.40, 0.18, 0.42)
+    triple_ratios = (0.52, 0.22, 0.26)
+    third_inner = theme.third_inner_width_in()
+    gap_pt = theme.col_gap_in * inch
+    w_cell_triple = third_inner * inch
 
-    status_rows = ranked_rows_from_dicts(
-        apply_row_label_formatter(
-            list(cache.get("by_cache_status") or []),
-            top,
-            "status",
-            format_cache_status_label,
-        ),
-        top,
+    edge_items, origin_items = _edge_and_origin_status_items(cache)
+    edge_rows = ranked_rows_from_dicts(
+        apply_row_label_formatter(edge_items, 5, "status", format_cache_status_label),
+        5,
         "status",
     )
-    # Keep side-by-side tables aligned: MIME rows follow cache-status row count.
-    mime_top = len(status_rows) if status_rows else top
-    mime_rows = (
-        ranked_rows_from_dicts(mime_rows_in, mime_top, "content_type") if mime_rows_in else []
+    origin_rows = ranked_rows_from_dicts(
+        apply_row_label_formatter(origin_items, 3, "status", format_cache_status_label),
+        3,
+        "status",
+    )
+    mime_rows_triple = (
+        ranked_rows_from_dicts(mime_rows_in, 5, "content_type") if mime_rows_in else []
     )
 
-    if "status" in blocks and "mime_http_1d" in blocks and (status_rows or mime_rows):
-        left = (
-            table_with_bars(
-                "Cache status",
-                status_rows,
-                styles,
-                ratios=cache_ratios,
-                total_width_in=half_inner,
-                theme=theme,
-            )
-            if status_rows
-            else Spacer(1, PDF_SPACE_SMALL_PT)
+    if "status" in blocks and "mime_http_1d" in blocks:
+        gutter = Spacer(gap_pt, 1)
+        triple = Table(
+            [
+                [
+                    _cache_ranked_cell(
+                        "Cache status Edge",
+                        edge_rows,
+                        styles=styles,
+                        theme=theme,
+                        ratios=triple_ratios,
+                        width_in=third_inner,
+                    ),
+                    gutter,
+                    _cache_ranked_cell(
+                        "Cache status origin",
+                        origin_rows,
+                        styles=styles,
+                        theme=theme,
+                        ratios=triple_ratios,
+                        width_in=third_inner,
+                    ),
+                    gutter,
+                    _cache_ranked_cell(
+                        "Traffic by response type",
+                        mime_rows_triple,
+                        styles=styles,
+                        theme=theme,
+                        ratios=triple_ratios,
+                        width_in=third_inner,
+                    ),
+                ]
+            ],
+            colWidths=[w_cell_triple, gap_pt, w_cell_triple, gap_pt, w_cell_triple],
         )
-        right = (
-            table_with_bars(
-                "Traffic by edge response type",
-                mime_rows,
-                styles,
-                ratios=mime_ratios,
-                total_width_in=half_inner,
-                theme=theme,
+        triple.setStyle(
+            TableStyle(
+                [
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ]
             )
-            if mime_rows
-            else Spacer(1, PDF_SPACE_SMALL_PT)
         )
-        two_col = Table([[left, right]], colWidths=[w_half, w_half])
-        two_col.setStyle(two_column_gap_style(theme))
-        story.append(two_col)
+        story.append(triple)
         story.append(Spacer(1, PDF_SPACE_SMALL_PT))
-    else:
-        if "status" in blocks and status_rows:
+    elif "status" in blocks:
+        pair = Table(
+            [
+                [
+                    _cache_ranked_cell(
+                        "Cache status Edge",
+                        edge_rows,
+                        styles=styles,
+                        theme=theme,
+                        ratios=pair_ratios,
+                        width_in=half_inner,
+                    ),
+                    _cache_ranked_cell(
+                        "Cache status origin",
+                        origin_rows,
+                        styles=styles,
+                        theme=theme,
+                        ratios=pair_ratios,
+                        width_in=half_inner,
+                    ),
+                ]
+            ],
+            colWidths=[w_half, w_half],
+        )
+        pair.setStyle(two_column_gap_style(theme))
+        story.append(pair)
+        story.append(Spacer(1, PDF_SPACE_SMALL_PT))
+    elif "mime_http_1d" in blocks:
+        mime_rows_full = (
+            ranked_rows_from_dicts(mime_rows_in, top, "content_type") if mime_rows_in else []
+        )
+        if mime_rows_full:
             story.append(
                 table_with_bars(
-                    "Cache status",
-                    status_rows,
+                    "Traffic by response type",
+                    mime_rows_full,
                     styles,
-                    ratios=cache_ratios,
+                    ratios=mime_full_ratios,
                     total_width_in=w_content,
                     theme=theme,
-                )
-            )
-            story.append(Spacer(1, PDF_SPACE_SMALL_PT))
-        if "mime_http_1d" in blocks and mime_rows:
-            story.append(
-                table_with_bars(
-                    "Traffic by edge response type",
-                    mime_rows,
-                    styles,
-                    ratios=mime_ratios,
-                    total_width_in=w_content,
-                    theme=theme,
-                )
-            )
-            story.append(Spacer(1, PDF_SPACE_SMALL_PT))
-            story.append(
-                Paragraph(
-                    "<i>From cached <tt>http.json</tt> (httpRequests1dGroups "
-                    "<tt>contentTypeMap</tt>).</i>",
-                    styles["RepFootnote"],
                 )
             )
             story.append(Spacer(1, PDF_SPACE_SMALL_PT))

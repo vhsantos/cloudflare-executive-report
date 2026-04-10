@@ -269,9 +269,38 @@ def test_build_cache_section_merges_status_and_paths():
     assert c["cache_hit_ratio"] == 48.0
     assert c["served_cf_count"] == 12
     assert c["served_origin_count"] == 13
+    assert c["by_cache_status_edge"][0]["status"] == "hit"
+    assert c["by_cache_status_origin"][0]["status"] == "dynamic"
+    assert c["by_cache_status_origin"][1]["status"] == "miss"
     assert c["by_cache_status"][0]["status"] == "hit"
     assert c["top_paths"][0]["path"] == "/"
     assert "top_content_types" not in c
+
+
+def test_build_cache_section_edge_status_capped_at_five() -> None:
+    """Non-origin cache statuses in the edge PDF column are capped at five rows."""
+    day = {
+        "by_cache_status": [
+            {"value": "hit", "count": 100},
+            {"value": "none", "count": 90},
+            {"value": "revalidated", "count": 80},
+            {"value": "expired", "count": 70},
+            {"value": "stale", "count": 60},
+            {"value": "ignored", "count": 50},
+            {"value": "miss", "count": 10},
+        ],
+        "top_path_status": [],
+    }
+    c = build_cache_section([day], top=10)
+    assert len(c["by_cache_status_edge"]) == 5
+    assert [r["status"] for r in c["by_cache_status_edge"]] == [
+        "hit",
+        "none",
+        "revalidated",
+        "expired",
+        "stale",
+    ]
+    assert c["by_cache_status_origin"][0]["status"] == "miss"
 
 
 def test_format_helpers():

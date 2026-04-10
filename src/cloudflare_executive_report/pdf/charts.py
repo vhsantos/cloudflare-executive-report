@@ -28,6 +28,18 @@ SecurityTripleStackMode = Literal["absolute", "percent"]
 # Bottom + top series for stacked charts (e.g. cached + uncached). ``None`` = missing day.
 StackedPoint = tuple[float | None, float | None]
 StackedTriplePoint = tuple[float | None, float | None, float | None]
+CHART_MARKER_SIZE: float = 4.0
+CHART_MARKER_EDGE_WIDTH: float = 0.55
+
+
+def _marker_style(color: str) -> dict[str, Any]:
+    return {
+        "marker": "o",
+        "markersize": CHART_MARKER_SIZE,
+        "markerfacecolor": color,
+        "markeredgewidth": CHART_MARKER_EDGE_WIDTH,
+        "markeredgecolor": "white",
+    }
 
 
 def _save_figure_bytes(fig: Any, *, theme: Theme) -> bytes:
@@ -343,7 +355,14 @@ def line_chart_bytes(
         fill_c = to_rgba(line_c, 0.22)
         for cx, cy in segments:
             ax.fill_between(cx, 0, cy, color=fill_c, linewidth=0, interpolate=True)
-            ax.plot(cx, cy, color=line_c, linewidth=1.4, solid_capstyle="round")
+            ax.plot(
+                cx,
+                cy,
+                color=line_c,
+                linewidth=1.4,
+                solid_capstyle="round",
+                **_marker_style(line_c),
+            )
 
         tick_idx = _xtick_indices(len(dates))
         full_labels = _x_axis_labels_cf(dates, time_granularity)
@@ -434,8 +453,22 @@ def stacked_area_chart_bytes(
             ctop = [cb[i] + cu[i] for i in range(len(cx))]
             ax.fill_between(cx, 0, cb, color=fill_lo, linewidth=0, interpolate=True)
             ax.fill_between(cx, cb, ctop, color=fill_hi, linewidth=0, interpolate=True)
-            ax.plot(cx, cb, color=line_lo, linewidth=1.2, solid_capstyle="round")
-            ax.plot(cx, ctop, color=line_hi, linewidth=1.4, solid_capstyle="round")
+            ax.plot(
+                cx,
+                cb,
+                color=line_lo,
+                linewidth=1.2,
+                solid_capstyle="round",
+                **_marker_style(line_lo),
+            )
+            ax.plot(
+                cx,
+                ctop,
+                color=line_hi,
+                linewidth=1.4,
+                solid_capstyle="round",
+                **_marker_style(line_hi),
+            )
 
         tick_idx = _xtick_indices(len(dates))
         full_labels = _x_axis_labels_cf(dates, time_granularity)
@@ -569,9 +602,30 @@ def stacked_area_chart_triple_bytes(
             ax.fill_between(cx, 0, mit, color=fill_mit, linewidth=0, interpolate=True)
             ax.fill_between(cx, mit, d1, color=fill_or, linewidth=0, interpolate=True)
             ax.fill_between(cx, d1, d2, color=fill_cf, linewidth=0, interpolate=True)
-            ax.plot(cx, mit, color=c_mit, linewidth=1.0, solid_capstyle="round")
-            ax.plot(cx, d1, color=c_or, linewidth=1.15, solid_capstyle="round")
-            ax.plot(cx, d2, color=c_cf, linewidth=1.25, solid_capstyle="round")
+            ax.plot(
+                cx,
+                mit,
+                color=c_mit,
+                linewidth=1.0,
+                solid_capstyle="round",
+                **_marker_style(c_mit),
+            )
+            ax.plot(
+                cx,
+                d1,
+                color=c_or,
+                linewidth=1.15,
+                solid_capstyle="round",
+                **_marker_style(c_or),
+            )
+            ax.plot(
+                cx,
+                d2,
+                color=c_cf,
+                linewidth=1.25,
+                solid_capstyle="round",
+                **_marker_style(c_cf),
+            )
 
         if stack_mode == "percent":
             ax.set_ylim(0, 100)
@@ -641,8 +695,6 @@ def line_chart_triple_bytes(
     Semi-transparent fills from zero + small round markers at each point.
     """
     _fill_alpha = 0.22
-    _marker_ms = 4.0
-    _marker_edgewidth = 0.55
     fig_w = min(theme.content_width_in(), 7.1)
     fig_h = fig_w * 0.35
     fig, ax = plt.subplots(figsize=(fig_w, fig_h), facecolor="white")
@@ -679,15 +731,11 @@ def line_chart_triple_bytes(
         plot_kw: dict = {
             "linewidth": 1.35,
             "solid_capstyle": "round",
-            "marker": "o",
-            "markersize": _marker_ms,
-            "markeredgewidth": _marker_edgewidth,
-            "markeredgecolor": "white",
             "zorder": 4,
         }
-        ax.plot(x, y_m, color=c_mit, markerfacecolor=c_mit, label=legend_mit, **plot_kw)
-        ax.plot(x, y_cf, color=c_cf, markerfacecolor=c_cf, label=legend_cf, **plot_kw)
-        ax.plot(x, y_o, color=c_or, markerfacecolor=c_or, label=legend_or, **plot_kw)
+        ax.plot(x, y_m, color=c_mit, label=legend_mit, **plot_kw, **_marker_style(c_mit))
+        ax.plot(x, y_cf, color=c_cf, label=legend_cf, **plot_kw, **_marker_style(c_cf))
+        ax.plot(x, y_o, color=c_or, label=legend_or, **plot_kw, **_marker_style(c_or))
 
         if ymax > 0:
             ax.set_ylim(0, ymax * 1.08)
@@ -715,11 +763,7 @@ def line_chart_triple_bytes(
                 [0],
                 color=c_mit,
                 lw=1.35,
-                marker="o",
-                markersize=_marker_ms * 0.9,
-                markerfacecolor=c_mit,
-                markeredgecolor="white",
-                markeredgewidth=_marker_edgewidth,
+                **_marker_style(c_mit),
                 label=legend_mit,
             )
             h_cf_l = Line2D(
@@ -727,11 +771,7 @@ def line_chart_triple_bytes(
                 [0],
                 color=c_cf,
                 lw=1.35,
-                marker="o",
-                markersize=_marker_ms * 0.9,
-                markerfacecolor=c_cf,
-                markeredgecolor="white",
-                markeredgewidth=_marker_edgewidth,
+                **_marker_style(c_cf),
                 label=legend_cf,
             )
             h_o = Line2D(
@@ -739,11 +779,7 @@ def line_chart_triple_bytes(
                 [0],
                 color=c_or,
                 lw=1.35,
-                marker="o",
-                markersize=_marker_ms * 0.9,
-                markerfacecolor=c_or,
-                markeredgecolor="white",
-                markeredgewidth=_marker_edgewidth,
+                **_marker_style(c_or),
                 label=legend_or,
             )
             ax.legend(
@@ -778,8 +814,6 @@ def line_chart_dual_bytes(
 ) -> bytes:
     """Two lines: ``legend_a`` (first series) then ``legend_b`` (second)."""
     _fill_alpha = 0.22
-    _marker_ms = 4.0
-    _marker_edgewidth = 0.55
     fig_w = min(theme.content_width_in(), 7.1)
     fig_h = fig_w * 0.35
     fig, ax = plt.subplots(figsize=(fig_w, fig_h), facecolor="white")
@@ -809,14 +843,10 @@ def line_chart_dual_bytes(
         plot_kw: dict = {
             "linewidth": 1.35,
             "solid_capstyle": "round",
-            "marker": "o",
-            "markersize": _marker_ms,
-            "markeredgewidth": _marker_edgewidth,
-            "markeredgecolor": "white",
             "zorder": 3,
         }
-        ax.plot(x, y_b, color=c_b, markerfacecolor=c_b, label=legend_b, **plot_kw)
-        ax.plot(x, y_a, color=c_a, markerfacecolor=c_a, label=legend_a, **plot_kw)
+        ax.plot(x, y_b, color=c_b, label=legend_b, **plot_kw, **_marker_style(c_b))
+        ax.plot(x, y_a, color=c_a, label=legend_a, **plot_kw, **_marker_style(c_a))
 
         if ymax > 0:
             ax.set_ylim(0, ymax * 1.08)
@@ -844,11 +874,7 @@ def line_chart_dual_bytes(
                 [0],
                 color=c_a,
                 lw=1.35,
-                marker="o",
-                markersize=_marker_ms * 0.9,
-                markerfacecolor=c_a,
-                markeredgecolor="white",
-                markeredgewidth=_marker_edgewidth,
+                **_marker_style(c_a),
                 label=legend_a,
             )
             h_b = Line2D(
@@ -856,11 +882,7 @@ def line_chart_dual_bytes(
                 [0],
                 color=c_b,
                 lw=1.35,
-                marker="o",
-                markersize=_marker_ms * 0.9,
-                markerfacecolor=c_b,
-                markeredgecolor="white",
-                markeredgewidth=_marker_edgewidth,
+                **_marker_style(c_b),
                 label=legend_b,
             )
             ax.legend(
