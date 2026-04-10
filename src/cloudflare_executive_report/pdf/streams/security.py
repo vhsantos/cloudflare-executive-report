@@ -279,26 +279,6 @@ def append_security_stream(
             )
             story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
-    if "timeseries" in blocks:
-        chart_bytes_timeseries, sub_t = prepare_triple_line_daily_metric_series(
-            daily_security_triple,
-            theme,
-            chart_title="Daily requests",
-            legend_mit="Mitigated",
-            legend_cf="Served by Cloudflare",
-            legend_or="Served by origin",
-        )
-        append_chart_section(
-            story,
-            styles,
-            theme,
-            blocks,
-            heading=None,
-            chart_bytes=chart_bytes_timeseries,
-            subtitle=sub_t,
-        )
-        story.append(Spacer(1, PDF_SPACE_SMALL_PT))
-
     atk_items: list[dict[str, Any]] = []
     for r in security.get("top_attack_sources") or []:
         if not isinstance(r, dict):
@@ -320,32 +300,86 @@ def append_security_stream(
             }
         )
 
-    if "attack_sources" in blocks and atk_items:
-        rows_atk = ranked_rows_from_dicts(atk_items, top, "label")
-        story.append(
+    attack_sources_enabled = "attack_sources" in blocks
+    attack_paths_enabled = "attack_paths" in blocks
+    rows_atk = ranked_rows_from_dicts(atk_items, top, "label")
+    path_items = list(security.get("top_attack_paths") or [])
+    path_rows = ranked_rows_from_dicts(path_items, top, "path")
+
+    if attack_sources_enabled and attack_paths_enabled and (rows_atk or path_rows):
+        half_inner = theme.half_inner_width_in()
+        w_half = half_inner * inch
+        atk_panel = (
             table_with_bars(
-                "Frequently seen attacker IPs (approximate - from daily top lists)",
+                "Frequently seen attacker IPs",
                 rows_atk,
                 styles,
                 ratios=(0.52, 0.18, 0.30),
-                total_width_in=w_content,
+                total_width_in=half_inner,
                 theme=theme,
             )
+            if rows_atk
+            else Spacer(1, PDF_SPACE_SMALL_PT)
         )
-        story.append(Spacer(1, PDF_SPACE_SMALL_PT))
-        story.append(
-            Paragraph(
-                "<i>Note: For multi-day reports, IPs are merged from daily top 10 lists. "
-                "IPs that attack consistently but never reach daily top 10 may not appear.</i>",
-                styles["RepFootnote"],
+        path_panel = (
+            table_with_bars(
+                "Top attacked paths",
+                path_rows,
+                styles,
+                ratios=(0.48, 0.18, 0.34),
+                total_width_in=half_inner,
+                theme=theme,
+            )
+            if path_rows
+            else Spacer(1, PDF_SPACE_SMALL_PT)
+        )
+        attack_row = Table(
+            [[atk_panel, Spacer(gap_pt, 1), path_panel]], colWidths=[w_half, gap_pt, w_half]
+        )
+        attack_row.setStyle(
+            TableStyle(
+                [
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                ]
             )
         )
+        story.append(attack_row)
         story.append(Spacer(1, PDF_SPACE_SMALL_PT))
-
-    if "attack_paths" in blocks:
-        path_items = list(security.get("top_attack_paths") or [])
-        path_rows = ranked_rows_from_dicts(path_items, top, "path")
-        if path_rows:
+        if rows_atk:
+            story.append(
+                Paragraph(
+                    "<i>Note: For multi-day reports, IPs are merged from daily top 10 lists. "
+                    "IPs that attack consistently but never reach daily top 10 may not appear.</i>",
+                    styles["RepFootnote"],
+                )
+            )
+            story.append(Spacer(1, PDF_SPACE_SMALL_PT))
+    else:
+        if attack_sources_enabled and rows_atk:
+            story.append(
+                table_with_bars(
+                    "Frequently seen attacker IPs",
+                    rows_atk,
+                    styles,
+                    ratios=(0.52, 0.18, 0.30),
+                    total_width_in=w_content,
+                    theme=theme,
+                )
+            )
+            story.append(Spacer(1, PDF_SPACE_SMALL_PT))
+            story.append(
+                Paragraph(
+                    "<i>Note: For multi-day reports, IPs are merged from daily top 10 lists. "
+                    "IPs that attack consistently but never reach daily top 10 may not appear.</i>",
+                    styles["RepFootnote"],
+                )
+            )
+            story.append(Spacer(1, PDF_SPACE_SMALL_PT))
+        if attack_paths_enabled and path_rows:
             story.append(
                 table_with_bars(
                     "Top attacked paths",
@@ -357,6 +391,26 @@ def append_security_stream(
                 )
             )
             story.append(Spacer(1, PDF_SPACE_SMALL_PT))
+
+    if "timeseries" in blocks:
+        chart_bytes_timeseries, sub_t = prepare_triple_line_daily_metric_series(
+            daily_security_triple,
+            theme,
+            chart_title="Security traffic",
+            legend_mit="Mitigated",
+            legend_cf="Served by Cloudflare",
+            legend_or="Served by origin",
+        )
+        append_chart_section(
+            story,
+            styles,
+            theme,
+            blocks,
+            heading=None,
+            chart_bytes=chart_bytes_timeseries,
+            subtitle=sub_t,
+        )
+        story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
     cache_rows = ranked_rows_from_dicts(
         apply_row_label_formatter(

@@ -102,7 +102,7 @@ def append_cache_stream(
         chart_bytes_timeseries, sub_t = prepare_dual_line_daily_metric_series(
             daily_cache_cf_origin,
             theme,
-            chart_title="Daily requests",
+            chart_title="Cache requests",
             legend_a="Served by Cloudflare",
             legend_b="Served by origin",
         )
