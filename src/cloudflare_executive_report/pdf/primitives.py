@@ -6,6 +6,7 @@ import io
 from typing import Any
 from xml.sax.saxutils import escape
 
+from reportlab.graphics.shapes import Drawing
 from reportlab.lib import colors
 from reportlab.lib.units import inch
 from reportlab.pdfbase.pdfmetrics import stringWidth
@@ -109,8 +110,35 @@ def section_title(text: str, styles: Any, theme: Theme) -> Paragraph:
     )
 
 
-def figure_from_bytes(png: bytes, *, width_in: float, height_in: float) -> Image:
-    return Image(io.BytesIO(png), width=width_in * inch, height=height_in * inch)
+def figure_from_bytes(image_bytes: bytes, *, width_in: float, height_in: float) -> Flowable:
+    sample = image_bytes.lstrip()[:64].lower()
+    if sample.startswith(b"<svg") or sample.startswith(b"<?xml"):
+        return figure_from_svg_bytes(image_bytes, width_in=width_in, height_in=height_in)
+    return Image(io.BytesIO(image_bytes), width=width_in * inch, height=height_in * inch)
+
+
+def figure_from_svg_bytes(svg: bytes, *, width_in: float, height_in: float) -> Drawing:
+    """Convert SVG bytes to a ReportLab drawing scaled to target box."""
+    try:
+        from svglib.svglib import svg2rlg
+    except ImportError as e:
+        msg = (
+            "SVG rendering requires optional dependency 'svglib'. "
+            "Install with: pip install '.[svg]'"
+        )
+        raise RuntimeError(msg) from e
+
+    drawing = svg2rlg(io.BytesIO(svg))
+    if drawing is None:
+        raise ValueError("Could not parse SVG chart bytes.")
+    target_w = width_in * inch
+    target_h = height_in * inch
+    src_w = float(drawing.width or 1.0)
+    src_h = float(drawing.height or 1.0)
+    drawing.scale(target_w / src_w, target_h / src_h)
+    drawing.width = target_w
+    drawing.height = target_h
+    return drawing
 
 
 def map_side_by_side_table(

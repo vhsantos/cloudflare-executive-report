@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 import yaml
 
@@ -26,6 +26,19 @@ def default_config_path() -> Path:
 
 def expand_path(s: str) -> Path:
     return Path(os.path.expanduser(s)).resolve()
+
+
+def parse_pdf_image_format(
+    raw: str | None,
+    *,
+    field_name: str,
+    default: Literal["png", "svg"] = "png",
+) -> Literal["png", "svg"]:
+    value = (raw or default).strip().lower()
+    if value not in {"png", "svg"}:
+        msg = f"{field_name} must be png or svg (got {raw!r})"
+        raise ValueError(msg)
+    return cast(Literal["png", "svg"], value)
 
 
 @dataclass
@@ -65,6 +78,10 @@ class AppConfig:
     log_level: str = "info"
     # low | medium | high - matplotlib DPI for PDF maps/charts (smaller file vs sharper plots)
     pdf_image_quality: str = "medium"
+    # png | svg - chart output format inside generated PDF.
+    pdf_chart_format: Literal["png", "svg"] = "png"
+    # png | svg - world-map output format inside generated PDF.
+    pdf_map_format: Literal["png", "svg"] = "png"
     zones: list[ZoneEntry] = field(default_factory=list)
     cover: CoverConfig = field(default_factory=CoverConfig)
 
@@ -94,6 +111,8 @@ class AppConfig:
             "default_zone": self.default_zone,
             "log_level": self.log_level,
             "pdf_image_quality": self.pdf_image_quality,
+            "pdf_chart_format": self.pdf_chart_format,
+            "pdf_map_format": self.pdf_map_format,
             "zones": [{"id": z.id, "name": z.name} for z in self.zones],
             "cover": {
                 "enabled": self.cover.enabled,
@@ -116,6 +135,16 @@ class AppConfig:
         pdf_image_quality = parse_pdf_image_quality(
             str(pq_raw) if pq_raw is not None else None
         ).value
+        pcf_raw = data.get("pdf_chart_format")
+        pdf_chart_format = parse_pdf_image_format(
+            str(pcf_raw) if pcf_raw is not None else None,
+            field_name="pdf_chart_format",
+        )
+        pmf_raw = data.get("pdf_map_format")
+        pdf_map_format = parse_pdf_image_format(
+            str(pmf_raw) if pmf_raw is not None else None,
+            field_name="pdf_map_format",
+        )
         cover_raw = data.get("cover") or {}
         if not isinstance(cover_raw, dict):
             cover_raw = {}
@@ -137,6 +166,8 @@ class AppConfig:
             default_zone=str(data.get("default_zone") or ""),
             log_level=str(data.get("log_level") or "info"),
             pdf_image_quality=pdf_image_quality,
+            pdf_chart_format=pdf_chart_format,
+            pdf_map_format=pdf_map_format,
             zones=zones,
             cover=cover,
         )
@@ -175,6 +206,8 @@ def template_config() -> AppConfig:
         default_zone="",
         log_level="info",
         pdf_image_quality="medium",
+        pdf_chart_format="png",
+        pdf_map_format="png",
         zones=[],
         cover=CoverConfig(),
     )

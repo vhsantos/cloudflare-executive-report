@@ -45,15 +45,36 @@ Example:
 ```yaml
 api_token: "cfat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 cache_dir: "~/.cache/cf-report"
+output_dir: "~/.cf-report"
 default_zone: "" # optional: used when `sync` is run without `--zone`
 log_level: "info" # e.g. debug, warning (same idea as verbose for logging)
+pdf_image_quality: "medium" # low | medium | high
+pdf_chart_format: "png" # png | svg (time-series charts and table charts)
+pdf_map_format: "png" # png | svg (world maps)
 
 zones:
   - id: "a1b2c3d4e5f6789012345678abcdef01"
     name: "example.com"
+
+cover:
+  enabled: true
+  company_name: ""
+  logo_path: ""
+  title: "Cloudflare Executive Report"
+  subtitle: "Security & Performance Overview"
+  notes: ""
+  prepared_for: ""
+  classification: ""
+  date_format: "%d/%b/%Y"
 ```
 
 - **`default_zone`**: If set and you omit **`--zone`** on **`sync`**, only that zone (by id or name) is processed; if empty, all configured zones run.
+- **`output_dir`**: Root for JSON outputs/history used by `sync` and `report` (default `~/.cf-report`).
+- **`pdf_image_quality`**: Raster DPI preset (`low|medium|high`) for PNG charts/maps.
+- **`pdf_chart_format`**: Chart format (`png|svg`), default `png`.
+- **`pdf_map_format`**: World map format (`png|svg`), default `png` (recommended for smaller PDFs).
+- **SVG dependency**: If using `pdf_chart_format: svg` or `pdf_map_format: svg`, install optional dependency:
+  - `pip install '.[svg]'`
 
 ## What gets collected
 

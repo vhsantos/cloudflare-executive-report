@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from typing import Literal
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import inch
@@ -26,6 +27,8 @@ class Theme:
     # Defaults match ``pdf_image_quality: medium`` (96); PDF build applies preset from config.
     chart_dpi: int = 96
     map_dpi: int = 96
+    chart_format: Literal["png", "svg"] = "png"
+    map_format: Literal["png", "svg"] = "png"
     title_size: int = 22
     section_size: int = 11
 
@@ -42,3 +45,17 @@ class Theme:
 
 
 DEFAULT_THEME = Theme()
+
+
+def theme_with_chart_format(theme: Theme, chart_format: Literal["png", "svg"]) -> Theme:
+    """Return ``theme`` with validated chart format (png or svg)."""
+    if chart_format == theme.chart_format:
+        return theme
+    return replace(theme, chart_format=chart_format)
+
+
+def theme_with_map_format(theme: Theme, map_format: Literal["png", "svg"]) -> Theme:
+    """Return ``theme`` with validated map format (png or svg)."""
+    if map_format == theme.map_format:
+        return theme
+    return replace(theme, map_format=map_format)

@@ -39,7 +39,11 @@ from cloudflare_executive_report.pdf.streams.dns import append_dns_stream
 from cloudflare_executive_report.pdf.streams.executive_summary import append_executive_summary
 from cloudflare_executive_report.pdf.streams.http import append_http_stream
 from cloudflare_executive_report.pdf.streams.security import append_security_stream
-from cloudflare_executive_report.pdf.theme import Theme
+from cloudflare_executive_report.pdf.theme import (
+    Theme,
+    theme_with_chart_format,
+    theme_with_map_format,
+)
 from cloudflare_executive_report.report.baseline_selection import (
     find_previous_zone_in_report,
     select_previous_report_for_period,
@@ -114,10 +118,16 @@ def write_report_pdf(
     theme: Theme | None = None,
 ) -> None:
     if theme is not None:
-        th = theme
+        th = theme_with_map_format(
+            theme_with_chart_format(theme, cfg.pdf_chart_format),
+            cfg.pdf_map_format,
+        )
     else:
         q = parse_pdf_image_quality(cfg.pdf_image_quality)
-        th = theme_with_pdf_image_quality(q)
+        th = theme_with_map_format(
+            theme_with_chart_format(theme_with_pdf_image_quality(q), cfg.pdf_chart_format),
+            cfg.pdf_map_format,
+        )
     cache_root = cfg.cache_path()
     styles = make_styles(th)
     story: list[Any] = []

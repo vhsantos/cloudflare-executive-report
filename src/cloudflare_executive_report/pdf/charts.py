@@ -7,7 +7,7 @@ import io
 import math
 from collections.abc import Sequence
 from datetime import date
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 import matplotlib
 
@@ -28,6 +28,23 @@ SecurityTripleStackMode = Literal["absolute", "percent"]
 # Bottom + top series for stacked charts (e.g. cached + uncached). ``None`` = missing day.
 StackedPoint = tuple[float | None, float | None]
 StackedTriplePoint = tuple[float | None, float | None, float | None]
+
+
+def _save_figure_bytes(fig: Any, *, theme: Theme, pad_inches: float = 0.15) -> bytes:
+    """Save a matplotlib figure to bytes honoring configured chart format."""
+    buf = io.BytesIO()
+    save_kwargs: dict[str, Any] = {
+        "format": theme.chart_format,
+        "bbox_inches": "tight",
+        "facecolor": "white",
+        "pad_inches": pad_inches,
+    }
+    if theme.chart_format == "png":
+        save_kwargs["dpi"] = theme.chart_dpi
+    fig.savefig(buf, **save_kwargs)
+    plt.close(fig)
+    buf.seek(0)
+    return buf.read()
 
 
 def _sum_aligned_stack_rows(
@@ -363,18 +380,7 @@ def line_chart_bytes(
     ax.set_title(title, fontsize=10, color=theme.slate, pad=8)
     if subtitle:
         fig.text(0.5, 0.02, subtitle, ha="center", fontsize=7, color=theme.muted)
-    buf = io.BytesIO()
-    fig.savefig(
-        buf,
-        format="png",
-        dpi=theme.chart_dpi,
-        bbox_inches="tight",
-        facecolor="white",
-        pad_inches=0.15,
-    )
-    plt.close(fig)
-    buf.seek(0)
-    return buf.read()
+    return _save_figure_bytes(fig, theme=theme)
 
 
 def _stacked_segments(
@@ -468,18 +474,7 @@ def stacked_area_chart_bytes(
     ax.set_title(title, fontsize=10, color=theme.slate, pad=8)
     if subtitle:
         fig.text(0.5, 0.02, subtitle, ha="center", fontsize=7, color=theme.muted)
-    buf = io.BytesIO()
-    fig.savefig(
-        buf,
-        format="png",
-        dpi=theme.chart_dpi,
-        bbox_inches="tight",
-        facecolor="white",
-        pad_inches=0.15,
-    )
-    plt.close(fig)
-    buf.seek(0)
-    return buf.read()
+    return _save_figure_bytes(fig, theme=theme)
 
 
 def _triple_to_percent_stack(
@@ -625,18 +620,7 @@ def stacked_area_chart_triple_bytes(
     ax.set_title(title, fontsize=10, color=theme.slate, pad=8)
     if subtitle:
         fig.text(0.5, 0.02, subtitle, ha="center", fontsize=7, color=theme.muted)
-    buf = io.BytesIO()
-    fig.savefig(
-        buf,
-        format="png",
-        dpi=theme.chart_dpi,
-        bbox_inches="tight",
-        facecolor="white",
-        pad_inches=0.15,
-    )
-    plt.close(fig)
-    buf.seek(0)
-    return buf.read()
+    return _save_figure_bytes(fig, theme=theme)
 
 
 def line_chart_triple_bytes(
@@ -778,18 +762,7 @@ def line_chart_triple_bytes(
     ax.set_title(title, fontsize=10, color=theme.slate, pad=8)
     if subtitle:
         fig.text(0.5, 0.02, subtitle, ha="center", fontsize=7, color=theme.muted)
-    buf = io.BytesIO()
-    fig.savefig(
-        buf,
-        format="png",
-        dpi=theme.chart_dpi,
-        bbox_inches="tight",
-        facecolor="white",
-        pad_inches=0.15,
-    )
-    plt.close(fig)
-    buf.seek(0)
-    return buf.read()
+    return _save_figure_bytes(fig, theme=theme)
 
 
 def line_chart_dual_bytes(
@@ -906,18 +879,7 @@ def line_chart_dual_bytes(
     ax.set_title(title, fontsize=10, color=theme.slate, pad=8)
     if subtitle:
         fig.text(0.5, 0.02, subtitle, ha="center", fontsize=7, color=theme.muted)
-    buf = io.BytesIO()
-    fig.savefig(
-        buf,
-        format="png",
-        dpi=theme.chart_dpi,
-        bbox_inches="tight",
-        facecolor="white",
-        pad_inches=0.15,
-    )
-    plt.close(fig)
-    buf.seek(0)
-    return buf.read()
+    return _save_figure_bytes(fig, theme=theme)
 
 
 def prepare_dual_line_daily_metric_series(

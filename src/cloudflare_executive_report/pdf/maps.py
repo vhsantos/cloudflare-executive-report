@@ -37,6 +37,7 @@ def world_map_from_colos_bytes(
     w_in = width_in if width_in is not None else theme.content_width_in()
     h_in = map_height_in_for_width(w_in)
     dpi = theme.map_dpi
+    output_format = theme.map_format
     country_totals = dns_queries_by_country(top_colos)
 
     if not top_colos:
@@ -46,6 +47,7 @@ def world_map_from_colos_bytes(
             h_in,
             dpi,
             theme,
+            output_format=output_format,
         )
     if not country_totals:
         return _placeholder_bytes(
@@ -54,13 +56,26 @@ def world_map_from_colos_bytes(
             h_in,
             dpi,
             theme,
+            output_format=output_format,
         )
 
     try:
-        return _choropleth_cartopy(country_totals, width_in=w_in, dpi=dpi)
+        return _choropleth_cartopy(
+            country_totals,
+            width_in=w_in,
+            dpi=dpi,
+            output_format=output_format,
+        )
     except Exception as e:
         log.warning("Cartopy map failed, using bar fallback: %s", e)
-        return _fallback_bars(country_totals, w_in, h_in, dpi, theme)
+        return _fallback_bars(
+            country_totals,
+            w_in,
+            h_in,
+            dpi,
+            theme,
+            output_format=output_format,
+        )
 
 
 def world_map_from_country_totals_bytes(
@@ -72,6 +87,7 @@ def world_map_from_country_totals_bytes(
     w_in = width_in if width_in is not None else theme.content_width_in()
     h_in = map_height_in_for_width(w_in)
     dpi = theme.map_dpi
+    output_format = theme.map_format
     if not country_totals:
         return _placeholder_bytes(
             "No geographic breakdown for this period.",
@@ -79,12 +95,25 @@ def world_map_from_country_totals_bytes(
             h_in,
             dpi,
             theme,
+            output_format=output_format,
         )
     try:
-        return _choropleth_cartopy(country_totals, width_in=w_in, dpi=dpi)
+        return _choropleth_cartopy(
+            country_totals,
+            width_in=w_in,
+            dpi=dpi,
+            output_format=output_format,
+        )
     except Exception as e:
         log.warning("Cartopy map failed, using bar fallback: %s", e)
-        return _fallback_bars(country_totals, w_in, h_in, dpi, theme)
+        return _fallback_bars(
+            country_totals,
+            w_in,
+            h_in,
+            dpi,
+            theme,
+            output_format=output_format,
+        )
 
 
 def _choropleth_cartopy(
@@ -92,6 +121,7 @@ def _choropleth_cartopy(
     *,
     width_in: float,
     dpi: int,
+    output_format: str = "png",
 ) -> bytes:
     import cartopy.crs as ccrs
     import cartopy.feature as cfeature
@@ -143,7 +173,15 @@ def _choropleth_cartopy(
     ax.add_feature(cfeature.BORDERS, linewidth=0.2, edgecolor="#cbd5e1", alpha=0.55, zorder=2)
     ax.set_axis_off()
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=dpi, facecolor="white", bbox_inches=None, pad_inches=0)
+    save_kwargs: dict[str, Any] = {
+        "format": output_format,
+        "facecolor": "white",
+        "bbox_inches": None,
+        "pad_inches": 0,
+    }
+    if output_format == "png":
+        save_kwargs["dpi"] = dpi
+    fig.savefig(buf, **save_kwargs)
     plt.close(fig)
     buf.seek(0)
     return buf.read()
@@ -155,6 +193,7 @@ def _fallback_bars(
     h_in: float,
     dpi: int,
     theme: Theme,
+    output_format: str = "png",
 ) -> bytes:
     import matplotlib.pyplot as plt
 
@@ -176,7 +215,15 @@ def _fallback_bars(
         ax.spines["right"].set_visible(False)
         ax.grid(axis="x", linestyle="--", alpha=0.35)
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight", facecolor="white", pad_inches=0.12)
+    save_kwargs: dict[str, Any] = {
+        "format": output_format,
+        "bbox_inches": "tight",
+        "facecolor": "white",
+        "pad_inches": 0.12,
+    }
+    if output_format == "png":
+        save_kwargs["dpi"] = dpi
+    fig.savefig(buf, **save_kwargs)
     plt.close(fig)
     buf.seek(0)
     return buf.read()
@@ -188,6 +235,7 @@ def _placeholder_bytes(
     h_in: float,
     dpi: int,
     theme: Theme,
+    output_format: str = "png",
 ) -> bytes:
     import matplotlib.pyplot as plt
 
@@ -195,7 +243,14 @@ def _placeholder_bytes(
     ax.text(0.5, 0.5, message, ha="center", va="center", fontsize=11, color=theme.muted)
     ax.axis("off")
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight", facecolor="white")
+    save_kwargs: dict[str, Any] = {
+        "format": output_format,
+        "bbox_inches": "tight",
+        "facecolor": "white",
+    }
+    if output_format == "png":
+        save_kwargs["dpi"] = dpi
+    fig.savefig(buf, **save_kwargs)
     plt.close(fig)
     buf.seek(0)
     return buf.read()
