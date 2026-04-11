@@ -93,6 +93,7 @@ def append_timeseries_if_enabled(
     y_axis_label: str,
     heading: str | None = "Time series",
 ) -> None:
+    """Build a single-line daily chart from points and append it when timeseries is enabled."""
     if "timeseries" not in blocks:
         return
     chart_bytes, sub = prepare_daily_metric_series(
@@ -101,16 +102,15 @@ def append_timeseries_if_enabled(
         chart_title=chart_title,
         y_axis_label=y_axis_label,
     )
-    if not chart_bytes:
-        return
-    w_content = theme.content_width_in()
-    if heading:
-        story.append(Paragraph(heading, styles["RepSection"]))
-    if sub:
-        story.append(Paragraph(f"<i>{sub}</i>", styles["RepFootnote"]))
-    tw = w_content - (10.0 / inch)
-    th = tw * 0.33
-    story.append(figure_from_bytes(chart_bytes, width_in=tw, height_in=th))
+    append_chart_section(
+        story,
+        styles,
+        theme,
+        blocks,
+        heading=heading,
+        chart_bytes=chart_bytes,
+        subtitle=sub,
+    )
 
 
 def append_chart_section(
@@ -134,6 +134,26 @@ def append_chart_section(
     tw = w_content - (10.0 / inch)
     th = tw * 0.33
     story.append(figure_from_bytes(chart_bytes, width_in=tw, height_in=th))
+
+
+def append_prepared_timeseries_chart(
+    story: list[Any],
+    styles: Any,
+    theme: Theme,
+    blocks: set[str],
+    chart_bytes: bytes,
+    subtitle: str = "",
+) -> None:
+    """Append a pre-rendered timeseries PNG via ``append_chart_section`` (no section heading)."""
+    append_chart_section(
+        story,
+        styles,
+        theme,
+        blocks,
+        heading=None,
+        chart_bytes=chart_bytes,
+        subtitle=subtitle,
+    )
 
 
 def append_map_and_ranked_table(

@@ -29,8 +29,8 @@ from cloudflare_executive_report.pdf.security_display import (
     format_cache_status_label,
 )
 from cloudflare_executive_report.pdf.stream_fragments import (
-    append_chart_section,
     append_missing_dates_note,
+    append_prepared_timeseries_chart,
     append_stream_header,
 )
 from cloudflare_executive_report.pdf.theme import Theme
@@ -129,14 +129,8 @@ def append_cache_stream(
             legend_a="Served by Cloudflare",
             legend_b="Served by origin",
         )
-        append_chart_section(
-            story,
-            styles,
-            theme,
-            blocks,
-            heading=None,
-            chart_bytes=chart_bytes_timeseries,
-            subtitle=sub_t,
+        append_prepared_timeseries_chart(
+            story, styles, theme, blocks, chart_bytes_timeseries, sub_t
         )
 
     pair_ratios = (0.42, 0.18, 0.40)
