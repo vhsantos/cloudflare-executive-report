@@ -259,10 +259,9 @@ def write_report_pdf(
                         zone_warnings.extend(health_warnings)
                     else:
                         raise ValueError(
-                            "Zone health is not available from the report snapshot; "
-                            "live fetch is disabled "
-                            f"(zone {zone_name}). "
-                            "Use a valid matching cf_report.json or run without --cache-only."
+                            "Zone health is not in the report snapshot and live fetch is disabled "
+                            f"(zone {zone_name}). Use a matching cf_report.json or run without "
+                            "--cache-only."
                         )
 
                 if sync_opts is None:
@@ -295,6 +294,7 @@ def write_report_pdf(
                         current_period={"start": spec.start, "end": spec.end},
                         previous_report=previous_report,
                         previous_zone=find_previous_zone_in_report(previous_report, zone_id),
+                        ignore_messages=cfg.ignore_messages,
                     )
                 append_executive_summary(
                     story,

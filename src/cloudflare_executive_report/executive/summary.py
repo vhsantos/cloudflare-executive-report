@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import date
 from typing import Any
 
@@ -11,11 +12,15 @@ from cloudflare_executive_report.common.formatting import (
     format_count_human,
     trim_decimal,
 )
-from cloudflare_executive_report.executive.phrase_catalog import render_phrase
+from cloudflare_executive_report.executive.phrase_catalog import format_line_with_severity_prefix
 from cloudflare_executive_report.executive.rules import (
-    RuleMessage,
-    build_rule_messages,
+    SECT_DELTAS,
+    SECT_RISKS,
+    TX_ORDER,
+    ExecutiveMessageFilter,
+    build_executive_rule_output,
     evaluate_comparison_gate,
+    exec_msg,
 )
 
 _DEFENSIVE_ACTIONS = frozenset(
@@ -212,8 +217,13 @@ def build_executive_summary(
     current_period: dict[str, Any] | None = None,
     previous_report: dict[str, Any] | None = None,
     previous_zone: dict[str, Any] | None = None,
+    ignore_messages: Sequence[str] | None = None,
 ) -> dict[str, Any]:
-    """Build a compact CTO summary object from existing section rollups."""
+    """Build a compact CTO summary object from existing section rollups.
+
+    ``ignore_messages`` entries are either bare phrase keys (letters, digits, underscore) for
+    exact match, or any other string treated as a regular expression (``re.search`` on key).
+    """
     zh = _as_dict(zone_health)
     d = _as_dict(dns)
     h = _as_dict(http)
@@ -243,10 +253,12 @@ def build_executive_summary(
 
     mitigation_rate = float(s.get("mitigation_rate_pct") or 0.0)
 
+    msg_filt = ExecutiveMessageFilter.from_entries(list(ignore_messages or []))
     gate = evaluate_comparison_gate(
         current_zone_id=zone_id,
         previous_report=previous_report,
         current_period=_as_dict(current_period),
+        message_filter=msg_filt,
     )
     current_zone_payload = {
         "zone_name": zone_name,
@@ -259,41 +271,44 @@ def build_executive_summary(
         "audit": au,
         "certificates": ce,
     }
-    rule_buckets = build_rule_messages(
-        current_zone=current_zone_payload,
-        previous_zone=previous_zone,
-        comparison_allowed=gate.allowed,
-    )
-    if gate.warning is not None:
-        rule_buckets["warnings"] = [gate.warning, *rule_buckets.get("warnings", [])]
-    elif gate.allowed:
+    comparison_baseline = None
+    if gate.allowed:
         prev_period = _as_dict((previous_report or {}).get("report_period"))
         ps = str(prev_period.get("start") or "").strip()
         pe = str(prev_period.get("end") or "").strip()
         if ps and pe:
-            baseline_msg = RuleMessage(
-                phrase_key="comparison.baseline_reference",
-                severity="info",
-                message=render_phrase("comparison.baseline_reference", start=ps, end=pe),
+            comparison_baseline = exec_msg(
+                "info",
+                "baseline_reference",
+                section=SECT_DELTAS,
+                filt=msg_filt,
+                start=ps,
+                end=pe,
             )
-            rule_buckets["comparisons"] = [baseline_msg, *rule_buckets.get("comparisons", [])]
 
-    takeaway_buckets = ("positive_changes", "warnings", "correlations", "comparisons")
+    rule_out = build_executive_rule_output(
+        current_zone=current_zone_payload,
+        previous_zone=previous_zone,
+        comparison_allowed=gate.allowed,
+        message_filter=msg_filt,
+        gate_warning=gate.blocked_takeaway,
+        comparison_baseline=comparison_baseline,
+    )
+
     categorized_takeaways = {
-        k: [
+        section_key: [
             {
-                "phrase_key": m.phrase_key,
-                "severity": m.severity,
-                "message": m.message,
-                "display": m.display(),
+                "phrase_key": line.phrase_key,
+                "severity": line.severity,
+                "message": line.body,
+                "display": format_line_with_severity_prefix(line.severity, line.body),
             }
-            for m in v
+            for line in rule_out.lines_for_section(section_key)
         ]
-        for k in takeaway_buckets
-        for v in [rule_buckets.get(k, [])]
+        for section_key in TX_ORDER
     }
     takeaways = [item["display"] for bucket in categorized_takeaways.values() for item in bucket]
-    actions = [item.message for item in rule_buckets.get("actions", [])]
+    actions = [line.body for line in rule_out.actions]
     prev_http = _as_dict(previous_zone.get("http")) if previous_zone else {}
     prev_dns = _as_dict(previous_zone.get("dns")) if previous_zone else {}
     prev_ha = _as_dict(previous_zone.get("http_adaptive")) if previous_zone else {}
@@ -483,5 +498,5 @@ def build_executive_summary(
         "takeaways_categorized": categorized_takeaways,
         "actions": actions,
         "kpi_indicators": kpi_indicators,
-        "warnings_count": len(warn) + len(categorized_takeaways.get("warnings", [])),
+        "warnings_count": len(warn) + len(categorized_takeaways.get(SECT_RISKS, [])),
     }

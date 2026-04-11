@@ -1,11 +1,46 @@
-"""Comparison, regression, and correlation rules for executive takeaways."""
+"""Comparison and risks rules for the executive summary (takeaways + actions)."""
 
 from __future__ import annotations
 
+import re
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
-from cloudflare_executive_report.executive.phrase_catalog import PREFIXES, render_phrase
+from cloudflare_executive_report.executive.phrase_catalog import render_phrase
+
+_VALID_SEVERITIES = frozenset({"positive", "warning", "critical", "info"})
+_TOKEN_KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+
+# Report section IDs: string keys in takeaways_categorized JSON and ExecutiveLine.section.
+# These are NOT severities. Severity (positive, warning, critical, info) is separate; it drives
+# the [OK]/[!] prefix and tone. Section only decides which bucket a line appears in and merge
+# order in the flat takeaways list (see TX_ORDER). Short names keep rules under Ruff line length.
+#
+# SECT_WINS ("wins"): Improvements versus the previous report period (traffic up, latency
+# down, apex proxied, SSL upgraded, DNSSEC enabled). Only emitted when comparison is allowed.
+#
+# SECT_RISKS ("risks"): Current-zone configuration and exposure issues (SSL mode, WAF off, apex
+# unproxied, cert expiry, comparison gate failures). Same bucket as "why we cannot compare periods".
+#
+# SECT_SIGNALS ("signals"): Multiple signals combined in one narrative (origin errors + latency,
+# cache + bandwidth, security level notes, threat rate spikes). Not the same as period deltas.
+#
+# SECT_DELTAS ("deltas"): Period-over-period metric deltas (traffic/threats/latency/cache vs last
+# window). Includes the optional baseline line ("Comparing to: ...") when comparison is allowed.
+#
+# SECT_ACTIONS ("actions"): Recommended next steps only. Shown under "actions" in JSON, not mixed
+# into the numbered takeaway paragraphs for PDF (flat takeaways list excludes this section).
+SECT_WINS = "wins"
+SECT_RISKS = "risks"
+SECT_SIGNALS = "signals"
+SECT_DELTAS = "deltas"
+SECT_ACTIONS = "actions"
+
+# Flatten order for PDF and the flat takeaways list.
+TX_ORDER: tuple[str, ...] = (SECT_WINS, SECT_RISKS, SECT_SIGNALS, SECT_DELTAS)
+
+TakeawaySection = Literal["wins", "risks", "signals", "deltas"]
 
 
 def _as_dict(v: Any) -> dict[str, Any]:
@@ -62,20 +97,98 @@ def _pp_delta(current: float, previous: float) -> float:
     return current - previous
 
 
-@dataclass
-class RuleMessage:
+@dataclass(frozen=True)
+class ExecutiveMessageFilter:
+    """Exact keys and regex patterns that suppress executive lines."""
+
+    exact_keys: frozenset[str]
+    patterns: tuple[re.Pattern[str], ...]
+
+    @classmethod
+    def empty(cls) -> ExecutiveMessageFilter:
+        return cls(frozenset(), ())
+
+    @classmethod
+    def from_entries(cls, entries: Sequence[str] | None) -> ExecutiveMessageFilter:
+        """Token-shaped entries match the key exactly; anything else is a regex (re.search)."""
+        if not entries:
+            return cls.empty()
+        exact: set[str] = set()
+        patterns: list[re.Pattern[str]] = []
+        for raw in entries:
+            s = str(raw).strip()
+            if not s:
+                continue
+            if _TOKEN_KEY.fullmatch(s):
+                exact.add(s)
+            else:
+                patterns.append(re.compile(s))
+        return cls(frozenset(exact), tuple(patterns))
+
+    def is_ignored(self, phrase_key: str) -> bool:
+        if phrase_key in self.exact_keys:
+            return True
+        return any(p.search(phrase_key) for p in self.patterns)
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutiveLine:
+    """One line: phrase key, severity (marker + tone), body, and report section (grouping)."""
+
     phrase_key: str
     severity: str
-    message: str
+    body: str
+    section: str
 
-    def display(self) -> str:
-        return f"{PREFIXES[self.severity]} {self.message}"
+
+@dataclass(frozen=True, slots=True)
+class ExecutiveRuleOutput:
+    """Rule output: ordered takeaway lines, then actions (JSON uses action bodies only)."""
+
+    takeaways: tuple[ExecutiveLine, ...]
+    actions: tuple[ExecutiveLine, ...]
+
+    def lines_for_section(self, section: str) -> list[ExecutiveLine]:
+        """Lines in one takeaway section (for tests and JSON grouping)."""
+        return [ln for ln in self.takeaways if ln.section == section]
 
 
 @dataclass
 class ComparisonGate:
     allowed: bool
-    warning: RuleMessage | None
+    blocked_takeaway: ExecutiveLine | None
+
+
+def exec_msg(
+    severity: str,
+    phrase_key: str,
+    *,
+    section: str,
+    filt: ExecutiveMessageFilter | None = None,
+    **kwargs: object,
+) -> ExecutiveLine | None:
+    """Render a phrase if not ignored. Severity sets the [OK]/[!] prefix; section is the group."""
+    if severity not in _VALID_SEVERITIES:
+        allowed = ", ".join(sorted(_VALID_SEVERITIES))
+        raise ValueError(f"Invalid severity {severity!r}; expected one of: {allowed}")
+    if filt is not None and filt.is_ignored(phrase_key):
+        return None
+    return ExecutiveLine(
+        phrase_key=phrase_key,
+        severity=severity,
+        body=render_phrase(phrase_key, **kwargs),
+        section=section,
+    )
+
+
+def _comparison_gate_blocked(
+    phrase_key: str,
+    filt: ExecutiveMessageFilter | None,
+    **phrase_kwargs: object,
+) -> ComparisonGate:
+    """Return disallowed comparison with one risks takeaway (warning, SECT_RISKS)."""
+    line = exec_msg("warning", phrase_key, section=SECT_RISKS, filt=filt, **phrase_kwargs)
+    return ComparisonGate(allowed=False, blocked_takeaway=line)
 
 
 def evaluate_comparison_gate(
@@ -83,68 +196,39 @@ def evaluate_comparison_gate(
     current_zone_id: str,
     previous_report: dict[str, Any] | None,
     current_period: dict[str, Any],
+    message_filter: ExecutiveMessageFilter | None = None,
 ) -> ComparisonGate:
+    """Whether prior-period comparison is allowed; otherwise one risks takeaway explaining why."""
+    filt = message_filter
     if not previous_report:
-        return ComparisonGate(
-            allowed=False,
-            warning=RuleMessage(
-                phrase_key="no_comparison.first_report",
-                severity="warning",
-                message=render_phrase("no_comparison.first_report"),
-            ),
-        )
+        return _comparison_gate_blocked("no_comparison_first_report", filt)
+
     previous_period = _as_dict(previous_report.get("report_period"))
     current_days = _period_days(current_period)
     previous_days = _period_days(previous_period)
     previous_bounds = _period_bounds(previous_period)
     current_bounds = _period_bounds(current_period)
-    if previous_bounds is None or current_bounds is None or previous_bounds[1] >= current_bounds[0]:
-        return ComparisonGate(
-            allowed=False,
-            warning=RuleMessage(
-                phrase_key="no_comparison.period_mismatch",
-                severity="warning",
-                message=render_phrase(
-                    "no_comparison.period_mismatch",
-                    previous_days=previous_days,
-                    current_days=current_days,
-                ),
-            ),
+    bounds_bad = (
+        previous_bounds is None or current_bounds is None or previous_bounds[1] >= current_bounds[0]
+    )
+    days_bad = current_days <= 0 or previous_days <= 0 or current_days != previous_days
+    if bounds_bad or days_bad:
+        return _comparison_gate_blocked(
+            "no_comparison_period_mismatch",
+            filt,
+            previous_days=previous_days,
+            current_days=current_days,
         )
-    if current_days <= 0 or previous_days <= 0 or current_days != previous_days:
-        return ComparisonGate(
-            allowed=False,
-            warning=RuleMessage(
-                phrase_key="no_comparison.period_mismatch",
-                severity="warning",
-                message=render_phrase(
-                    "no_comparison.period_mismatch",
-                    previous_days=previous_days,
-                    current_days=current_days,
-                ),
-            ),
-        )
+
     prev_zone = _find_zone(previous_report, current_zone_id)
     if not prev_zone:
-        return ComparisonGate(
-            allowed=False,
-            warning=RuleMessage(
-                phrase_key="no_comparison.first_report",
-                severity="warning",
-                message=render_phrase("no_comparison.first_report"),
-            ),
-        )
+        return _comparison_gate_blocked("no_comparison_first_report", filt)
+
     needed = ("http", "security", "dns")
     if any(_as_dict(prev_zone).get(k) in (None, {}) for k in needed):
-        return ComparisonGate(
-            allowed=False,
-            warning=RuleMessage(
-                phrase_key="no_comparison.missing_streams",
-                severity="warning",
-                message=render_phrase("no_comparison.missing_streams"),
-            ),
-        )
-    return ComparisonGate(allowed=True, warning=None)
+        return _comparison_gate_blocked("no_comparison_missing_streams", filt)
+
+    return ComparisonGate(allowed=True, blocked_takeaway=None)
 
 
 def _find_zone(report: dict[str, Any], zone_id: str) -> dict[str, Any] | None:
@@ -154,17 +238,34 @@ def _find_zone(report: dict[str, Any], zone_id: str) -> dict[str, Any] | None:
     return None
 
 
-def build_rule_messages(
+def build_executive_rule_output(
     *,
     current_zone: dict[str, Any],
     previous_zone: dict[str, Any] | None,
     comparison_allowed: bool,
-) -> dict[str, list[RuleMessage]]:
-    positive: list[RuleMessage] = []
-    warnings: list[RuleMessage] = []
-    correlations: list[RuleMessage] = []
-    comparisons: list[RuleMessage] = []
-    actions: list[RuleMessage] = []
+    message_filter: ExecutiveMessageFilter | None = None,
+    gate_warning: ExecutiveLine | None = None,
+    comparison_baseline: ExecutiveLine | None = None,
+) -> ExecutiveRuleOutput:
+    """Run risks and comparison rules; return ordered takeaways and actions."""
+    filt = message_filter or ExecutiveMessageFilter.empty()
+    sections: dict[str, list[ExecutiveLine]] = {k: [] for k in TX_ORDER}
+    actions: list[ExecutiveLine] = []
+
+    def add_takeaway(
+        section: TakeawaySection,
+        severity: str,
+        phrase_key: str,
+        **kwargs: object,
+    ) -> None:
+        line = exec_msg(severity, phrase_key, section=section, filt=filt, **kwargs)
+        if line:
+            sections[section].append(line)
+
+    def add_action(severity: str, phrase_key: str, **kwargs: object) -> None:
+        line = exec_msg(severity, phrase_key, section=SECT_ACTIONS, filt=filt, **kwargs)
+        if line:
+            actions.append(line)
 
     zh = _as_dict(current_zone.get("zone_health"))
     http = _as_dict(current_zone.get("http"))
@@ -185,34 +286,34 @@ def build_rule_messages(
     cert_packs = _as_int(ce.get("total_certificate_packs"))
 
     if apex_unproxied:
-        warnings.append(_msg("warning.apex_unproxied", "warning"))
+        add_takeaway(SECT_RISKS, "warning", "apex_unproxied")
     if ssl_mode == "off":
-        warnings.append(_msg("warning.ssl_off", "critical"))
+        add_takeaway(SECT_RISKS, "critical", "ssl_off")
     elif ssl_mode == "flexible":
-        warnings.append(_msg("warning.ssl_flexible", "critical"))
+        add_takeaway(SECT_RISKS, "critical", "ssl_flexible")
     elif ssl_mode == "full":
-        warnings.append(_msg("warning.ssl_full", "warning"))
+        add_takeaway(SECT_RISKS, "warning", "ssl_full")
     if dnssec in {"off", "disabled"}:
-        warnings.append(_msg("warning.dnssec_off", "warning"))
+        add_takeaway(SECT_RISKS, "warning", "dnssec_off")
     if security_level in {"off", "essentially_off"}:
-        warnings.append(_msg("warning.security_level_off_or_minimal", "critical"))
-        actions.append(_msg("action.enable_cloudflare_security_level_auto", "info"))
+        add_takeaway(SECT_RISKS, "critical", "security_level_off_or_minimal")
+        add_action("info", "enable_cloudflare_security_level_auto")
     elif security_level == "under_attack":
-        correlations.append(_msg("correlation.security_under_attack_mode", "info"))
+        add_takeaway(SECT_SIGNALS, "info", "security_under_attack_mode")
     elif security_level == "low":
-        correlations.append(_msg("correlation.security_level_low", "info"))
+        add_takeaway(SECT_SIGNALS, "info", "security_level_low")
     elif security_level == "high":
-        correlations.append(_msg("correlation.security_level_high", "info"))
+        add_takeaway(SECT_SIGNALS, "info", "security_level_high")
     if not waf_on:
-        warnings.append(_msg("warning.waf_off", "warning"))
+        add_takeaway(SECT_RISKS, "warning", "waf_off")
     if ddos in {"off", "disabled"}:
-        warnings.append(_msg("warning.ddos_off", "warning"))
+        add_takeaway(SECT_RISKS, "warning", "ddos_off")
     if cert_packs == 0:
-        warnings.append(_msg("warning.no_cert_packs", "warning"))
+        add_takeaway(SECT_RISKS, "warning", "no_cert_packs")
     if 0 < exp_days <= 14:
-        warnings.append(_msg("warning.cert_14", "critical", days=exp_days))
+        add_takeaway(SECT_RISKS, "critical", "cert_14", days=exp_days)
     elif 14 < exp_days <= 30:
-        warnings.append(_msg("warning.cert_30", "warning", days=exp_days))
+        add_takeaway(SECT_RISKS, "warning", "cert_30", days=exp_days)
 
     err_5xx = _as_float(ha.get("status_5xx_rate_pct"))
     latency = _as_float(ha.get("origin_response_duration_avg_ms"))
@@ -221,56 +322,41 @@ def build_rule_messages(
     mitigation = _as_float(sec.get("mitigation_rate_pct"))
     audits = _as_int(au.get("total_events"))
     if err_5xx > 0.5 and latency > 500:
-        correlations.append(
-            _msg(
-                "correlation.origin_overloaded",
-                "critical",
-                err_pct=round(err_5xx, 2),
-                latency_ms=int(round(latency)),
-            )
-        )
+        e5, lms = round(err_5xx, 2), int(round(latency))
+        add_takeaway(SECT_SIGNALS, "critical", "origin_overloaded", err_pct=e5, latency_ms=lms)
     if cache_hit < 10 and bandwidth_gb > 10:
-        correlations.append(
-            _msg(
-                "correlation.cache_inefficient",
-                "warning",
-                cache_hit=round(cache_hit, 1),
-                bandwidth_gb=int(round(bandwidth_gb)),
-            )
-        )
+        ch, gbw = round(cache_hit, 1), int(round(bandwidth_gb))
+        add_takeaway(SECT_SIGNALS, "warning", "cache_inefficient", cache_hit=ch, bandwidth_gb=gbw)
     if apex_unproxied and ddos == "on":
-        correlations.append(_msg("correlation.apex_ddos_mismatch", "warning"))
+        add_takeaway(SECT_SIGNALS, "warning", "apex_ddos_mismatch")
     if ssl_mode == "flexible" and cert_packs > 0:
-        correlations.append(_msg("correlation.ssl_flexible_with_cert", "warning"))
+        add_takeaway(SECT_SIGNALS, "warning", "ssl_flexible_with_cert")
     if mitigation > 5.0:
-        correlations.append(
-            _msg("correlation.threats_high", "warning", mitigation_pct=round(mitigation, 1))
-        )
+        add_takeaway(SECT_SIGNALS, "warning", "threats_high", mitigation_pct=round(mitigation, 1))
     if audits > 50:
-        correlations.append(_msg("correlation.audit_high", "warning", events=audits))
+        add_takeaway(SECT_SIGNALS, "warning", "audit_high", events=audits)
 
-    # Action rules migrated from summary.py to keep rule ownership centralized.
     always_https = str(zh.get("always_https") or "").strip().lower()
     total_requests = _as_int(http.get("total_requests"))
     encrypted_requests = _as_int(http.get("encrypted_requests"))
     enc_gap = max(0, total_requests - encrypted_requests)
     enc_gap_pct = (100.0 * enc_gap / total_requests) if total_requests > 0 else 0.0
     if always_https != "on" or (total_requests > 0 and enc_gap_pct > 5.0):
-        actions.append(_msg("action.enable_always_https", "info"))
+        add_action("info", "enable_always_https")
     if dnssec in {"disabled", "off", "unavailable"}:
-        actions.append(_msg("action.review_dnssec", "info"))
+        add_action("info", "review_dnssec")
     if ssl_mode == "full":
-        actions.append(_msg("action.ssl_upgrade_full_to_strict", "info"))
+        add_action("info", "ssl_upgrade_full_to_strict")
     elif ssl_mode not in {"strict", "full_strict"}:
-        actions.append(_msg("action.review_ssl_mode", "info"))
+        add_action("info", "review_ssl_mode")
     if not waf_on:
-        actions.append(_msg("action.review_waf_posture", "info"))
+        add_action("info", "review_waf_posture")
     if apex_unproxied:
-        actions.append(_msg("action.enable_apex_proxy", "info"))
+        add_action("info", "enable_apex_proxy")
     if len(ce) and ce.get("unavailable") is not True and exp_days > 0:
-        actions.append(_msg("action.plan_tls_renewal", "info"))
+        add_action("info", "plan_tls_renewal")
     if len(au) and au.get("unavailable") is not True and audits > 50:
-        actions.append(_msg("action.review_audit_activity", "info"))
+        add_action("info", "review_audit_activity")
 
     if previous_zone and comparison_allowed:
         p_http = _as_dict(previous_zone.get("http"))
@@ -288,78 +374,60 @@ def build_rule_messages(
         )
         if abs(pct_traffic) > 20:
             if pct_traffic > 0:
-                comparisons.append(
-                    _msg("comparison.traffic_up", "info", pct=int(round(pct_traffic)))
-                )
-                positive.append(
-                    _msg("positive.traffic_up", "positive", pct=int(round(pct_traffic)))
-                )
+                pct_i = int(round(pct_traffic))
+                add_takeaway(SECT_DELTAS, "info", "traffic_up_comparison", pct=pct_i)
+                add_takeaway(SECT_WINS, "positive", "traffic_up_positive", pct=pct_i)
             else:
-                comparisons.append(
-                    _msg("comparison.traffic_down", "warning", pct=abs(int(round(pct_traffic))))
-                )
+                pct_dn = abs(int(round(pct_traffic)))
+                add_takeaway(SECT_DELTAS, "warning", "traffic_down_comparison", pct=pct_dn)
         if pct_threats > 100:
+            pt = int(round(pct_threats))
             if abs(pct_traffic) < 10:
-                comparisons.append(
-                    _msg(
-                        "comparison.threats_up_traffic_flat",
-                        "critical",
-                        pct=int(round(pct_threats)),
-                    )
-                )
+                add_takeaway(SECT_DELTAS, "critical", "threats_up_traffic_flat", pct=pt)
             else:
-                comparisons.append(
-                    _msg("comparison.threats_up_traffic_up", "warning", pct=int(round(pct_threats)))
-                )
+                add_takeaway(SECT_DELTAS, "warning", "threats_up_traffic_up", pct=pt)
         latency_delta = _as_float(ha.get("origin_response_duration_avg_ms")) - _as_float(
             p_ha.get("origin_response_duration_avg_ms")
         )
         if latency_delta > 100:
-            comparisons.append(
-                _msg("comparison.latency_up", "warning", ms=int(round(latency_delta)))
+            add_takeaway(
+                SECT_DELTAS, "warning", "latency_up_comparison", ms=int(round(latency_delta))
             )
         elif latency_delta < -10:
-            positive.append(
-                _msg("positive.latency_down", "positive", ms=abs(int(round(latency_delta))))
-            )
+            ms_dn = abs(int(round(latency_delta)))
+            add_takeaway(SECT_WINS, "positive", "latency_down", ms=ms_dn)
         cache_delta = _pp_delta(
             _as_float(cache.get("cache_hit_ratio") or http.get("cache_hit_ratio")),
             _as_float(p_http.get("cache_hit_ratio")),
         )
         if cache_delta < -15:
-            comparisons.append(
-                _msg("comparison.cache_hit_down", "warning", pp=abs(int(round(cache_delta))))
-            )
+            pp_dn = abs(int(round(cache_delta)))
+            add_takeaway(SECT_DELTAS, "warning", "cache_hit_down", pp=pp_dn)
         p_apex = _as_int(p_dr.get("apex_unproxied_a_aaaa"))
         c_apex = _as_int(dr.get("apex_unproxied_a_aaaa"))
         if p_apex == 0 and c_apex > 0:
-            comparisons.append(
-                _msg(
-                    "comparison.apex_regression", "critical", previous="proxied", current="dns-only"
-                )
+            add_takeaway(
+                SECT_DELTAS, "critical", "apex_regression", previous="proxied", current="dns-only"
             )
         if p_apex > 0 and c_apex == 0:
-            positive.append(_msg("positive.apex_proxied", "positive"))
+            add_takeaway(SECT_WINS, "positive", "apex_proxied")
         p_ssl = str(p_zh.get("ssl_mode") or "").strip().lower()
         c_ssl = str(zh.get("ssl_mode") or "").strip().lower()
         if p_ssl in {"strict", "full_strict"} and c_ssl == "flexible":
-            comparisons.append(
-                _msg("comparison.ssl_regression", "critical", previous=p_ssl, current=c_ssl)
-            )
+            add_takeaway(SECT_DELTAS, "critical", "ssl_regression", previous=p_ssl, current=c_ssl)
         if p_ssl == "flexible" and c_ssl in {"strict", "full", "full_strict"}:
-            positive.append(_msg("positive.ssl_upgraded", "positive"))
+            add_takeaway(SECT_WINS, "positive", "ssl_upgraded")
         p_dnssec = str(p_zh.get("dnssec_status") or "").strip().lower()
         if p_dnssec in {"off", "disabled"} and dnssec not in {"off", "disabled"}:
-            positive.append(_msg("positive.dnssec_enabled", "positive"))
+            add_takeaway(SECT_WINS, "positive", "dnssec_enabled")
 
-    return {
-        "positive_changes": positive,
-        "warnings": warnings,
-        "correlations": correlations,
-        "comparisons": comparisons,
-        "actions": actions,
-    }
+    if gate_warning is not None:
+        sections[SECT_RISKS].insert(0, gate_warning)
+    if comparison_baseline is not None:
+        sections[SECT_DELTAS].insert(0, comparison_baseline)
 
-
-def _msg(key: str, severity: str, **kwargs: object) -> RuleMessage:
-    return RuleMessage(phrase_key=key, severity=severity, message=render_phrase(key, **kwargs))
+    merged_takeaways = [ln for key in TX_ORDER for ln in sections[key]]
+    return ExecutiveRuleOutput(
+        takeaways=tuple(merged_takeaways),
+        actions=tuple(actions),
+    )

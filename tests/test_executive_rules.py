@@ -1,7 +1,14 @@
-from cloudflare_executive_report.executive.phrase_catalog import render_phrase
+from cloudflare_executive_report.executive.phrase_catalog import (
+    format_line_with_severity_prefix,
+    render_phrase,
+)
 from cloudflare_executive_report.executive.rules import (
-    build_rule_messages,
+    SECT_RISKS,
+    SECT_SIGNALS,
+    ExecutiveMessageFilter,
+    build_executive_rule_output,
     evaluate_comparison_gate,
+    exec_msg,
 )
 
 
@@ -21,8 +28,8 @@ def test_comparison_gate_first_report_phrase():
         current_period={"start": "2026-04-01", "end": "2026-04-07"},
     )
     assert gate.allowed is False
-    assert gate.warning is not None
-    assert gate.warning.message == render_phrase("no_comparison.first_report")
+    assert gate.blocked_takeaway is not None
+    assert gate.blocked_takeaway.body == render_phrase("no_comparison_first_report")
 
 
 def test_comparison_gate_period_mismatch_phrase():
@@ -33,7 +40,7 @@ def test_comparison_gate_period_mismatch_phrase():
         current_period={"start": "2026-04-01", "end": "2026-04-07"},
     )
     assert gate.allowed is False
-    assert "Comparison skipped: previous period" in gate.warning.message
+    assert "Comparison skipped: previous period" in gate.blocked_takeaway.body
 
 
 def test_comparison_gate_rejects_overlapping_periods():
@@ -44,7 +51,7 @@ def test_comparison_gate_rejects_overlapping_periods():
         current_period={"start": "2026-04-05", "end": "2026-04-11"},
     )
     assert gate.allowed is False
-    assert "Comparison skipped: previous period" in gate.warning.message
+    assert "Comparison skipped: previous period" in gate.blocked_takeaway.body
 
 
 def test_correlation_origin_overloaded_uses_exact_phrase():
@@ -58,10 +65,10 @@ def test_correlation_origin_overloaded_uses_exact_phrase():
         "audit": {"total_events": 0},
         "certificates": {},
     }
-    out = build_rule_messages(
+    out = build_executive_rule_output(
         current_zone=current_zone, previous_zone=None, comparison_allowed=False
     )
-    texts = [m.message for m in out["correlations"]]
+    texts = [m.body for m in out.lines_for_section(SECT_SIGNALS)]
     assert any(
         "Origin overloaded: high error rate (0.8%) with slow response (600ms)" == t for t in texts
     )
@@ -84,22 +91,22 @@ def test_action_rules_migrated_from_summary_logic():
         "audit": {"total_events": 51},
         "certificates": {"expiring_in_30_days": 5},
     }
-    out = build_rule_messages(
+    out = build_executive_rule_output(
         current_zone=current_zone,
         previous_zone=None,
         comparison_allowed=False,
     )
-    action_keys = [m.phrase_key for m in out["actions"]]
-    action_texts = [m.message for m in out["actions"]]
-    warning_keys = {m.phrase_key for m in out["warnings"]}
-    assert "warning.ssl_full" in warning_keys
-    assert "action.enable_always_https" in action_keys
-    assert "action.review_dnssec" in action_keys
-    assert "action.ssl_upgrade_full_to_strict" in action_keys
-    assert "action.review_waf_posture" in action_keys
-    assert "action.enable_apex_proxy" in action_keys
-    assert "action.plan_tls_renewal" in action_keys
-    assert "action.review_audit_activity" in action_keys
+    action_keys = [m.phrase_key for m in out.actions]
+    action_texts = [m.body for m in out.actions]
+    warning_keys = {m.phrase_key for m in out.lines_for_section(SECT_RISKS)}
+    assert "ssl_full" in warning_keys
+    assert "enable_always_https" in action_keys
+    assert "review_dnssec" in action_keys
+    assert "ssl_upgrade_full_to_strict" in action_keys
+    assert "review_waf_posture" in action_keys
+    assert "enable_apex_proxy" in action_keys
+    assert "plan_tls_renewal" in action_keys
+    assert "review_audit_activity" in action_keys
     assert "Enable Always Use HTTPS - redirects HTTP to HTTPS for all traffic." in action_texts
     assert "Enable DNSSEC - prevents DNS spoofing and domain hijacking." in action_texts
     assert (
@@ -153,26 +160,26 @@ def test_all_action_phrase_keys_are_reachable_by_rules():
     }
     keys_flex = {
         m.phrase_key
-        for m in build_rule_messages(
+        for m in build_executive_rule_output(
             current_zone=flex_zone, previous_zone=None, comparison_allowed=False
-        )["actions"]
+        ).actions
     }
     keys_full = {
         m.phrase_key
-        for m in build_rule_messages(
+        for m in build_executive_rule_output(
             current_zone=full_zone, previous_zone=None, comparison_allowed=False
-        )["actions"]
+        ).actions
     }
     expected = {
-        "action.enable_always_https",
-        "action.review_dnssec",
-        "action.review_ssl_mode",
-        "action.ssl_upgrade_full_to_strict",
-        "action.review_waf_posture",
-        "action.enable_apex_proxy",
-        "action.plan_tls_renewal",
-        "action.review_audit_activity",
-        "action.enable_cloudflare_security_level_auto",
+        "enable_always_https",
+        "review_dnssec",
+        "review_ssl_mode",
+        "ssl_upgrade_full_to_strict",
+        "review_waf_posture",
+        "enable_apex_proxy",
+        "plan_tls_renewal",
+        "review_audit_activity",
+        "enable_cloudflare_security_level_auto",
     }
     assert keys_flex | keys_full == expected
 
@@ -199,62 +206,109 @@ def _zone_minimal_for_security_level(*, security_level: str, ssl_mode: str = "st
 
 
 def test_security_level_medium_no_low_high_under_attack_correlations() -> None:
-    out = build_rule_messages(
+    out = build_executive_rule_output(
         current_zone=_zone_minimal_for_security_level(security_level="medium"),
         previous_zone=None,
         comparison_allowed=False,
     )
-    ckeys = {m.phrase_key for m in out["correlations"]}
-    assert "correlation.security_level_low" not in ckeys
-    assert "correlation.security_level_high" not in ckeys
-    assert "correlation.security_under_attack_mode" not in ckeys
+    ckeys = {m.phrase_key for m in out.lines_for_section(SECT_SIGNALS)}
+    assert "security_level_low" not in ckeys
+    assert "security_level_high" not in ckeys
+    assert "security_under_attack_mode" not in ckeys
 
 
 def test_security_level_low_info_correlation() -> None:
-    out = build_rule_messages(
+    out = build_executive_rule_output(
         current_zone=_zone_minimal_for_security_level(security_level="low"),
         previous_zone=None,
         comparison_allowed=False,
     )
-    corr = {m.phrase_key: m.severity for m in out["correlations"]}
-    assert corr.get("correlation.security_level_low") == "info"
+    corr = {m.phrase_key: m.severity for m in out.lines_for_section(SECT_SIGNALS)}
+    assert corr.get("security_level_low") == "info"
 
 
 def test_security_level_high_info_correlation() -> None:
-    out = build_rule_messages(
+    out = build_executive_rule_output(
         current_zone=_zone_minimal_for_security_level(security_level="high"),
         previous_zone=None,
         comparison_allowed=False,
     )
-    corr = {m.phrase_key: m.severity for m in out["correlations"]}
-    assert corr.get("correlation.security_level_high") == "info"
+    corr = {m.phrase_key: m.severity for m in out.lines_for_section(SECT_SIGNALS)}
+    assert corr.get("security_level_high") == "info"
 
 
 def test_security_level_off_warns_and_action() -> None:
-    out = build_rule_messages(
+    out = build_executive_rule_output(
         current_zone=_zone_minimal_for_security_level(security_level="off"),
         previous_zone=None,
         comparison_allowed=False,
     )
-    assert "warning.security_level_off_or_minimal" in {m.phrase_key for m in out["warnings"]}
-    assert "action.enable_cloudflare_security_level_auto" in {m.phrase_key for m in out["actions"]}
+    wkeys = {m.phrase_key for m in out.lines_for_section(SECT_RISKS)}
+    assert "security_level_off_or_minimal" in wkeys
+    assert "enable_cloudflare_security_level_auto" in {m.phrase_key for m in out.actions}
 
 
 def test_security_level_essentially_off_warns_and_action() -> None:
-    out = build_rule_messages(
+    out = build_executive_rule_output(
         current_zone=_zone_minimal_for_security_level(security_level="essentially_off"),
         previous_zone=None,
         comparison_allowed=False,
     )
-    assert "warning.security_level_off_or_minimal" in {m.phrase_key for m in out["warnings"]}
-    assert "action.enable_cloudflare_security_level_auto" in {m.phrase_key for m in out["actions"]}
+    wkeys = {m.phrase_key for m in out.lines_for_section(SECT_RISKS)}
+    assert "security_level_off_or_minimal" in wkeys
+    assert "enable_cloudflare_security_level_auto" in {m.phrase_key for m in out.actions}
 
 
 def test_security_level_under_attack_info_correlation() -> None:
-    out = build_rule_messages(
+    out = build_executive_rule_output(
         current_zone=_zone_minimal_for_security_level(security_level="under_attack"),
         previous_zone=None,
         comparison_allowed=False,
     )
-    corr = {m.phrase_key: m.severity for m in out["correlations"]}
-    assert corr.get("correlation.security_under_attack_mode") == "info"
+    corr = {m.phrase_key: m.severity for m in out.lines_for_section(SECT_SIGNALS)}
+    assert corr.get("security_under_attack_mode") == "info"
+
+
+def test_ignore_messages_filters_exact_key() -> None:
+    current_zone = {
+        "zone_name": "example.com",
+        "zone_health": {
+            "always_https": "off",
+            "dnssec_status": "disabled",
+            "ssl_mode": "strict",
+            "security_rules_active": 1,
+        },
+        "http": {"total_requests": 100, "encrypted_requests": 100},
+        "security": {},
+        "cache": {},
+        "http_adaptive": {},
+        "dns_records": {"apex_unproxied_a_aaaa": 0},
+        "audit": {"total_events": 0},
+        "certificates": {},
+    }
+    filt = ExecutiveMessageFilter.from_entries(["review_dnssec"])
+    out = build_executive_rule_output(
+        current_zone=current_zone,
+        previous_zone=None,
+        comparison_allowed=False,
+        message_filter=filt,
+    )
+    assert "review_dnssec" not in {m.phrase_key for m in out.actions}
+
+
+def test_add_exec_msg_rejects_invalid_severity() -> None:
+    try:
+        exec_msg("bogus", "cert_14", section=SECT_RISKS, days=1)
+        raise AssertionError("expected ValueError")
+    except ValueError as e:
+        assert "bogus" in str(e)
+
+
+def test_format_line_with_severity_prefix() -> None:
+    assert format_line_with_severity_prefix("warning", "Hello") == "[!] Hello"
+
+
+def test_executive_message_filter_regex() -> None:
+    filt = ExecutiveMessageFilter.from_entries([r"^ssl_"])
+    assert filt.is_ignored("ssl_off")
+    assert not filt.is_ignored("review_ssl_mode")

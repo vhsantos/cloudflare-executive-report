@@ -95,10 +95,10 @@ def test_build_executive_summary_warning_with_warnings_and_inactive_zone():
     assert out["warnings_count"] >= 1
     assert len(out["actions"]) >= 1
     assert set(out["takeaways_categorized"].keys()) == {
-        "positive_changes",
-        "warnings",
-        "correlations",
-        "comparisons",
+        "wins",
+        "risks",
+        "signals",
+        "deltas",
     }
     assert all(a not in out["takeaways"] for a in out["actions"])
 
@@ -301,3 +301,29 @@ def test_build_executive_summary_includes_baseline_reference_takeaway_when_compa
         previous_zone=previous_zone,
     )
     assert any("Comparing to: 2026-03-25 to 2026-03-31" in t for t in out["takeaways"])
+
+
+def test_build_executive_summary_ignore_messages_drops_matching_actions() -> None:
+    out = build_executive_summary(
+        zone_name="example.com",
+        zone_health={
+            "zone_status": "active",
+            "ssl_mode": "strict",
+            "always_https": "on",
+            "security_level": "medium",
+            "dnssec_status": "disabled",
+            "ddos_protection": "on",
+            "security_rules_active": 1,
+        },
+        dns={"total_queries": 10, "average_qps": 0.1},
+        http={"total_requests": 100, "encrypted_requests": 100, "cache_hit_ratio": 50.0},
+        security={"mitigated_count": 0, "mitigation_rate_pct": 0.0},
+        cache={},
+        http_adaptive={},
+        dns_records={"apex_unproxied_a_aaaa": 0},
+        audit={"total_events": 0},
+        certificates={"total_certificate_packs": 1, "expiring_in_30_days": 0},
+        warnings=[],
+        ignore_messages=["review_dnssec"],
+    )
+    assert not any("Enable DNSSEC" in a for a in out["actions"])

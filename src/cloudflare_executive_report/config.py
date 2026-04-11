@@ -84,6 +84,8 @@ class AppConfig:
     pdf_map_format: Literal["png", "svg"] = "png"
     zones: list[ZoneEntry] = field(default_factory=list)
     cover: CoverConfig = field(default_factory=CoverConfig)
+    # Executive summary: suppress rule messages by phrase key (identifier) or regex string.
+    ignore_messages: list[str] = field(default_factory=list)
 
     def cache_path(self) -> Path:
         return expand_path(self.cache_dir)
@@ -125,6 +127,7 @@ class AppConfig:
                 "classification": self.cover.classification,
                 "date_format": self.cover.date_format,
             },
+            "ignore_messages": list(self.ignore_messages),
         }
 
     @classmethod
@@ -159,6 +162,11 @@ class AppConfig:
             classification=str(cover_raw.get("classification") or ""),
             date_format=str(cover_raw.get("date_format") or "%d/%b/%Y"),
         )
+        raw_ignore = data.get("ignore_messages")
+        if isinstance(raw_ignore, list):
+            ignore_messages = [str(x) for x in raw_ignore]
+        else:
+            ignore_messages = []
         return cls(
             api_token=str(data.get("api_token") or ""),
             cache_dir=str(data.get("cache_dir") or "~/.cache/cf-report"),
@@ -170,6 +178,7 @@ class AppConfig:
             pdf_map_format=pdf_map_format,
             zones=zones,
             cover=cover,
+            ignore_messages=ignore_messages,
         )
 
 
