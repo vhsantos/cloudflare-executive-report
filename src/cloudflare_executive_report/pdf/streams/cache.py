@@ -19,10 +19,10 @@ from cloudflare_executive_report.pdf.charts import prepare_dual_line_daily_metri
 from cloudflare_executive_report.pdf.layout_spec import CacheStreamLayout
 from cloudflare_executive_report.pdf.primitives import (
     flex_row,
+    flex_row_section,
     get_render_context,
     kpi_row,
     ranked_rows_from_dicts,
-    table_with_bars,
 )
 from cloudflare_executive_report.pdf.security_display import (
     apply_row_label_formatter,
@@ -158,47 +158,28 @@ def append_cache_stream(
         ranked_rows_from_dicts(mime_rows_in, 5, "content_type") if mime_rows_in else []
     )
 
-    if "status" in blocks and "mime_http_1d" in blocks:
-        story.append(
-            flex_row(
-                [
-                    ("Cache status Edge", edge_rows, triple_ratios),
-                    ("Cache status origin", origin_rows, triple_ratios),
-                    ("Traffic by response type", mime_rows_triple, triple_ratios),
-                ]
+    cache_ranked_tables: list[tuple[str, list[list[Any]], tuple[float, float, float]]] = []
+    if "status" in blocks:
+        status_ratios = triple_ratios if "mime_http_1d" in blocks else pair_ratios
+        cache_ranked_tables.append(("Cache status Edge", edge_rows, status_ratios))
+        cache_ranked_tables.append(("Cache status origin", origin_rows, status_ratios))
+    if "mime_http_1d" in blocks:
+        if "status" in blocks:
+            cache_ranked_tables.append(
+                ("Traffic by response type", mime_rows_triple, triple_ratios),
             )
-        )
-        story.append(Spacer(1, PDF_SPACE_SMALL_PT))
-    elif "status" in blocks:
-        story.append(
-            flex_row(
-                [
-                    ("Cache status Edge", edge_rows, pair_ratios),
-                    ("Cache status origin", origin_rows, pair_ratios),
-                ]
+        else:
+            mime_rows_full = (
+                ranked_rows_from_dicts(mime_rows_in, top, "content_type") if mime_rows_in else []
             )
-        )
-        story.append(Spacer(1, PDF_SPACE_SMALL_PT))
-    elif "mime_http_1d" in blocks:
-        mime_rows_full = (
-            ranked_rows_from_dicts(mime_rows_in, top, "content_type") if mime_rows_in else []
-        )
-        if mime_rows_full:
-            story.append(
-                table_with_bars(
-                    "Traffic by response type",
-                    mime_rows_full,
-                    mime_full_ratios,
+            if mime_rows_full:
+                cache_ranked_tables.append(
+                    ("Traffic by response type", mime_rows_full, mime_full_ratios),
                 )
-            )
-            story.append(Spacer(1, PDF_SPACE_SMALL_PT))
+    flex_row_section(story, cache_ranked_tables)
 
     path_rows = ranked_rows_from_dicts(list(cache.get("top_paths") or []), top, "path")
     if "paths" in blocks and path_rows:
         story.append(
-            table_with_bars(
-                "Top paths",
-                path_rows,
-                (0.52, 0.18, 0.30),
-            )
+            flex_row([("Top paths", path_rows, (0.52, 0.18, 0.30))]),
         )

@@ -71,7 +71,7 @@ def get_render_context() -> RenderContext:
     if _CONTEXT is None:
         raise RuntimeError(
             "PDF render context is not initialized. Call initialize(theme) before building "
-            "flowables that use table_with_bars, kpi_row, or flex_row."
+            "flowables that use table_with_bars, kpi_row, flex_row, or flex_row_section."
         )
     return _CONTEXT
 
@@ -422,6 +422,16 @@ def flex_row(
         )
     )
     return row
+
+
+def flex_row_section(
+    story: list[Flowable],
+    tables: list[tuple[str, list[list[Any]], tuple[float, float, float]]],
+) -> None:
+    """Append a flex row of ranked tables and a small spacer when tables is non-empty."""
+    if tables:
+        story.append(flex_row(tables))
+        story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
 
 def kpi_row(cells: list[tuple[str, str] | tuple[str, str, str]]) -> Table:

@@ -1,7 +1,7 @@
 """PDF primitive helpers."""
 
 from reportlab.lib.units import inch
-from reportlab.platypus import KeepInFrame, Spacer
+from reportlab.platypus import KeepInFrame, Spacer, Table
 
 from cloudflare_executive_report.common.constants import (
     PDF_MAP_SIDE_BY_SIDE_MAP_WIDTH_SHARE,
@@ -11,6 +11,7 @@ from cloudflare_executive_report.pdf.primitives import (
     _ranked_column_ratios_with_capped_bar,
     clear_render_context,
     flex_row,
+    flex_row_section,
     get_render_context,
     initialize,
     map_side_by_side_table,
@@ -88,5 +89,29 @@ def test_flex_row_rejects_invalid_table_count() -> None:
             raise AssertionError("expected ValueError")
         except ValueError:
             pass
+    finally:
+        clear_render_context()
+
+
+def test_flex_section_appends_nothing_when_tables_empty() -> None:
+    initialize(DEFAULT_THEME)
+    try:
+        story: list = []
+        flex_row_section(story, [])
+        assert len(story) == 0
+    finally:
+        clear_render_context()
+
+
+def test_flex_section_appends_flex_row_and_spacer() -> None:
+    initialize(DEFAULT_THEME)
+    try:
+        story: list = []
+        sample_rows = [["label", "1", 0.5]]
+        ratios = (0.33, 0.33, 0.34)
+        flex_row_section(story, [("T", sample_rows, ratios)])
+        assert len(story) == 2
+        assert isinstance(story[0], Table)
+        assert isinstance(story[1], Spacer)
     finally:
         clear_render_context()

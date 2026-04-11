@@ -14,11 +14,10 @@ from cloudflare_executive_report.common.constants import (
 from cloudflare_executive_report.pdf.layout_spec import DnsStreamLayout
 from cloudflare_executive_report.pdf.maps import world_map_from_colos_bytes
 from cloudflare_executive_report.pdf.primitives import (
-    flex_row,
+    flex_row_section,
     get_render_context,
     kpi_row,
     ranked_rows_from_dicts,
-    table_with_bars,
 )
 from cloudflare_executive_report.pdf.stream_fragments import (
     append_map_and_ranked_table,
@@ -99,40 +98,28 @@ def append_dns_stream(
     rtypes = ranked_rows_from_dicts(list(dns.get("top_record_types") or []), top, "type")
     rcodes = ranked_rows_from_dicts(list(dns.get("response_codes") or []), top, "code")
 
+    qname_tables: list[tuple[str, list[list[Any]], tuple[float, float, float]]] = []
     if "qnames_rtypes" in blocks:
-        story.append(
-            flex_row(
-                [
-                    ("Top query names", qnames, (0.52, 0.18, 0.30)),
-                    ("Top record types", rtypes, (0.28, 0.18, 0.54)),
-                ]
-            )
-        )
-        story.append(Spacer(1, PDF_SPACE_SMALL_PT))
+        qname_tables.append(("Top query names", qnames, (0.52, 0.18, 0.30)))
+        qname_tables.append(("Top record types", rtypes, (0.28, 0.18, 0.54)))
+    flex_row_section(story, qname_tables)
 
     proto = ranked_rows_from_dicts(list(dns.get("protocols") or []), top, "protocol")
     ip_v = ranked_rows_from_dicts(list(dns.get("ip_versions") or []), top, "version")
 
+    dns_detail_tables: list[tuple[str, list[list[Any]], tuple[float, float, float]]] = []
+    dns_triple_ratios = (0.52, 0.22, 0.26)
     if "rcode_proto" in blocks:
-        dns_triple_ratios = (0.52, 0.22, 0.26)
-        story.append(
-            flex_row(
-                [
-                    ("Response codes", rcodes, dns_triple_ratios),
-                    ("Protocols", proto, dns_triple_ratios),
-                    ("IP versions", ip_v, dns_triple_ratios),
-                ]
-            )
+        dns_detail_tables.extend(
+            [
+                ("Response codes", rcodes, dns_triple_ratios),
+                ("Protocols", proto, dns_triple_ratios),
+                ("IP versions", ip_v, dns_triple_ratios),
+            ]
         )
-        story.append(Spacer(1, PDF_SPACE_SMALL_PT))
-    elif "ip_versions" in blocks:
-        story.append(
-            table_with_bars(
-                "IP versions",
-                ip_v,
-                (0.22, 0.12, 0.66),
-            )
-        )
+    elif "ip_versions" in blocks and ip_v:
+        dns_detail_tables.append(("IP versions", ip_v, (0.22, 0.12, 0.66)))
+    flex_row_section(story, dns_detail_tables)
 
     append_timeseries_if_enabled(
         story,

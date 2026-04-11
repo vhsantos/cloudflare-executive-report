@@ -17,7 +17,7 @@ from cloudflare_executive_report.pdf.charts import prepare_triple_line_daily_met
 from cloudflare_executive_report.pdf.layout_spec import SecurityStreamLayout
 from cloudflare_executive_report.pdf.maps import world_map_from_country_totals_bytes
 from cloudflare_executive_report.pdf.primitives import (
-    flex_row,
+    flex_row_section,
     get_render_context,
     kpi_row,
     ranked_rows_from_dicts,
@@ -171,32 +171,14 @@ def append_security_stream(
         list(security.get("http_methods_breakdown") or []), top, "method"
     )
 
-    if (
-        "services" in blocks
-        and "methods" in blocks
-        and "actions" in blocks
-        and (svc_rows or method_rows or rows_top)
-    ):
-        story.append(
-            flex_row(
-                [
-                    ("HTTP methods", method_rows, method_ratios),
-                    ("Security services", svc_rows, sec_ratios),
-                    ("Security actions", rows_top, sec_ratios),
-                ]
-            )
-        )
-        story.append(Spacer(1, PDF_SPACE_SMALL_PT))
-    else:
-        if "services" in blocks and svc_rows:
-            story.append(table_with_bars("Security services", svc_rows, sec_ratios))
-            story.append(Spacer(1, PDF_SPACE_SMALL_PT))
-        if "methods" in blocks and method_rows:
-            story.append(table_with_bars("HTTP methods", method_rows, method_ratios))
-            story.append(Spacer(1, PDF_SPACE_SMALL_PT))
-        if "actions" in blocks and rows_top:
-            story.append(table_with_bars("Security actions", rows_top, sec_ratios))
-            story.append(Spacer(1, PDF_SPACE_SMALL_PT))
+    breakdown_tables: list[tuple[str, list[list[Any]], tuple[float, float, float]]] = []
+    if "methods" in blocks and method_rows:
+        breakdown_tables.append(("HTTP methods", method_rows, method_ratios))
+    if "services" in blocks and svc_rows:
+        breakdown_tables.append(("Security services", svc_rows, sec_ratios))
+    if "actions" in blocks and rows_top:
+        breakdown_tables.append(("Security actions", rows_top, sec_ratios))
+    flex_row_section(story, breakdown_tables)
 
     atk_items: list[dict[str, Any]] = []
     for r in security.get("top_attack_sources") or []:
@@ -225,52 +207,23 @@ def append_security_stream(
     path_items = list(security.get("top_attack_paths") or [])
     path_rows = ranked_rows_from_dicts(path_items, top, "path")
 
-    if attack_sources_enabled and attack_paths_enabled and (rows_atk or path_rows):
+    attack_tables: list[tuple[str, list[list[Any]], tuple[float, float, float]]] = []
+    if attack_sources_enabled and rows_atk:
+        attack_tables.append(
+            ("Frequently seen attacker IPs", rows_atk, (0.52, 0.18, 0.30)),
+        )
+    if attack_paths_enabled and path_rows:
+        attack_tables.append(("Top attacked paths", path_rows, (0.48, 0.18, 0.34)))
+    flex_row_section(story, attack_tables)
+    if attack_tables and rows_atk:
         story.append(
-            flex_row(
-                [
-                    ("Frequently seen attacker IPs", rows_atk, (0.52, 0.18, 0.30)),
-                    ("Top attacked paths", path_rows, (0.48, 0.18, 0.34)),
-                ]
+            Paragraph(
+                "<i>Note: For multi-day reports, IPs are merged from daily top 10 lists. "
+                "IPs that attack consistently but never reach daily top 10 may not appear.</i>",
+                styles["RepFootnote"],
             )
         )
         story.append(Spacer(1, PDF_SPACE_SMALL_PT))
-        if rows_atk:
-            story.append(
-                Paragraph(
-                    "<i>Note: For multi-day reports, IPs are merged from daily top 10 lists. "
-                    "IPs that attack consistently but never reach daily top 10 may not appear.</i>",
-                    styles["RepFootnote"],
-                )
-            )
-            story.append(Spacer(1, PDF_SPACE_SMALL_PT))
-    else:
-        if attack_sources_enabled and rows_atk:
-            story.append(
-                table_with_bars(
-                    "Frequently seen attacker IPs",
-                    rows_atk,
-                    (0.52, 0.18, 0.30),
-                )
-            )
-            story.append(Spacer(1, PDF_SPACE_SMALL_PT))
-            story.append(
-                Paragraph(
-                    "<i>Note: For multi-day reports, IPs are merged from daily top 10 lists. "
-                    "IPs that attack consistently but never reach daily top 10 may not appear.</i>",
-                    styles["RepFootnote"],
-                )
-            )
-            story.append(Spacer(1, PDF_SPACE_SMALL_PT))
-        if attack_paths_enabled and path_rows:
-            story.append(
-                table_with_bars(
-                    "Top attacked paths",
-                    path_rows,
-                    (0.48, 0.18, 0.34),
-                )
-            )
-            story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
     if "timeseries" in blocks:
         chart_bytes_timeseries, sub_t = prepare_triple_line_daily_metric_series(
