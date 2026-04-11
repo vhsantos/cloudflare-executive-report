@@ -16,7 +16,7 @@ from cloudflare_executive_report.common.formatting import (
     format_pdf_status_line,
     format_percent_compact,
 )
-from cloudflare_executive_report.pdf.primitives import kpi_multi_cell_row, make_styles
+from cloudflare_executive_report.pdf.primitives import get_render_context, kpi_row
 from cloudflare_executive_report.pdf.theme import Theme
 
 
@@ -61,8 +61,7 @@ def append_executive_summary(
     report_type: str | None,
     theme: Theme,
 ) -> None:
-    styles = make_styles(theme)
-    w_content = theme.content_width_in()
+    styles = get_render_context().styles
 
     verdict = str(summary.get("verdict") or "warning").upper()
     story.append(Paragraph("Executive summary", styles["RepStreamHeadLeft"]))
@@ -86,21 +85,18 @@ def append_executive_summary(
     certificates_k = kpis.get("certificates") or {}
 
     story.append(
-        kpi_multi_cell_row(
+        kpi_row(
             [
                 ("Verdict", verdict),
                 ("Zone status", str(platform.get("zone_status") or "unavailable")),
                 ("TLS/SSL Mode", str(platform.get("ssl_mode") or "unavailable")),
                 ("Always HTTPS", str(platform.get("always_https") or "unavailable")),
             ],
-            styles,
-            theme=theme,
-            content_width_in=w_content,
         )
     )
     story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))
     story.append(
-        kpi_multi_cell_row(
+        kpi_row(
             [
                 (
                     "Requests",
@@ -128,9 +124,6 @@ def append_executive_summary(
                     _indicator_for(summary, "security.mitigation_rate_pct"),
                 ),
             ],
-            styles,
-            theme=theme,
-            content_width_in=w_content,
         )
     )
     story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))
@@ -142,7 +135,7 @@ def append_executive_summary(
     origin_ms = traffic.get("origin_response_duration_avg_ms")
     origin_txt = f"{round(float(origin_ms))} ms" if origin_ms is not None else "-"
     story.append(
-        kpi_multi_cell_row(
+        kpi_row(
             [
                 (
                     "4xx rate",
@@ -161,9 +154,6 @@ def append_executive_summary(
                     _indicator_for(summary, "traffic.origin_response_duration_avg_ms"),
                 ),
             ],
-            styles,
-            theme=theme,
-            content_width_in=w_content,
         )
     )
     story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))
@@ -171,7 +161,7 @@ def append_executive_summary(
     au_un = bool(audit_k.get("unavailable"))
     ce_un = bool(certificates_k.get("unavailable"))
     story.append(
-        kpi_multi_cell_row(
+        kpi_row(
             [
                 (
                     "DNS queries",
@@ -198,9 +188,6 @@ def append_executive_summary(
                     _indicator_for(summary, "dns_records.dns_only_records"),
                 ),
             ],
-            styles,
-            theme=theme,
-            content_width_in=w_content,
         )
     )
     story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))
@@ -220,7 +207,7 @@ def append_executive_summary(
     apex_status = "-" if dr_un else str(dns_records.get("apex_protection_status") or "-")
     audit_events = "unavailable" if au_un else str(audit_k.get("total_events") or "0")
     story.append(
-        kpi_multi_cell_row(
+        kpi_row(
             [
                 ("Audit events", audit_events),
                 ("Cert packs", cert_packs_v),
@@ -228,9 +215,6 @@ def append_executive_summary(
                 ("Cert expires", cert_label),
                 ("Apex protection", apex_status),
             ],
-            styles,
-            theme=theme,
-            content_width_in=w_content,
         )
     )
     story.append(Spacer(1, PDF_SPACE_SMALL_PT))

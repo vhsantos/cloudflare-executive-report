@@ -5,8 +5,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from reportlab.lib.units import inch
-from reportlab.platypus import Spacer, Table, TableStyle
+from reportlab.platypus import Spacer
 
 from cloudflare_executive_report.common.aggregation_helpers import (
     CACHE_ORIGIN_FETCH_STATUSES,
@@ -19,11 +18,11 @@ from cloudflare_executive_report.common.constants import (
 from cloudflare_executive_report.pdf.charts import prepare_dual_line_daily_metric_series
 from cloudflare_executive_report.pdf.layout_spec import CacheStreamLayout
 from cloudflare_executive_report.pdf.primitives import (
-    kpi_multi_cell_row,
-    make_styles,
+    flex_row,
+    get_render_context,
+    kpi_row,
     ranked_rows_from_dicts,
     table_with_bars,
-    two_column_gap_style,
 )
 from cloudflare_executive_report.pdf.security_display import (
     apply_row_label_formatter,
@@ -66,20 +65,6 @@ def _edge_and_origin_status_items(
     return edge_out[:5], origin_out[:3]
 
 
-def _cache_ranked_cell(
-    title: str,
-    rows: list[list[Any]],
-    *,
-    styles: Any,
-    theme: Theme,
-    ratios: tuple[float, float, float],
-    width_in: float,
-) -> Any:
-    if not rows:
-        return Spacer(1, PDF_SPACE_SMALL_PT)
-    return table_with_bars(title, rows, styles, ratios=ratios, total_width_in=width_in, theme=theme)
-
-
 def append_cache_stream(
     story: list[Any],
     *,
@@ -94,11 +79,7 @@ def append_cache_stream(
     top: int,
     http_mime_1d: list[dict[str, Any]] | None = None,
 ) -> None:
-    styles = make_styles(theme)
-    w_content = theme.content_width_in()
-    w_full = w_content * 72.0
-    w_half = w_full / 2
-    half_inner = theme.half_inner_width_in()
+    styles = get_render_context().styles
     blocks = set(layout.blocks)
     mime_rows_in = http_mime_1d if http_mime_1d is not None else []
 
@@ -121,27 +102,21 @@ def append_cache_stream(
         tb = str(cache.get("total_edge_response_bytes_human") or "0B")
         hr = float(cache.get("cache_hit_ratio") or 0.0)
         story.append(
-            kpi_multi_cell_row(
+            kpi_row(
                 [
                     ("Total requests", tr),
                     ("Served by Cloudflare", scf),
                     ("Served by origin", sor),
                 ],
-                styles,
-                theme=theme,
-                content_width_in=w_content,
             )
         )
         story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))
         story.append(
-            kpi_multi_cell_row(
+            kpi_row(
                 [
                     ("Total bandwidth", tb),
                     ("Cache hit ratio", f"{hr:.1f}%"),
                 ],
-                styles,
-                theme=theme,
-                content_width_in=w_content,
             )
         )
         story.append(Spacer(1, PDF_SPACE_SMALL_PT))
@@ -167,9 +142,6 @@ def append_cache_stream(
     pair_ratios = (0.42, 0.18, 0.40)
     mime_full_ratios = (0.40, 0.18, 0.42)
     triple_ratios = (0.52, 0.22, 0.26)
-    third_inner = theme.third_inner_width_in()
-    gap_pt = theme.col_gap_in * inch
-    w_cell_triple = third_inner * inch
 
     edge_items, origin_items = _edge_and_origin_status_items(cache)
     edge_rows = ranked_rows_from_dicts(
@@ -187,77 +159,25 @@ def append_cache_stream(
     )
 
     if "status" in blocks and "mime_http_1d" in blocks:
-        gutter = Spacer(gap_pt, 1)
-        triple = Table(
-            [
+        story.append(
+            flex_row(
                 [
-                    _cache_ranked_cell(
-                        "Cache status Edge",
-                        edge_rows,
-                        styles=styles,
-                        theme=theme,
-                        ratios=triple_ratios,
-                        width_in=third_inner,
-                    ),
-                    gutter,
-                    _cache_ranked_cell(
-                        "Cache status origin",
-                        origin_rows,
-                        styles=styles,
-                        theme=theme,
-                        ratios=triple_ratios,
-                        width_in=third_inner,
-                    ),
-                    gutter,
-                    _cache_ranked_cell(
-                        "Traffic by response type",
-                        mime_rows_triple,
-                        styles=styles,
-                        theme=theme,
-                        ratios=triple_ratios,
-                        width_in=third_inner,
-                    ),
-                ]
-            ],
-            colWidths=[w_cell_triple, gap_pt, w_cell_triple, gap_pt, w_cell_triple],
-        )
-        triple.setStyle(
-            TableStyle(
-                [
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                    ("Cache status Edge", edge_rows, triple_ratios),
+                    ("Cache status origin", origin_rows, triple_ratios),
+                    ("Traffic by response type", mime_rows_triple, triple_ratios),
                 ]
             )
         )
-        story.append(triple)
         story.append(Spacer(1, PDF_SPACE_SMALL_PT))
     elif "status" in blocks:
-        pair = Table(
-            [
+        story.append(
+            flex_row(
                 [
-                    _cache_ranked_cell(
-                        "Cache status Edge",
-                        edge_rows,
-                        styles=styles,
-                        theme=theme,
-                        ratios=pair_ratios,
-                        width_in=half_inner,
-                    ),
-                    _cache_ranked_cell(
-                        "Cache status origin",
-                        origin_rows,
-                        styles=styles,
-                        theme=theme,
-                        ratios=pair_ratios,
-                        width_in=half_inner,
-                    ),
+                    ("Cache status Edge", edge_rows, pair_ratios),
+                    ("Cache status origin", origin_rows, pair_ratios),
                 ]
-            ],
-            colWidths=[w_half, w_half],
+            )
         )
-        pair.setStyle(two_column_gap_style(theme))
-        story.append(pair)
         story.append(Spacer(1, PDF_SPACE_SMALL_PT))
     elif "mime_http_1d" in blocks:
         mime_rows_full = (
@@ -268,10 +188,7 @@ def append_cache_stream(
                 table_with_bars(
                     "Traffic by response type",
                     mime_rows_full,
-                    styles,
-                    ratios=mime_full_ratios,
-                    total_width_in=w_content,
-                    theme=theme,
+                    mime_full_ratios,
                 )
             )
             story.append(Spacer(1, PDF_SPACE_SMALL_PT))
@@ -282,9 +199,6 @@ def append_cache_stream(
             table_with_bars(
                 "Top paths",
                 path_rows,
-                styles,
-                ratios=(0.52, 0.18, 0.30),
-                total_width_in=w_content,
-                theme=theme,
+                (0.52, 0.18, 0.30),
             )
         )

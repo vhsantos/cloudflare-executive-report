@@ -5,8 +5,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from reportlab.lib.units import inch
-from reportlab.platypus import Spacer, Table, TableStyle
+from reportlab.platypus import Spacer
 
 from cloudflare_executive_report.common.constants import (
     PDF_MAP_SIDE_TABLE_MAX_ROWS,
@@ -15,11 +14,11 @@ from cloudflare_executive_report.common.constants import (
 from cloudflare_executive_report.pdf.layout_spec import DnsStreamLayout
 from cloudflare_executive_report.pdf.maps import world_map_from_colos_bytes
 from cloudflare_executive_report.pdf.primitives import (
-    kpi_two_cell_row,
-    make_styles,
+    flex_row,
+    get_render_context,
+    kpi_row,
     ranked_rows_from_dicts,
     table_with_bars,
-    two_column_gap_style,
 )
 from cloudflare_executive_report.pdf.stream_fragments import (
     append_map_and_ranked_table,
@@ -43,15 +42,7 @@ def append_dns_stream(
     theme: Theme,
     top: int,
 ) -> None:
-    styles = make_styles(theme)
-    w_content = theme.content_width_in()
-    w_full = w_content * inch
-    w_half = w_full / 2
-    half_inner = theme.half_inner_width_in()
-    third_inner = theme.third_inner_width_in()
-    gap_pt = theme.col_gap_in * inch
-    w_cell_triple = third_inner * inch
-
+    styles = get_render_context().styles
     blocks = set(layout.blocks)
 
     append_stream_header(
@@ -71,14 +62,11 @@ def append_dns_stream(
 
     if "kpi" in blocks:
         story.append(
-            kpi_two_cell_row(
-                "Total queries",
-                str(total_q) if total_q < 1000 else f"{total_q:,}",
-                "Avg queries/sec",
-                f"{avg_qps:.3f}",
-                styles,
-                theme=theme,
-                content_width_in=w_content,
+            kpi_row(
+                [
+                    ("Total queries", str(total_q) if total_q < 1000 else f"{total_q:,}"),
+                    ("Avg queries/sec", f"{avg_qps:.3f}"),
+                ]
             )
         )
         story.append(Spacer(1, PDF_SPACE_SMALL_PT))
@@ -112,83 +100,39 @@ def append_dns_stream(
     rcodes = ranked_rows_from_dicts(list(dns.get("response_codes") or []), top, "code")
 
     if "qnames_rtypes" in blocks:
-        left = table_with_bars(
-            "Top query names",
-            qnames,
-            styles,
-            ratios=(0.52, 0.18, 0.30),
-            total_width_in=half_inner,
-            theme=theme,
+        story.append(
+            flex_row(
+                [
+                    ("Top query names", qnames, (0.52, 0.18, 0.30)),
+                    ("Top record types", rtypes, (0.28, 0.18, 0.54)),
+                ]
+            )
         )
-        right = table_with_bars(
-            "Top record types",
-            rtypes,
-            styles,
-            ratios=(0.28, 0.18, 0.54),
-            total_width_in=half_inner,
-            theme=theme,
-        )
-        two_col = Table([[left, right]], colWidths=[w_half, w_half])
-        two_col.setStyle(two_column_gap_style(theme))
-        story.append(two_col)
         story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
     proto = ranked_rows_from_dicts(list(dns.get("protocols") or []), top, "protocol")
     ip_v = ranked_rows_from_dicts(list(dns.get("ip_versions") or []), top, "version")
 
     if "rcode_proto" in blocks:
-        # Card width = column width; spacer columns for gutters (matches page content width).
         dns_triple_ratios = (0.52, 0.22, 0.26)
-        col_codes = table_with_bars(
-            "Response codes",
-            rcodes,
-            styles,
-            ratios=dns_triple_ratios,
-            total_width_in=third_inner,
-            theme=theme,
-        )
-        col_proto = table_with_bars(
-            "Protocols",
-            proto,
-            styles,
-            ratios=dns_triple_ratios,
-            total_width_in=third_inner,
-            theme=theme,
-        )
-        col_ip = table_with_bars(
-            "IP versions",
-            ip_v,
-            styles,
-            ratios=dns_triple_ratios,
-            total_width_in=third_inner,
-            theme=theme,
-        )
-        gutter = Spacer(gap_pt, 1)
-        triple = Table(
-            [[col_codes, gutter, col_proto, gutter, col_ip]],
-            colWidths=[w_cell_triple, gap_pt, w_cell_triple, gap_pt, w_cell_triple],
-        )
-        triple.setStyle(
-            TableStyle(
+        story.append(
+            flex_row(
                 [
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                    ("Response codes", rcodes, dns_triple_ratios),
+                    ("Protocols", proto, dns_triple_ratios),
+                    ("IP versions", ip_v, dns_triple_ratios),
                 ]
             )
         )
-        story.append(triple)
         story.append(Spacer(1, PDF_SPACE_SMALL_PT))
     elif "ip_versions" in blocks:
-        ip_block = table_with_bars(
-            "IP versions",
-            ip_v,
-            styles,
-            ratios=(0.22, 0.12, 0.66),
-            total_width_in=w_content,
-            theme=theme,
+        story.append(
+            table_with_bars(
+                "IP versions",
+                ip_v,
+                (0.22, 0.12, 0.66),
+            )
         )
-        story.append(ip_block)
 
     append_timeseries_if_enabled(
         story,

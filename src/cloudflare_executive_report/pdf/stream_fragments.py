@@ -167,10 +167,8 @@ def append_map_and_ranked_table(
         side_table = table_with_bars(
             table_title,
             table_rows_side,
-            styles,
-            ratios=side_table_ratios,
+            side_table_ratios,
             total_width_in=side_table_w_in,
-            theme=theme,
             show_outer_card=False,
         )
         story.append(map_side_by_side_table(map_fig, side_table, content_width_in=w_content))
@@ -188,10 +186,8 @@ def append_map_and_ranked_table(
         full_table = table_with_bars(
             table_title,
             table_rows_full,
-            styles,
-            ratios=full_table_ratios,
+            full_table_ratios,
             total_width_in=w_content,
-            theme=theme,
         )
         story.append(full_table)
         if append_space_after_table_only:

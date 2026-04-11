@@ -5,8 +5,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from reportlab.lib.units import inch
-from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import Paragraph, Spacer
 
 from cloudflare_executive_report.common.constants import (
     PDF_MAP_SIDE_TABLE_MAX_ROWS,
@@ -18,8 +17,9 @@ from cloudflare_executive_report.pdf.charts import prepare_triple_line_daily_met
 from cloudflare_executive_report.pdf.layout_spec import SecurityStreamLayout
 from cloudflare_executive_report.pdf.maps import world_map_from_country_totals_bytes
 from cloudflare_executive_report.pdf.primitives import (
-    kpi_multi_cell_row,
-    make_styles,
+    flex_row,
+    get_render_context,
+    kpi_row,
     ranked_rows_from_dicts,
     table_with_bars,
 )
@@ -52,12 +52,7 @@ def append_security_stream(
     top: int,
     cache_stream_in_report: bool = False,
 ) -> None:
-    styles = make_styles(theme)
-    w_content = theme.content_width_in()
-    third_inner = theme.third_inner_width_in()
-    gap_pt = theme.col_gap_in * inch
-    w_cell_triple = third_inner * inch
-
+    styles = get_render_context().styles
     blocks = set(layout.blocks)
     # Same breakdown as the dedicated Cache page (from security aggregate); skip when both run.
     show_cache_perf = ("cache" in blocks) and not cache_stream_in_report
@@ -87,28 +82,22 @@ def append_security_stream(
         blk = str(security.get("block_events_sampled_human") or "-")
 
         story.append(
-            kpi_multi_cell_row(
+            kpi_row(
                 [
                     ("Traffic overview", tr),
                     ("Served by Cloudflare", scf),
                     ("Served by origin", sor),
-                ],
-                styles,
-                theme=theme,
-                content_width_in=w_content,
+                ]
             )
         )
         story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))
         story.append(
-            kpi_multi_cell_row(
+            kpi_row(
                 [
                     ("Mitigated", mit_display),
                     ("Challenges", ch),
                     ("Blocks", blk),
-                ],
-                styles,
-                theme=theme,
-                content_width_in=w_content,
+                ]
             )
         )
         story.append(Spacer(1, PDF_SPACE_SMALL_PT))
@@ -188,95 +177,25 @@ def append_security_stream(
         and "actions" in blocks
         and (svc_rows or method_rows or rows_top)
     ):
-        col_methods = (
-            table_with_bars(
-                "HTTP methods",
-                method_rows,
-                styles,
-                ratios=method_ratios,
-                total_width_in=third_inner,
-                theme=theme,
-            )
-            if method_rows
-            else Spacer(1, PDF_SPACE_SMALL_PT)
-        )
-        col_services = (
-            table_with_bars(
-                "Security services",
-                svc_rows,
-                styles,
-                ratios=sec_ratios,
-                total_width_in=third_inner,
-                theme=theme,
-            )
-            if svc_rows
-            else Spacer(1, PDF_SPACE_SMALL_PT)
-        )
-
-        col_actions = (
-            table_with_bars(
-                "Security actions",
-                rows_top,
-                styles,
-                ratios=sec_ratios,
-                total_width_in=third_inner,
-                theme=theme,
-            )
-            if rows_top
-            else Spacer(1, PDF_SPACE_SMALL_PT)
-        )
-        gutter = Spacer(gap_pt, 1)
-        triple = Table(
-            [[col_methods, gutter, col_services, gutter, col_actions]],
-            colWidths=[w_cell_triple, gap_pt, w_cell_triple, gap_pt, w_cell_triple],
-        )
-        triple.setStyle(
-            TableStyle(
+        story.append(
+            flex_row(
                 [
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                    ("HTTP methods", method_rows, method_ratios),
+                    ("Security services", svc_rows, sec_ratios),
+                    ("Security actions", rows_top, sec_ratios),
                 ]
             )
         )
-        story.append(triple)
         story.append(Spacer(1, PDF_SPACE_SMALL_PT))
     else:
         if "services" in blocks and svc_rows:
-            story.append(
-                table_with_bars(
-                    "Security services",
-                    svc_rows,
-                    styles,
-                    ratios=sec_ratios,
-                    total_width_in=w_content,
-                    theme=theme,
-                )
-            )
+            story.append(table_with_bars("Security services", svc_rows, sec_ratios))
             story.append(Spacer(1, PDF_SPACE_SMALL_PT))
         if "methods" in blocks and method_rows:
-            story.append(
-                table_with_bars(
-                    "HTTP methods",
-                    method_rows,
-                    styles,
-                    ratios=method_ratios,
-                    total_width_in=w_content,
-                    theme=theme,
-                )
-            )
+            story.append(table_with_bars("HTTP methods", method_rows, method_ratios))
             story.append(Spacer(1, PDF_SPACE_SMALL_PT))
         if "actions" in blocks and rows_top:
-            story.append(
-                table_with_bars(
-                    "Security actions",
-                    rows_top,
-                    styles,
-                    ratios=sec_ratios,
-                    total_width_in=w_content,
-                    theme=theme,
-                )
-            )
+            story.append(table_with_bars("Security actions", rows_top, sec_ratios))
             story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
     atk_items: list[dict[str, Any]] = []
@@ -307,47 +226,14 @@ def append_security_stream(
     path_rows = ranked_rows_from_dicts(path_items, top, "path")
 
     if attack_sources_enabled and attack_paths_enabled and (rows_atk or path_rows):
-        half_inner = theme.half_inner_width_in()
-        w_half = half_inner * inch
-        atk_panel = (
-            table_with_bars(
-                "Frequently seen attacker IPs",
-                rows_atk,
-                styles,
-                ratios=(0.52, 0.18, 0.30),
-                total_width_in=half_inner,
-                theme=theme,
-            )
-            if rows_atk
-            else Spacer(1, PDF_SPACE_SMALL_PT)
-        )
-        path_panel = (
-            table_with_bars(
-                "Top attacked paths",
-                path_rows,
-                styles,
-                ratios=(0.48, 0.18, 0.34),
-                total_width_in=half_inner,
-                theme=theme,
-            )
-            if path_rows
-            else Spacer(1, PDF_SPACE_SMALL_PT)
-        )
-        attack_row = Table(
-            [[atk_panel, Spacer(gap_pt, 1), path_panel]], colWidths=[w_half, gap_pt, w_half]
-        )
-        attack_row.setStyle(
-            TableStyle(
+        story.append(
+            flex_row(
                 [
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                    ("TOPPADDING", (0, 0), (-1, -1), 0),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                    ("Frequently seen attacker IPs", rows_atk, (0.52, 0.18, 0.30)),
+                    ("Top attacked paths", path_rows, (0.48, 0.18, 0.34)),
                 ]
             )
         )
-        story.append(attack_row)
         story.append(Spacer(1, PDF_SPACE_SMALL_PT))
         if rows_atk:
             story.append(
@@ -364,10 +250,7 @@ def append_security_stream(
                 table_with_bars(
                     "Frequently seen attacker IPs",
                     rows_atk,
-                    styles,
-                    ratios=(0.52, 0.18, 0.30),
-                    total_width_in=w_content,
-                    theme=theme,
+                    (0.52, 0.18, 0.30),
                 )
             )
             story.append(Spacer(1, PDF_SPACE_SMALL_PT))
@@ -384,10 +267,7 @@ def append_security_stream(
                 table_with_bars(
                     "Top attacked paths",
                     path_rows,
-                    styles,
-                    ratios=(0.48, 0.18, 0.34),
-                    total_width_in=w_content,
-                    theme=theme,
+                    (0.48, 0.18, 0.34),
                 )
             )
             story.append(Spacer(1, PDF_SPACE_SMALL_PT))
@@ -423,14 +303,5 @@ def append_security_stream(
         "status",
     )
     if show_cache_perf and cache_rows:
-        story.append(
-            table_with_bars(
-                "Cache performance",
-                cache_rows,
-                styles,
-                ratios=sec_ratios,
-                total_width_in=w_content,
-                theme=theme,
-            )
-        )
+        story.append(table_with_bars("Cache performance", cache_rows, sec_ratios))
         story.append(Spacer(1, PDF_SPACE_SMALL_PT))

@@ -21,8 +21,8 @@ from cloudflare_executive_report.pdf.maps import (
     world_map_from_country_totals_bytes,
 )
 from cloudflare_executive_report.pdf.primitives import (
-    kpi_multi_cell_row,
-    make_styles,
+    get_render_context,
+    kpi_row,
     ranked_rows_from_dicts,
 )
 from cloudflare_executive_report.pdf.stream_fragments import (
@@ -71,9 +71,7 @@ def append_http_stream(
     top: int,
     cache_stream_in_report: bool = False,
 ) -> None:
-    styles = make_styles(theme)
-    w_content = theme.content_width_in()
-
+    styles = get_render_context().styles
     blocks = set(layout.blocks)
 
     append_stream_header(
@@ -101,43 +99,34 @@ def append_http_stream(
     pv = str(http.get("page_views_human") or "0")
     if "kpi" in blocks:
         story.append(
-            kpi_multi_cell_row(
+            kpi_row(
                 [
                     ("Total requests", tr),
                     ("Strict hits", cr),
                     ("Non-hits", ur),
                     ("Cache hit ratio", f"{ch:.1f}%"),
                 ],
-                styles,
-                theme=theme,
-                content_width_in=w_content,
             )
         )
         story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))
         story.append(
-            kpi_multi_cell_row(
+            kpi_row(
                 [
                     ("Total bandwidth", tb),
                     ("Cached bandwidth", cbw),
                     ("Uncached bandwidth", ubw),
                     ("SSL (HTTPS) requests", ssl),
                 ],
-                styles,
-                theme=theme,
-                content_width_in=w_content,
             )
         )
         story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))
         story.append(
-            kpi_multi_cell_row(
+            kpi_row(
                 [
                     ("Uniques Visitors (sum)", uv),
                     ("Peak Uniques Visitors", uv_peak),
                     ("Page views", pv),
                 ],
-                styles,
-                theme=theme,
-                content_width_in=w_content,
             )
         )
         story.append(Spacer(1, PDF_SPACE_SMALL_PT))

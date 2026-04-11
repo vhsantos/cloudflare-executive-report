@@ -10,7 +10,7 @@ from reportlab.graphics.shapes import Drawing
 from reportlab.lib import colors
 from reportlab.lib.units import inch
 from reportlab.pdfbase.pdfmetrics import stringWidth
-from reportlab.platypus import Flowable, Image, KeepInFrame, Paragraph, Table, TableStyle
+from reportlab.platypus import Flowable, Image, KeepInFrame, Paragraph, Spacer, Table, TableStyle
 
 from cloudflare_executive_report.common.constants import (
     PDF_MAP_SIDE_BY_SIDE_MAP_WIDTH_SHARE,
@@ -18,6 +18,7 @@ from cloudflare_executive_report.common.constants import (
     PDF_RANKED_BAR_TRACK_HEIGHT_PT,
     PDF_RANKED_TABLE_ROW_PAD_PT,
     PDF_SPACE_MEDIUM_PT,
+    PDF_SPACE_SMALL_PT,
 )
 from cloudflare_executive_report.common.formatting import format_count_human
 from cloudflare_executive_report.pdf.styles import build_styles
@@ -33,6 +34,52 @@ _KEEP_IN_FRAME_MAX_WIDTH_PT = 1e9
 # rectangle is clipped so labels do not overlap the count/bar columns. ~11pt matches
 # one line at ``RepRankedLabel`` (9pt / 11 leading); raise if two lines should show.
 _RANKED_LABEL_LINE_PT = 11.0
+
+
+class RenderContext:
+    """Document-level theme, styles, and content width for PDF flowable helpers."""
+
+    def __init__(self, theme: Theme) -> None:
+        self.theme = theme
+        self.content_width_in = theme.content_width_in()
+        self.styles = build_styles(theme)
+
+    def column_inner_width_in(self, n_columns: int) -> float:
+        """Width in inches for one column in an n-column row with theme column gaps."""
+        if n_columns < 1:
+            raise ValueError("n_columns must be at least 1")
+        gap_in = self.theme.col_gap_in
+        return (self.content_width_in - (n_columns - 1) * gap_in) / n_columns
+
+    @property
+    def gap_pt(self) -> float:
+        """Column gap in points."""
+        return self.theme.col_gap_in * inch
+
+
+_CONTEXT: RenderContext | None = None
+
+
+def initialize(theme: Theme) -> None:
+    """Set PDF render context. Call once at the start of each report build."""
+    global _CONTEXT
+    _CONTEXT = RenderContext(theme)
+
+
+def get_render_context() -> RenderContext:
+    """Return the active PDF render context."""
+    if _CONTEXT is None:
+        raise RuntimeError(
+            "PDF render context is not initialized. Call initialize(theme) before building "
+            "flowables that use table_with_bars, kpi_row, or flex_row."
+        )
+    return _CONTEXT
+
+
+def clear_render_context() -> None:
+    """Clear PDF render context (after each report or in tests)."""
+    global _CONTEXT
+    _CONTEXT = None
 
 
 def ranked_table_label_cell(text: str, styles: Any) -> KeepInFrame:
@@ -54,7 +101,7 @@ def ranked_table_label_cell(text: str, styles: Any) -> KeepInFrame:
         styles: From ``build_styles``; must define ``RepRankedLabel``.
 
     Returns:
-        Flowable for column 0 of ``table_with_bars`` / ``colo_table_wrap``.
+        Flowable for column 0 of ``table_with_bars``.
     """
     para = Paragraph(escape(str(text).strip()), styles["RepRankedLabel"])
     return KeepInFrame(
@@ -151,7 +198,7 @@ def map_side_by_side_table(
 
     Args:
         map_flowable: Left cell (typically the world map image).
-        side_table_flowable: Right cell (typically ``colo_table_wrap`` or ``table_with_bars``).
+        side_table_flowable: Right cell (typically ``table_with_bars``).
         content_width_in: Full content width in inches; column widths sum to this width.
     """
     w_total_pt = content_width_in * inch
@@ -173,20 +220,6 @@ def map_side_by_side_table(
         )
     )
     return outer
-
-
-def two_column_gap_style(theme: Theme) -> TableStyle:
-    gap_pt = theme.col_gap_in * inch
-    half = gap_pt / 2
-    return TableStyle(
-        [
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("LEFTPADDING", (0, 0), (0, 0), 0),
-            ("RIGHTPADDING", (0, 0), (0, 0), half),
-            ("LEFTPADDING", (0, 1), (0, 1), half),
-            ("RIGHTPADDING", (0, 1), (0, 1), 0),
-        ]
-    )
 
 
 def ranked_rows_from_dicts(
@@ -293,14 +326,17 @@ def _ranked_inner_table_style(num_rows: int, theme: Theme) -> list:
 def table_with_bars(
     title: str,
     rows: list[list[Any]],
-    styles: Any,
-    *,
     ratios: tuple[float, float, float],
-    total_width_in: float,
-    theme: Theme,
+    *,
+    total_width_in: float | None = None,
     show_outer_card: bool = True,
 ) -> Table:
-    inner_w_pt = _inner_grid_width_pt(total_width_in, theme)
+    """Ranked bar table card using the active :func:`initialize` context."""
+    ctx = get_render_context()
+    theme = ctx.theme
+    styles = ctx.styles
+    width_in = ctx.content_width_in if total_width_in is None else total_width_in
+    inner_w_pt = _inner_grid_width_pt(width_in, theme)
     ratios_capped = _ranked_column_ratios_with_capped_bar(ratios, PDF_RANKED_BAR_COLUMN_MAX_SHARE)
     col_pt = _scale_ratios_to_pt(inner_w_pt, ratios_capped)
     bar_total_pt = col_pt[2]
@@ -312,7 +348,7 @@ def table_with_bars(
     inner.setStyle(TableStyle(_ranked_inner_table_style(len(data_rows), theme)))
     title_p = Paragraph(f"<font color='{theme.slate}'>{title}</font>", styles["RepCardTitle"])
     pad = theme.outer_card_pad_pt
-    outer = Table([[title_p], [inner]], colWidths=[total_width_in * inch])
+    outer = Table([[title_p], [inner]], colWidths=[width_in * inch])
     if show_outer_card:
         outer.setStyle(
             TableStyle(
@@ -350,51 +386,52 @@ def table_with_bars(
     return outer
 
 
-def colo_table_wrap(
-    colo_rows: list[list[Any]],
-    *,
-    total_width_in: float,
-    theme: Theme,
-    styles: Any,
+def flex_row(
+    tables: list[tuple[str, list[list[Any]], tuple[float, float, float]]],
 ) -> Table:
-    inner_w_pt = _inner_grid_width_pt(total_width_in, theme)
-    ratios = (0.28, 0.26, 0.46)
-    ratios_capped = _ranked_column_ratios_with_capped_bar(ratios, PDF_RANKED_BAR_COLUMN_MAX_SHARE)
-    col_pt = _scale_ratios_to_pt(inner_w_pt, ratios_capped)
-    bar_total_pt = col_pt[2]
-    data_rows: list[list[Any]] = []
-    for label, cnt_s, bar_w in colo_rows:
-        bar_cell = _bar_cell_table(bar_total_pt, bar_w, theme)
-        data_rows.append([ranked_table_label_cell(str(label), styles), cnt_s, bar_cell])
-    t = Table(data_rows, colWidths=col_pt)
-    t.setStyle(TableStyle(_ranked_inner_table_style(len(data_rows), theme)))
-    wrap = Table([[t]], colWidths=[total_width_in * inch])
-    wrap.setStyle(
+    """Lay out one to three ranked bar table cards with explicit column gaps.
+
+    Column widths use ``(content_width - (n-1)*gap) / n`` inches per table.
+    """
+    ctx = get_render_context()
+    n = len(tables)
+    if n < 1 or n > 3:
+        raise ValueError(f"flex_row supports 1-3 tables, got {n}")
+    gap_pt = ctx.gap_pt
+    cell_width_in = ctx.column_inner_width_in(n)
+    w_cell_pt = cell_width_in * inch
+    cells: list[Any] = []
+    col_widths: list[float] = []
+    for i, (title, rows, ratios) in enumerate(tables):
+        if i > 0:
+            cells.append(Spacer(gap_pt, 1))
+            col_widths.append(gap_pt)
+        if rows:
+            cells.append(table_with_bars(title, rows, ratios, total_width_in=cell_width_in))
+        else:
+            cells.append(Spacer(1, PDF_SPACE_SMALL_PT))
+        col_widths.append(w_cell_pt)
+    row = Table([cells], colWidths=col_widths)
+    row.setStyle(
         TableStyle(
             [
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(theme.card_bg)),
-                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor(theme.border)),
-                ("TOPPADDING", (0, 0), (-1, -1), 10),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
-                ("LEFTPADDING", (0, 0), (-1, -1), theme.outer_card_pad_pt),
-                ("RIGHTPADDING", (0, 0), (-1, -1), theme.outer_card_pad_pt),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
             ]
         )
     )
-    return wrap
+    return row
 
 
-def kpi_multi_cell_row(
-    cells: list[tuple[str, str] | tuple[str, str, str]],
-    styles: Any,
-    *,
-    theme: Theme,
-    content_width_in: float,
-) -> Table:
+def kpi_row(cells: list[tuple[str, str] | tuple[str, str, str]]) -> Table:
     """KPI band: N columns, short vertical dividers, centered text, tighter padding."""
+    ctx = get_render_context()
+    theme = ctx.theme
+    styles = ctx.styles
+    content_width_in = ctx.content_width_in
     if not cells:
-        raise ValueError("kpi_multi_cell_row requires at least one cell")
+        raise ValueError("kpi_row requires at least one cell")
     w_full = content_width_in * inch
     n = len(cells)
     sep_w = 1.5
@@ -530,24 +567,6 @@ def kpi_multi_cell_row(
         )
     summary.setStyle(TableStyle(style_cmds))
     return summary
-
-
-def kpi_two_cell_row(
-    left_label: str,
-    left_value: str,
-    right_label: str,
-    right_value: str,
-    styles: Any,
-    *,
-    theme: Theme,
-    content_width_in: float,
-) -> Table:
-    return kpi_multi_cell_row(
-        [(left_label, left_value), (right_label, right_value)],
-        styles,
-        theme=theme,
-        content_width_in=content_width_in,
-    )
 
 
 def make_styles(theme: Theme) -> Any:
