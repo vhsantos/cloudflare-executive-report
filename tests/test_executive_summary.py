@@ -53,7 +53,7 @@ def test_build_executive_summary_healthy_zone():
     assert out["kpis"]["security"]["threats_mitigated"] == 200
     assert out["kpis"]["security"]["mitigated_events_human"] == "200"
     assert out["kpis"]["security"]["mitigation_rate_pct"] == 0.4
-    assert any("Security level at Medium" in t for t in out["takeaways"])
+    assert "security_level" not in out["kpis"]["platform"]
     assert out["kpis"]["traffic"]["encrypted_gap_pct"] >= 0.0
     assert out["kpis"]["dns"]["average_qps"] == 1.2
     assert "takeaways_categorized" in out

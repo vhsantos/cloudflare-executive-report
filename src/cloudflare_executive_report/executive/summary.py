@@ -410,7 +410,6 @@ def build_executive_summary(
                 "zone_status": _as_str(zh.get("zone_status")),
                 "ssl_mode": ssl_mode,
                 "always_https": always_https,
-                "security_level": _as_str(zh.get("security_level")),
                 "dnssec_status": dnssec_status,
                 "ddos_protection": _as_str(zh.get("ddos_protection")),
                 "security_rules_active": zh.get("security_rules_active", "unavailable"),

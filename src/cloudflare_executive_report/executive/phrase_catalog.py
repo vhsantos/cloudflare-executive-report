@@ -26,13 +26,20 @@ PHRASES: dict[str, str] = {
     "warning.apex_unproxied": "Apex record not proxied - origin IP exposed to attackers",
     "warning.cert_14": "Certificate expires in {days} days - renew immediately",
     "warning.cert_30": "Certificate expires in {days} days - schedule renewal",
-    "warning.ssl_flexible": "Encryption not enforced - upgrade to Full/Strict",
+    "warning.ssl_off": "TLS/SSL mode Off - enable HTTPS immediately.",
+    "warning.ssl_flexible": (
+        "TLS/SSL mode Flexible (HTTP may reach origin) - move to Full (Strict) now."
+    ),
+    "warning.ssl_full": (
+        "TLS/SSL mode Full without CA-validated origin certificate - upgrade to Full (Strict)."
+    ),
     "warning.dnssec_off": "DNSSEC disabled - domain spoofing risk",
-    "warning.security_low": "Security level set to low - increase to Medium/High",
-    "warning.security_medium": "Security level at Medium - consider High for sensitive data",
     "warning.waf_off": "Web Application Firewall disabled - no attack protection",
     "warning.ddos_off": "DDoS protection disabled - availability at risk",
     "warning.no_cert_packs": "No SSL certificate deployed - traffic not encrypted",
+    "warning.security_level_off_or_minimal": (
+        "Cloudflare Security Level is off or essentially off - known threats are barely challenged."
+    ),
     # Correlations
     "correlation.origin_overloaded": (
         "Origin overloaded: high error rate ({err_pct}%) with slow response ({latency_ms}ms)"
@@ -51,6 +58,15 @@ PHRASES: dict[str, str] = {
     ),
     "correlation.audit_high": (
         "Unusual activity: {events} audit events in period - review if expected"
+    ),
+    "correlation.security_under_attack_mode": (
+        "Cloudflare Under Attack mode is on - confirm this is intentional and temporary."
+    ),
+    "correlation.security_level_low": (
+        "Security Level is Low - consider default or automatic for stronger baseline protection."
+    ),
+    "correlation.security_level_high": (
+        "Security Level is High - watch for false positives blocking legitimate users."
     ),
     # Comparisons
     "comparison.threats_up_traffic_flat": (
@@ -74,13 +90,22 @@ PHRASES: dict[str, str] = {
         "Enable Always Use HTTPS - redirects HTTP to HTTPS for all traffic."
     ),
     "action.review_dnssec": "Enable DNSSEC - prevents DNS spoofing and domain hijacking.",
-    "action.review_ssl_mode": "Change SSL mode to Full (Strict) for end-to-end encryption.",
+    "action.review_ssl_mode": (
+        "Change SSL/TLS mode to Full (Strict) for end-to-end encryption "
+        "with certificate validation."
+    ),
+    "action.ssl_upgrade_full_to_strict": (
+        "Upgrade TLS/SSL mode from Full to Full (Strict) - enables CA certificate validation."
+    ),
     "action.review_waf_posture": (
         "Review Web Application Firewall (WAF) and rate-limiting baseline."
     ),
     "action.enable_apex_proxy": "Enable proxy on apex A/AAAA record - hides origin IP.",
     "action.plan_tls_renewal": "Renew TLS certificate before expiry - prevents outages.",
     "action.review_audit_activity": "Review audit log - check for unauthorized changes.",
+    "action.enable_cloudflare_security_level_auto": (
+        "Enable Cloudflare automatic Security Level (Security app) - avoid off or essentially off."
+    ),
 }
 
 PREFIXES: dict[str, str] = {

@@ -186,14 +186,23 @@ def build_rule_messages(
 
     if apex_unproxied:
         warnings.append(_msg("warning.apex_unproxied", "warning"))
-    if ssl_mode == "flexible":
-        warnings.append(_msg("warning.ssl_flexible", "warning"))
+    if ssl_mode == "off":
+        warnings.append(_msg("warning.ssl_off", "critical"))
+    elif ssl_mode == "flexible":
+        warnings.append(_msg("warning.ssl_flexible", "critical"))
+    elif ssl_mode == "full":
+        warnings.append(_msg("warning.ssl_full", "warning"))
     if dnssec in {"off", "disabled"}:
         warnings.append(_msg("warning.dnssec_off", "warning"))
-    if security_level == "low":
-        warnings.append(_msg("warning.security_low", "critical"))
-    elif security_level == "medium":
-        warnings.append(_msg("warning.security_medium", "warning"))
+    if security_level in {"off", "essentially_off"}:
+        warnings.append(_msg("warning.security_level_off_or_minimal", "critical"))
+        actions.append(_msg("action.enable_cloudflare_security_level_auto", "info"))
+    elif security_level == "under_attack":
+        correlations.append(_msg("correlation.security_under_attack_mode", "info"))
+    elif security_level == "low":
+        correlations.append(_msg("correlation.security_level_low", "info"))
+    elif security_level == "high":
+        correlations.append(_msg("correlation.security_level_high", "info"))
     if not waf_on:
         warnings.append(_msg("warning.waf_off", "warning"))
     if ddos in {"off", "disabled"}:
@@ -250,7 +259,9 @@ def build_rule_messages(
         actions.append(_msg("action.enable_always_https", "info"))
     if dnssec in {"disabled", "off", "unavailable"}:
         actions.append(_msg("action.review_dnssec", "info"))
-    if ssl_mode not in {"strict", "full_strict"}:
+    if ssl_mode == "full":
+        actions.append(_msg("action.ssl_upgrade_full_to_strict", "info"))
+    elif ssl_mode not in {"strict", "full_strict"}:
         actions.append(_msg("action.review_ssl_mode", "info"))
     if not waf_on:
         actions.append(_msg("action.review_waf_posture", "info"))

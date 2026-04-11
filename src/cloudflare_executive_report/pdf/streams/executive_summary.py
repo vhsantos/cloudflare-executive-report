@@ -90,7 +90,7 @@ def append_executive_summary(
             [
                 ("Verdict", verdict),
                 ("Zone status", str(platform.get("zone_status") or "unavailable")),
-                ("SSL mode", str(platform.get("ssl_mode") or "unavailable")),
+                ("TLS/SSL Mode", str(platform.get("ssl_mode") or "unavailable")),
                 ("Always HTTPS", str(platform.get("always_https") or "unavailable")),
             ],
             styles,

@@ -91,16 +91,21 @@ def test_action_rules_migrated_from_summary_logic():
     )
     action_keys = [m.phrase_key for m in out["actions"]]
     action_texts = [m.message for m in out["actions"]]
+    warning_keys = {m.phrase_key for m in out["warnings"]}
+    assert "warning.ssl_full" in warning_keys
     assert "action.enable_always_https" in action_keys
     assert "action.review_dnssec" in action_keys
-    assert "action.review_ssl_mode" in action_keys
+    assert "action.ssl_upgrade_full_to_strict" in action_keys
     assert "action.review_waf_posture" in action_keys
     assert "action.enable_apex_proxy" in action_keys
     assert "action.plan_tls_renewal" in action_keys
     assert "action.review_audit_activity" in action_keys
     assert "Enable Always Use HTTPS - redirects HTTP to HTTPS for all traffic." in action_texts
     assert "Enable DNSSEC - prevents DNS spoofing and domain hijacking." in action_texts
-    assert "Change SSL mode to Full (Strict) for end-to-end encryption." in action_texts
+    assert (
+        "Upgrade TLS/SSL mode from Full to Full (Strict) - enables CA certificate validation."
+        in action_texts
+    )
     assert "Review Web Application Firewall (WAF) and rate-limiting baseline." in action_texts
     assert "Enable proxy on apex A/AAAA record - hides origin IP." in action_texts
     assert "Renew TLS certificate before expiry - prevents outages." in action_texts
@@ -108,12 +113,13 @@ def test_action_rules_migrated_from_summary_logic():
 
 
 def test_all_action_phrase_keys_are_reachable_by_rules():
-    current_zone = {
+    flex_zone = {
         "zone_name": "example.com",
         "zone_health": {
             "always_https": "off",
             "dnssec_status": "disabled",
             "ssl_mode": "flexible",
+            "security_level": "off",
             "security_rules_active": 0,
         },
         "http": {
@@ -129,19 +135,126 @@ def test_all_action_phrase_keys_are_reachable_by_rules():
         "audit": {"total_events": 51},
         "certificates": {"expiring_in_30_days": 5},
     }
-    out = build_rule_messages(
-        current_zone=current_zone,
-        previous_zone=None,
-        comparison_allowed=False,
-    )
-    action_keys = {m.phrase_key for m in out["actions"]}
+    full_zone = {
+        "zone_name": "example.com",
+        "zone_health": {
+            "always_https": "off",
+            "dnssec_status": "disabled",
+            "ssl_mode": "full",
+            "security_rules_active": 0,
+        },
+        "http": {"total_requests": 100, "encrypted_requests": 80},
+        "security": {},
+        "cache": {},
+        "http_adaptive": {},
+        "dns_records": {"apex_unproxied_a_aaaa": 1},
+        "audit": {"total_events": 51},
+        "certificates": {"expiring_in_30_days": 5},
+    }
+    keys_flex = {
+        m.phrase_key
+        for m in build_rule_messages(
+            current_zone=flex_zone, previous_zone=None, comparison_allowed=False
+        )["actions"]
+    }
+    keys_full = {
+        m.phrase_key
+        for m in build_rule_messages(
+            current_zone=full_zone, previous_zone=None, comparison_allowed=False
+        )["actions"]
+    }
     expected = {
         "action.enable_always_https",
         "action.review_dnssec",
         "action.review_ssl_mode",
+        "action.ssl_upgrade_full_to_strict",
         "action.review_waf_posture",
         "action.enable_apex_proxy",
         "action.plan_tls_renewal",
         "action.review_audit_activity",
+        "action.enable_cloudflare_security_level_auto",
     }
-    assert action_keys == expected
+    assert keys_flex | keys_full == expected
+
+
+def _zone_minimal_for_security_level(*, security_level: str, ssl_mode: str = "strict") -> dict:
+    return {
+        "zone_name": "example.com",
+        "zone_health": {
+            "always_https": "on",
+            "dnssec_status": "active",
+            "ssl_mode": ssl_mode,
+            "security_level": security_level,
+            "ddos_protection": "on",
+            "security_rules_active": 1,
+        },
+        "http": {"total_requests": 10, "encrypted_requests": 10},
+        "security": {},
+        "cache": {},
+        "http_adaptive": {},
+        "dns_records": {"apex_unproxied_a_aaaa": 0},
+        "audit": {"total_events": 0},
+        "certificates": {"total_certificate_packs": 1, "expiring_in_30_days": 0},
+    }
+
+
+def test_security_level_medium_no_low_high_under_attack_correlations() -> None:
+    out = build_rule_messages(
+        current_zone=_zone_minimal_for_security_level(security_level="medium"),
+        previous_zone=None,
+        comparison_allowed=False,
+    )
+    ckeys = {m.phrase_key for m in out["correlations"]}
+    assert "correlation.security_level_low" not in ckeys
+    assert "correlation.security_level_high" not in ckeys
+    assert "correlation.security_under_attack_mode" not in ckeys
+
+
+def test_security_level_low_info_correlation() -> None:
+    out = build_rule_messages(
+        current_zone=_zone_minimal_for_security_level(security_level="low"),
+        previous_zone=None,
+        comparison_allowed=False,
+    )
+    corr = {m.phrase_key: m.severity for m in out["correlations"]}
+    assert corr.get("correlation.security_level_low") == "info"
+
+
+def test_security_level_high_info_correlation() -> None:
+    out = build_rule_messages(
+        current_zone=_zone_minimal_for_security_level(security_level="high"),
+        previous_zone=None,
+        comparison_allowed=False,
+    )
+    corr = {m.phrase_key: m.severity for m in out["correlations"]}
+    assert corr.get("correlation.security_level_high") == "info"
+
+
+def test_security_level_off_warns_and_action() -> None:
+    out = build_rule_messages(
+        current_zone=_zone_minimal_for_security_level(security_level="off"),
+        previous_zone=None,
+        comparison_allowed=False,
+    )
+    assert "warning.security_level_off_or_minimal" in {m.phrase_key for m in out["warnings"]}
+    assert "action.enable_cloudflare_security_level_auto" in {m.phrase_key for m in out["actions"]}
+
+
+def test_security_level_essentially_off_warns_and_action() -> None:
+    out = build_rule_messages(
+        current_zone=_zone_minimal_for_security_level(security_level="essentially_off"),
+        previous_zone=None,
+        comparison_allowed=False,
+    )
+    assert "warning.security_level_off_or_minimal" in {m.phrase_key for m in out["warnings"]}
+    assert "action.enable_cloudflare_security_level_auto" in {m.phrase_key for m in out["actions"]}
+
+
+def test_security_level_under_attack_info_correlation() -> None:
+    out = build_rule_messages(
+        current_zone=_zone_minimal_for_security_level(security_level="under_attack"),
+        previous_zone=None,
+        comparison_allowed=False,
+    )
+    corr = {m.phrase_key: m.severity for m in out["correlations"]}
+    assert corr.get("correlation.security_under_attack_mode") == "info"
