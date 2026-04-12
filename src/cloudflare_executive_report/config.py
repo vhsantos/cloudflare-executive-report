@@ -86,6 +86,8 @@ class AppConfig:
     cover: CoverConfig = field(default_factory=CoverConfig)
     # Executive summary: suppress rule messages by phrase key (identifier) or regex string.
     ignore_messages: list[str] = field(default_factory=list)
+    # When True, render the NIST control appendix on the executive summary page (same page).
+    pdf_include_nist_appendix: bool = True
 
     def cache_path(self) -> Path:
         return expand_path(self.cache_dir)
@@ -128,6 +130,7 @@ class AppConfig:
                 "date_format": self.cover.date_format,
             },
             "ignore_messages": list(self.ignore_messages),
+            "pdf_include_nist_appendix": self.pdf_include_nist_appendix,
         }
 
     @classmethod
@@ -167,6 +170,8 @@ class AppConfig:
             ignore_messages = [str(x) for x in raw_ignore]
         else:
             ignore_messages = []
+        raw_nist = data.get("pdf_include_nist_appendix")
+        pdf_include_nist_appendix = True if raw_nist is None else bool(raw_nist)
         return cls(
             api_token=str(data.get("api_token") or ""),
             cache_dir=str(data.get("cache_dir") or "~/.cache/cf-report"),
@@ -179,6 +184,7 @@ class AppConfig:
             zones=zones,
             cover=cover,
             ignore_messages=ignore_messages,
+            pdf_include_nist_appendix=pdf_include_nist_appendix,
         )
 
 

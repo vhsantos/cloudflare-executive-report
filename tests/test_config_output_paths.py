@@ -22,3 +22,11 @@ def test_to_yaml_dict_round_trip_ignore_messages() -> None:
     cfg = AppConfig(ignore_messages=["plan_tls_renewal"])
     back = AppConfig.from_yaml_dict(cfg.to_yaml_dict())
     assert back.ignore_messages == ["plan_tls_renewal"]
+
+
+def test_pdf_include_nist_appendix_yaml_round_trip() -> None:
+    cfg = AppConfig(pdf_include_nist_appendix=False)
+    back = AppConfig.from_yaml_dict(cfg.to_yaml_dict())
+    assert back.pdf_include_nist_appendix is False
+    default_back = AppConfig.from_yaml_dict({"zones": []})
+    assert default_back.pdf_include_nist_appendix is True

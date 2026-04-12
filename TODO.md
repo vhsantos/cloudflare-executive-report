@@ -53,3 +53,7 @@
 
 - [ ] Executive Summary incoherent.
   - Security level at Medium - consider High for sensitive data, but KPI SSL mode full/strict.
+
+## Configuration
+
+- [ ] Create sub-sections like: pdf, executive summary, email, etc.

@@ -12,6 +12,7 @@ from cloudflare_executive_report.common.formatting import (
     format_count_human,
     trim_decimal,
 )
+from cloudflare_executive_report.executive.nist_catalog import build_nist_reference_rows
 from cloudflare_executive_report.executive.phrase_catalog import format_line_with_severity_prefix
 from cloudflare_executive_report.executive.rules import (
     SECT_DELTAS,
@@ -299,16 +300,22 @@ def build_executive_summary(
         section_key: [
             {
                 "phrase_key": line.phrase_key,
+                "check_id": line.check_id,
+                "service": line.service,
+                "nist": list(line.nist),
                 "severity": line.severity,
                 "message": line.body,
-                "display": format_line_with_severity_prefix(line.severity, line.body),
+                "display": format_line_with_severity_prefix(
+                    line.severity, line.check_id, line.body
+                ),
             }
             for line in rule_out.lines_for_section(section_key)
         ]
         for section_key in TX_ORDER
     }
     takeaways = [item["display"] for bucket in categorized_takeaways.values() for item in bucket]
-    actions = [line.body for line in rule_out.actions]
+    actions = [f"[{line.check_id}] {line.body}" for line in rule_out.actions]
+    nist_reference = build_nist_reference_rows(list(rule_out.takeaways) + list(rule_out.actions))
     prev_http = _as_dict(previous_zone.get("http")) if previous_zone else {}
     prev_dns = _as_dict(previous_zone.get("dns")) if previous_zone else {}
     prev_ha = _as_dict(previous_zone.get("http_adaptive")) if previous_zone else {}
@@ -425,6 +432,11 @@ def build_executive_summary(
                 "zone_status": _as_str(zh.get("zone_status")),
                 "ssl_mode": ssl_mode,
                 "always_https": always_https,
+                "min_tls_version": _as_str(zh.get("min_tls_version")),
+                "tls_1_3": _as_str(zh.get("tls_1_3")),
+                "browser_check": _as_str(zh.get("browser_check")),
+                "email_obfuscation": _as_str(zh.get("email_obfuscation")),
+                "opportunistic_encryption": _as_str(zh.get("opportunistic_encryption")),
                 "dnssec_status": dnssec_status,
                 "ddos_protection": _as_str(zh.get("ddos_protection")),
                 "security_rules_active": zh.get("security_rules_active", "unavailable"),
@@ -497,6 +509,7 @@ def build_executive_summary(
         "takeaways": takeaways,
         "takeaways_categorized": categorized_takeaways,
         "actions": actions,
+        "nist_reference": nist_reference,
         "kpi_indicators": kpi_indicators,
         "warnings_count": len(warn) + len(categorized_takeaways.get(SECT_RISKS, [])),
     }

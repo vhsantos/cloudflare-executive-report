@@ -1,4 +1,4 @@
-"""Comparison and risks rules for the executive summary (takeaways + actions)."""
+"""Comparison and posture rules for the executive summary (takeaways + actions)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from cloudflare_executive_report.executive.phrase_catalog import render_phrase
+from cloudflare_executive_report.common.constants import HTTPS_ENCRYPTED_GAP_ACTION_MAX_PCT
+from cloudflare_executive_report.executive.phrase_catalog import get_phrase_meta, render_phrase
+from cloudflare_executive_report.zone_health import SKIPPED, UNAVAILABLE
 
 _VALID_SEVERITIES = frozenset({"positive", "warning", "critical", "info"})
 _TOKEN_KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
@@ -97,6 +99,16 @@ def _pp_delta(current: float, previous: float) -> float:
     return current - previous
 
 
+def _zone_health_str(zh: dict[str, Any], key: str) -> str:
+    """Lowercase string for a zone_health field, or empty if missing."""
+    return str(zh.get(key) or "").strip().lower()
+
+
+def _zone_health_config_known(raw: str) -> bool:
+    """True when the value is present and not a fetch skip or error sentinel."""
+    return bool(raw) and raw not in (UNAVAILABLE, SKIPPED)
+
+
 @dataclass(frozen=True)
 class ExecutiveMessageFilter:
     """Exact keys and regex patterns that suppress executive lines."""
@@ -133,9 +145,12 @@ class ExecutiveMessageFilter:
 
 @dataclass(frozen=True, slots=True)
 class ExecutiveLine:
-    """One line: phrase key, severity (marker + tone), body, and report section (grouping)."""
+    """One executive line: ids, NIST tags, severity, rendered body, and report section."""
 
     phrase_key: str
+    check_id: str
+    service: str
+    nist: tuple[str, ...]
     severity: str
     body: str
     section: str
@@ -173,8 +188,12 @@ def exec_msg(
         raise ValueError(f"Invalid severity {severity!r}; expected one of: {allowed}")
     if filt is not None and filt.is_ignored(phrase_key):
         return None
+    meta = get_phrase_meta(phrase_key)
     return ExecutiveLine(
         phrase_key=phrase_key,
+        check_id=meta.check_id,
+        service=meta.service,
+        nist=meta.nist,
         severity=severity,
         body=render_phrase(phrase_key, **kwargs),
         section=section,
@@ -186,7 +205,7 @@ def _comparison_gate_blocked(
     filt: ExecutiveMessageFilter | None,
     **phrase_kwargs: object,
 ) -> ComparisonGate:
-    """Return disallowed comparison with one risks takeaway (warning, SECT_RISKS)."""
+    """Return disallowed comparison with one risks-section takeaway (warning)."""
     line = exec_msg("warning", phrase_key, section=SECT_RISKS, filt=filt, **phrase_kwargs)
     return ComparisonGate(allowed=False, blocked_takeaway=line)
 
@@ -198,7 +217,7 @@ def evaluate_comparison_gate(
     current_period: dict[str, Any],
     message_filter: ExecutiveMessageFilter | None = None,
 ) -> ComparisonGate:
-    """Whether prior-period comparison is allowed; otherwise one risks takeaway explaining why."""
+    """Whether prior-period comparison is allowed; otherwise one posture takeaway explaining why."""
     filt = message_filter
     if not previous_report:
         return _comparison_gate_blocked("no_comparison_first_report", filt)
@@ -247,7 +266,7 @@ def build_executive_rule_output(
     gate_warning: ExecutiveLine | None = None,
     comparison_baseline: ExecutiveLine | None = None,
 ) -> ExecutiveRuleOutput:
-    """Run risks and comparison rules; return ordered takeaways and actions."""
+    """Run posture and comparison rules; return ordered takeaways and actions."""
     filt = message_filter or ExecutiveMessageFilter.empty()
     sections: dict[str, list[ExecutiveLine]] = {k: [] for k in TX_ORDER}
     actions: list[ExecutiveLine] = []
@@ -293,6 +312,30 @@ def build_executive_rule_output(
         add_takeaway(SECT_RISKS, "critical", "ssl_flexible")
     elif ssl_mode == "full":
         add_takeaway(SECT_RISKS, "warning", "ssl_full")
+
+    min_tls = _zone_health_str(zh, "min_tls_version")
+    if _zone_health_config_known(min_tls):
+        if min_tls in ("1.0", "1.1"):
+            add_takeaway(SECT_RISKS, "critical", "min_tls_version_weak", version=min_tls)
+        elif min_tls == "1.2":
+            add_takeaway(SECT_RISKS, "info", "min_tls_version_acceptable")
+
+    tls13 = _zone_health_str(zh, "tls_1_3")
+    if _zone_health_config_known(tls13) and tls13 not in ("on", "zrt"):
+        add_takeaway(SECT_RISKS, "warning", "tls_1_3_disabled")
+
+    browser_chk = _zone_health_str(zh, "browser_check")
+    if _zone_health_config_known(browser_chk) and browser_chk != "on":
+        add_takeaway(SECT_RISKS, "warning", "browser_integrity_disabled")
+
+    email_obs = _zone_health_str(zh, "email_obfuscation")
+    if _zone_health_config_known(email_obs) and email_obs != "on":
+        add_takeaway(SECT_RISKS, "info", "email_obfuscation_disabled")
+
+    opp_enc = _zone_health_str(zh, "opportunistic_encryption")
+    if _zone_health_config_known(opp_enc) and opp_enc != "on":
+        add_takeaway(SECT_RISKS, "info", "opportunistic_encryption_disabled")
+
     if dnssec in {"off", "disabled"}:
         add_takeaway(SECT_RISKS, "warning", "dnssec_off")
     if security_level in {"off", "essentially_off"}:
@@ -341,8 +384,14 @@ def build_executive_rule_output(
     encrypted_requests = _as_int(http.get("encrypted_requests"))
     enc_gap = max(0, total_requests - encrypted_requests)
     enc_gap_pct = (100.0 * enc_gap / total_requests) if total_requests > 0 else 0.0
-    if always_https != "on" or (total_requests > 0 and enc_gap_pct > 5.0):
+    if always_https != "on":
         add_action("info", "enable_always_https")
+    elif total_requests > 0 and enc_gap_pct > HTTPS_ENCRYPTED_GAP_ACTION_MAX_PCT:
+        add_action(
+            "info",
+            "review_https_encryption_gap",
+            gap_pct=round(enc_gap_pct, 1),
+        )
     if dnssec in {"disabled", "off", "unavailable"}:
         add_action("info", "review_dnssec")
     if ssl_mode == "full":
@@ -390,9 +439,8 @@ def build_executive_rule_output(
             p_ha.get("origin_response_duration_avg_ms")
         )
         if latency_delta > 100:
-            add_takeaway(
-                SECT_DELTAS, "warning", "latency_up_comparison", ms=int(round(latency_delta))
-            )
+            ms_up = int(round(latency_delta))
+            add_takeaway(SECT_DELTAS, "warning", "latency_up_comparison", ms=ms_up)
         elif latency_delta < -10:
             ms_dn = abs(int(round(latency_delta)))
             add_takeaway(SECT_WINS, "positive", "latency_down", ms=ms_dn)

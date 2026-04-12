@@ -48,3 +48,4 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.per-file-ignores]
 "src/cloudflare_executive_report/cli.py" = ["B008"]
+"src/cloudflare_executive_report/executive/phrase_catalog.py" = ["E501"]

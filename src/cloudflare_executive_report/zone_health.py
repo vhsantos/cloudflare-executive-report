@@ -142,6 +142,11 @@ def fetch_zone_health(
             "zone_status": SKIPPED,
             "ssl_mode": SKIPPED,
             "always_https": SKIPPED,
+            "min_tls_version": SKIPPED,
+            "tls_1_3": SKIPPED,
+            "browser_check": SKIPPED,
+            "email_obfuscation": SKIPPED,
+            "opportunistic_encryption": SKIPPED,
             "security_level": SKIPPED,
             "dnssec_status": SKIPPED,
             "ddos_protection": SKIPPED,
@@ -172,6 +177,23 @@ def fetch_zone_health(
     out["ssl_mode"] = _setting_value(sdk, zone_id, "ssl", warnings, label="ssl_mode")
     out["always_https"] = _setting_value(
         sdk, zone_id, "always_use_https", warnings, label="always_https"
+    )
+    out["min_tls_version"] = _setting_value(
+        sdk, zone_id, "min_tls_version", warnings, label="min_tls_version"
+    )
+    out["tls_1_3"] = _setting_value(sdk, zone_id, "tls_1_3", warnings, label="tls_1_3")
+    out["browser_check"] = _setting_value(
+        sdk, zone_id, "browser_check", warnings, label="browser_check"
+    )
+    out["email_obfuscation"] = _setting_value(
+        sdk, zone_id, "email_obfuscation", warnings, label="email_obfuscation"
+    )
+    out["opportunistic_encryption"] = _setting_value(
+        sdk,
+        zone_id,
+        "opportunistic_encryption",
+        warnings,
+        label="opportunistic_encryption",
     )
     out["security_level"] = _setting_value(
         sdk, zone_id, "security_level", warnings, label="security_level"

@@ -184,6 +184,35 @@ def test_all_action_phrase_keys_are_reachable_by_rules():
     assert keys_flex | keys_full == expected
 
 
+def test_https_gap_action_not_enable_when_always_https_on() -> None:
+    """Always HTTPS on but encrypted share below threshold: not the enable-setting action."""
+    enc = 93  # 7% gap, above 5% threshold
+    zone = {
+        "zone_name": "example.com",
+        "zone_health": {
+            "always_https": "on",
+            "dnssec_status": "active",
+            "ssl_mode": "strict",
+            "security_rules_active": 1,
+        },
+        "http": {"total_requests": 100, "encrypted_requests": enc},
+        "security": {},
+        "cache": {},
+        "http_adaptive": {},
+        "dns_records": {"apex_unproxied_a_aaaa": 0},
+        "audit": {"total_events": 0},
+        "certificates": {"total_certificate_packs": 1, "expiring_in_30_days": 0},
+    }
+    keys = {
+        m.phrase_key
+        for m in build_executive_rule_output(
+            current_zone=zone, previous_zone=None, comparison_allowed=False
+        ).actions
+    }
+    assert "enable_always_https" not in keys
+    assert "review_https_encryption_gap" in keys
+
+
 def _zone_minimal_for_security_level(*, security_level: str, ssl_mode: str = "strict") -> dict:
     return {
         "zone_name": "example.com",
@@ -296,7 +325,7 @@ def test_ignore_messages_filters_exact_key() -> None:
     assert "review_dnssec" not in {m.phrase_key for m in out.actions}
 
 
-def test_add_exec_msg_rejects_invalid_severity() -> None:
+def test_exec_msg_rejects_invalid_severity() -> None:
     try:
         exec_msg("bogus", "cert_14", section=SECT_RISKS, days=1)
         raise AssertionError("expected ValueError")
@@ -305,7 +334,51 @@ def test_add_exec_msg_rejects_invalid_severity() -> None:
 
 
 def test_format_line_with_severity_prefix() -> None:
-    assert format_line_with_severity_prefix("warning", "Hello") == "[!] Hello"
+    assert format_line_with_severity_prefix("warning", "TLS-001", "Hello") == "[!] [TLS-001] Hello"
+
+
+def test_min_tls_version_weak_takeaway() -> None:
+    zone = {
+        "zone_name": "example.com",
+        "zone_health": {
+            "always_https": "on",
+            "dnssec_status": "active",
+            "ssl_mode": "strict",
+            "security_level": "medium",
+            "ddos_protection": "on",
+            "security_rules_active": 1,
+            "min_tls_version": "1.1",
+            "tls_1_3": "on",
+            "browser_check": "on",
+            "email_obfuscation": "on",
+            "opportunistic_encryption": "on",
+        },
+        "http": {"total_requests": 10, "encrypted_requests": 10},
+        "security": {},
+        "cache": {},
+        "http_adaptive": {},
+        "dns_records": {"apex_unproxied_a_aaaa": 0},
+        "audit": {"total_events": 0},
+        "certificates": {"total_certificate_packs": 1, "expiring_in_30_days": 0},
+    }
+    out = build_executive_rule_output(
+        current_zone=zone, previous_zone=None, comparison_allowed=False
+    )
+    keys = {ln.phrase_key for ln in out.lines_for_section("risks")}
+    assert "min_tls_version_weak" in keys
+
+
+def test_phrases_include_metadata_fields() -> None:
+    """Every phrase entry must carry text, id, service, and nist in the RULE_CATALOG table."""
+    from cloudflare_executive_report.executive.phrase_catalog import RULE_CATALOG
+
+    for key, entry in RULE_CATALOG.items():
+        assert isinstance(entry, dict), f"RULE_CATALOG[{key!r}] must be a dict"
+        assert "text" in entry, key
+        assert "id" in entry, key
+        assert "service" in entry, key
+        assert "nist" in entry, key
+        assert isinstance(entry["nist"], list), key
 
 
 def test_executive_message_filter_regex() -> None:

@@ -10,6 +10,7 @@
         "earliests",
         "edgecolor",
         "facecolor",
+        "filt",
         "fontsize",
         "frameon",
         "handlelength",

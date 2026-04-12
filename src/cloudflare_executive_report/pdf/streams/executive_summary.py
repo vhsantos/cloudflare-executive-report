@@ -7,6 +7,7 @@ from typing import Any
 from reportlab.platypus import Paragraph, Spacer
 
 from cloudflare_executive_report.common.constants import (
+    PDF_SPACE_LARGE_PT,
     PDF_SPACE_MEDIUM_PT,
     PDF_SPACE_SMALL_PT,
 )
@@ -18,6 +19,35 @@ from cloudflare_executive_report.common.formatting import (
 )
 from cloudflare_executive_report.pdf.primitives import get_render_context, kpi_row
 from cloudflare_executive_report.pdf.theme import Theme
+
+
+def append_executive_nist_appendix(
+    story: list[Any],
+    nist_rows: list[dict[str, Any]],
+    theme: Theme,
+) -> None:
+    """Append NIST appendix on the current page (ReportLab uses ``<a href>``, not ``<link>``)."""
+    if not nist_rows:
+        return
+    styles = get_render_context().styles
+    story.append(Spacer(1, PDF_SPACE_LARGE_PT * 3))
+    story.append(Paragraph("Appendix: NIST Control Reference", styles["RepSection"]))
+    for row in nist_rows:
+        nid = str(row.get("nist_id") or "")
+        title = str(row.get("title") or "")
+        url = str(row.get("url") or "").strip()
+        raw_ids = row.get("check_ids") or []
+        checks = ", ".join(str(x) for x in raw_ids) if isinstance(raw_ids, list) else ""
+        label = f"[{nid}]"
+        if url:
+            text = f'<a href="{url}" color="{theme.primary}">{label}</a>'
+        else:
+            text = label
+        if title:
+            text += f" {title}"
+        if checks:
+            text += f" ({checks})"
+        story.append(Paragraph(text, styles["RepTableCell"]))
 
 
 def _report_type_suffix(report_type: str | None) -> str:
@@ -60,6 +90,7 @@ def append_executive_summary(
     summary: dict[str, Any],
     report_type: str | None,
     theme: Theme,
+    include_nist_appendix: bool = True,
 ) -> None:
     styles = get_render_context().styles
 
@@ -232,3 +263,8 @@ def append_executive_summary(
             story.append(
                 Paragraph(format_pdf_status_line(row, level="action"), styles["RepTableCell"])
             )
+
+    if include_nist_appendix:
+        nist_rows = summary.get("nist_reference") or []
+        if isinstance(nist_rows, list) and nist_rows:
+            append_executive_nist_appendix(story, nist_rows, theme)

@@ -307,6 +307,7 @@ def write_report_pdf(
                         sync_opts=sync_opts,
                     ),
                     theme=th,
+                    include_nist_appendix=cfg.pdf_include_nist_appendix,
                 )
 
             for si, stream in enumerate(spec.streams):
