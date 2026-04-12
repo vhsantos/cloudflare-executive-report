@@ -1,4 +1,7 @@
-from cloudflare_executive_report.pdf.streams.executive_summary import _report_type_suffix
+from cloudflare_executive_report.pdf.streams.executive_summary import (
+    _format_posture_score_pdf_cell,
+    _report_type_suffix,
+)
 
 
 def test_report_type_suffix_fixed_labels():
@@ -19,3 +22,14 @@ def test_report_type_suffix_omits_custom_incremental():
     assert _report_type_suffix("custom") == ""
     assert _report_type_suffix("incremental") == ""
     assert _report_type_suffix("") == ""
+
+
+def test_format_posture_score_pdf_cell_rounds_and_pairs_grade() -> None:
+    assert _format_posture_score_pdf_cell(71.7, "C") == "72 / C"
+    assert _format_posture_score_pdf_cell(83.3, "B") == "83 / B"
+
+
+def test_format_posture_score_pdf_cell_missing_returns_dash() -> None:
+    assert _format_posture_score_pdf_cell(None, "C") == "-"
+    assert _format_posture_score_pdf_cell(80.0, "") == "-"
+    assert _format_posture_score_pdf_cell("not-a-number", "A") == "-"

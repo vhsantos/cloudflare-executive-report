@@ -101,6 +101,17 @@ Each zone in `cf_report_output.json` includes `executive_summary`, derived from 
   - `Blocked/Challenged`
   - `Mitigation rate`
 
+### Security posture score (0-100)
+
+The JSON `executive_summary` includes a **security score** so you can track one number over time (the PDF first-row KPI uses the label **Score** with a compact value like **72 C+**). It reflects **risks only** (bad posture lines in the **`risks`** takeaway bucket). **Wins**, period **comparisons** (`deltas`), and **correlations** (`signals`) do **not** change the score.
+
+- **Weights**: Each risk phrase uses its **`weight`** from `executive/phrase_catalog.py` (`RULE_CATALOG`, typically **1-10**). Unknown keys default to weight **5**.
+- **Formula**: `score = round(max(0, 100 - (total_risk_weight / REF * 100)), 1)` where **`REF`** is **`SECURITY_POSTURE_REFERENCE_RISK_WEIGHT`** (default **60** in `common/constants.py`). **No risks** means **100** (perfect). Risk weight **60** or more maps to **0** (then stays **0** if weight is higher).
+- **Letter grade** (from numeric score): **A+** >= 95, **A** >= 85, **B** >= 75, **C+** >= 65, **C** >= 55, **D+** >= 45, **D** >= 35, **F** below 35.
+- **JSON fields**: Top-level **`security_score`** and **`security_grade`**, plus **`kpis.security_posture`** with **`score`**, **`grade`**, and **`risk_weight`** (summed risk weights).
+
+**Example:** SSL off (10) + WAF off (9) = **19** risk weight, score **68.3** **C+**. This is a compact summary, not a full CSPM audit.
+
 PDF reports render this executive summary first (per zone) before stream detail pages.
 
 Analytics from Cloudflare may use different aggregation windows than raw logs; totals and rankings are approximate and may differ slightly from the dashboard.

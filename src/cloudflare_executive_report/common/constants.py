@@ -30,3 +30,6 @@ HTTPS_ENCRYPTED_GAP_ACTION_MAX_PCT: float = 5.0
 # Executive verdict: pipeline warning strings must exceed this count to set ``warnings_present``.
 # Single cache misses do not downgrade the verdict below healthy (when zone is active).
 VERDICT_WARN_THRESHOLD: int = 3
+
+# Security posture score: summed ``SECT_RISKS`` weights at this level yield score 0 (linear scale).
+SECURITY_POSTURE_REFERENCE_RISK_WEIGHT: float = 60.0

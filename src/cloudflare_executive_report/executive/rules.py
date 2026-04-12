@@ -17,13 +17,14 @@ _TOKEN_KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 # Report section IDs: string keys in takeaways_categorized JSON and ExecutiveLine.section.
 # These are NOT severities. Severity (positive, warning, critical, info) is separate; it drives
 # the [OK]/[!] prefix and tone. Section only decides which bucket a line appears in and merge
-# order in the flat takeaways list (see TX_ORDER). Short names keep rules under Ruff line length.
+# order in the flat takeaways list (see TX_ORDER).
 #
 # SECT_WINS ("wins"): Improvements versus the previous report period (traffic up, latency
 # down, apex proxied, SSL upgraded, DNSSEC enabled). Only emitted when comparison is allowed.
 #
 # SECT_RISKS ("risks"): Current-zone configuration and exposure issues (SSL mode, WAF off, apex
-# unproxied, cert expiry, comparison gate failures). Same bucket as "why we cannot compare periods".
+# unproxied, cert expiry). Comparison gate messages live in SECT_DELTAS so they do not affect
+# security posture score (risks-only).
 #
 # SECT_SIGNALS ("signals"): Multiple signals combined in one narrative (origin errors + latency,
 # cache + bandwidth, security level notes, threat rate spikes). Not the same as period deltas.
@@ -205,8 +206,8 @@ def _comparison_gate_blocked(
     filt: ExecutiveMessageFilter | None,
     **phrase_kwargs: object,
 ) -> ComparisonGate:
-    """Return disallowed comparison with one risks-section takeaway (warning)."""
-    line = exec_msg("warning", phrase_key, section=SECT_RISKS, filt=filt, **phrase_kwargs)
+    """Return disallowed comparison with one deltas-section takeaway (warning)."""
+    line = exec_msg("warning", phrase_key, section=SECT_DELTAS, filt=filt, **phrase_kwargs)
     return ComparisonGate(allowed=False, blocked_takeaway=line)
 
 
@@ -470,7 +471,7 @@ def build_executive_rule_output(
             add_takeaway(SECT_WINS, "positive", "dnssec_enabled")
 
     if gate_warning is not None:
-        sections[SECT_RISKS].insert(0, gate_warning)
+        sections[SECT_DELTAS].insert(0, gate_warning)
     if comparison_baseline is not None:
         sections[SECT_DELTAS].insert(0, comparison_baseline)
 

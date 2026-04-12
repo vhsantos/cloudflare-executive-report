@@ -7,6 +7,7 @@ from datetime import date
 from typing import Any
 
 from cloudflare_executive_report.common.constants import (
+    SECURITY_POSTURE_REFERENCE_RISK_WEIGHT,
     VERDICT_WARN_THRESHOLD,
 )
 from cloudflare_executive_report.common.dates import format_date_with_days_from_iso, utc_today
@@ -16,16 +17,68 @@ from cloudflare_executive_report.common.formatting import (
     trim_decimal,
 )
 from cloudflare_executive_report.executive.nist_catalog import build_nist_reference_rows
-from cloudflare_executive_report.executive.phrase_catalog import format_line_with_severity_prefix
+from cloudflare_executive_report.executive.phrase_catalog import (
+    format_line_with_severity_prefix,
+    get_weight,
+)
 from cloudflare_executive_report.executive.rules import (
     SECT_DELTAS,
     SECT_RISKS,
     TX_ORDER,
     ExecutiveMessageFilter,
+    ExecutiveRuleOutput,
     build_executive_rule_output,
     evaluate_comparison_gate,
     exec_msg,
 )
+
+
+def _grade_for_security_posture_score(score: float) -> str:
+    """Letter grade for a 0-100 posture score (A+ through F)."""
+    if score >= 95:
+        return "A+"
+    if score >= 85:
+        return "A"
+    if score >= 75:
+        return "B"
+    if score >= 65:
+        return "C+"
+    if score >= 55:
+        return "C"
+    if score >= 45:
+        return "D+"
+    if score >= 35:
+        return "D"
+    return "F"
+
+
+def build_security_posture_score(rule_out: ExecutiveRuleOutput) -> dict[str, Any]:
+    """Return a 0-100 security posture score from risk takeaway lines only.
+
+    Only ``SECT_RISKS`` lines contribute. Wins, signals, deltas, and other sections are ignored
+    for scoring. The score is 100 minus a linear penalty to the reference risk weight (constant).
+    """
+    risk_weight = 0
+    for line in rule_out.takeaways:
+        if line.section == SECT_RISKS:
+            risk_weight += get_weight(line.phrase_key)
+
+    if risk_weight <= 0:
+        return {
+            "score": 100.0,
+            "grade": _grade_for_security_posture_score(100.0),
+            "risk_weight": 0,
+        }
+
+    ref = SECURITY_POSTURE_REFERENCE_RISK_WEIGHT
+    score = max(0.0, 100.0 - (risk_weight / ref) * 100.0)
+    score = round(score, 1)
+    return {
+        "score": score,
+        "grade": _grade_for_security_posture_score(score),
+        "risk_weight": risk_weight,
+    }
+
 
 _DEFENSIVE_ACTIONS = frozenset(
     {
@@ -304,6 +357,7 @@ def build_executive_summary(
         gate_warning=gate.blocked_takeaway,
         comparison_baseline=comparison_baseline,
     )
+    security_posture = build_security_posture_score(rule_out)
 
     categorized_takeaways = {
         section_key: [
@@ -436,7 +490,14 @@ def build_executive_summary(
         "zone_name": zone_name,
         "verdict": verdict,
         "verdict_reasons": reasons,
+        "security_score": security_posture["score"],
+        "security_grade": security_posture["grade"],
         "kpis": {
+            "security_posture": {
+                "score": security_posture["score"],
+                "grade": security_posture["grade"],
+                "risk_weight": security_posture["risk_weight"],
+            },
             "platform": {
                 "zone_status": _as_str(zh.get("zone_status")),
                 "ssl_mode": ssl_mode,

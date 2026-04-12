@@ -3,6 +3,7 @@ from cloudflare_executive_report.executive.phrase_catalog import (
     render_phrase,
 )
 from cloudflare_executive_report.executive.rules import (
+    SECT_DELTAS,
     SECT_RISKS,
     SECT_SIGNALS,
     ExecutiveMessageFilter,
@@ -30,6 +31,7 @@ def test_comparison_gate_first_report_phrase():
     assert gate.allowed is False
     assert gate.blocked_takeaway is not None
     assert gate.blocked_takeaway.body == render_phrase("no_comparison_first_report")
+    assert gate.blocked_takeaway.section == SECT_DELTAS
 
 
 def test_comparison_gate_period_mismatch_phrase():
@@ -41,6 +43,7 @@ def test_comparison_gate_period_mismatch_phrase():
     )
     assert gate.allowed is False
     assert "Comparison skipped: previous period" in gate.blocked_takeaway.body
+    assert gate.blocked_takeaway.section == SECT_DELTAS
 
 
 def test_comparison_gate_rejects_overlapping_periods():
@@ -52,6 +55,43 @@ def test_comparison_gate_rejects_overlapping_periods():
     )
     assert gate.allowed is False
     assert "Comparison skipped: previous period" in gate.blocked_takeaway.body
+    assert gate.blocked_takeaway.section == SECT_DELTAS
+
+
+def test_comparison_gate_warning_merged_into_deltas_not_risks():
+    """Blocked comparison missing deltas; must not count toward risks-only posture score."""
+    gate = evaluate_comparison_gate(
+        current_zone_id="z1",
+        previous_report=None,
+        current_period={"start": "2026-04-01", "end": "2026-04-07"},
+    )
+    assert gate.blocked_takeaway is not None
+    clean_zone = {
+        "zone_health": {
+            "ssl_mode": "strict",
+            "always_https": "on",
+            "security_rules_active": 1,
+            "dnssec_status": "active",
+            "ddos_protection": "on",
+        },
+        "http": {},
+        "security": {},
+        "cache": {},
+        "http_adaptive": {},
+        "dns_records": {"apex_unproxied_a_aaaa": 0},
+        "audit": {"total_events": 0},
+        "certificates": {"total_certificate_packs": 1, "expiring_in_30_days": 0},
+    }
+    out = build_executive_rule_output(
+        current_zone=clean_zone,
+        previous_zone=None,
+        comparison_allowed=False,
+        gate_warning=gate.blocked_takeaway,
+    )
+    delta_keys = {m.phrase_key for m in out.lines_for_section(SECT_DELTAS)}
+    risk_keys = {m.phrase_key for m in out.lines_for_section(SECT_RISKS)}
+    assert "no_comparison_first_report" in delta_keys
+    assert "no_comparison_first_report" not in risk_keys
 
 
 def test_correlation_origin_overloaded_uses_exact_phrase():
@@ -369,7 +409,7 @@ def test_min_tls_version_weak_takeaway() -> None:
 
 
 def test_phrases_include_metadata_fields() -> None:
-    """Every phrase entry must carry text, id, service, and nist in the RULE_CATALOG table."""
+    """Every phrase entry must carry text, id, service and nist in the single RULE_CATALOG table."""
     from cloudflare_executive_report.executive.phrase_catalog import RULE_CATALOG
 
     for key, entry in RULE_CATALOG.items():

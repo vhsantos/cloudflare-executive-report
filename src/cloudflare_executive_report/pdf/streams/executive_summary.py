@@ -74,6 +74,17 @@ def _report_type_suffix(report_type: str | None) -> str:
     return ""
 
 
+def _format_posture_score_pdf_cell(score_v: Any, grade_v: Any) -> str:
+    """Return compact posture text for the PDF KPI row, or '-' when inputs are unusable."""
+    if score_v is None or not str(grade_v or "").strip():
+        return "-"
+    try:
+        rounded = round(float(score_v))
+    except (TypeError, ValueError):
+        return "-"
+    return f"{rounded} / {grade_v}"
+
+
 def _indicator_for(summary: dict[str, Any], key: str) -> str:
     indicators = summary.get("kpi_indicators")
     if isinstance(indicators, dict):
@@ -115,10 +126,14 @@ def append_executive_summary(
     audit_k = kpis.get("audit") or {}
     certificates_k = kpis.get("certificates") or {}
 
+    sp = summary.get("kpis", {}).get("security_posture") or {}
+    score_cell = _format_posture_score_pdf_cell(sp.get("score"), sp.get("grade"))
+
     story.append(
         kpi_row(
             [
                 ("Verdict", verdict),
+                ("Score", score_cell),
                 ("Zone status", str(platform.get("zone_status") or "unavailable")),
                 ("TLS/SSL Mode", str(platform.get("ssl_mode") or "unavailable")),
                 ("Always HTTPS", str(platform.get("always_https") or "unavailable")),
