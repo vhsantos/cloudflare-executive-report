@@ -57,3 +57,46 @@
 ## Configuration
 
 - [ ] Create sub-sections like: pdf, executive summary, email, etc.
+
+## Security and posture checks (backlog)
+
+Suggested order when choosing the next item: HSTS (if one clear settings read), then bot posture (if API stable for your tiers), then rate-limit presence (reuse ruleset enumeration), then WAF/CRS depth (after durable API fields), then multi-zone ranking as a product call, Zero Trust only as a deliberate scope expansion.
+
+- [ ] **HSTS** - Takeaway when HSTS is off or weak (max-age, preload, includeSubDomains) beyond Always HTTPS alone.
+  - Data: zone or edge certificates API per current Cloudflare docs; confirm exact settings key.
+  - Shape: new phrase (e.g. `hsts_disabled` / `hsts_suboptimal`), rule on `zone_health` or rollup field; NIST mapping (e.g. SC-8).
+  - Risk: optional severity; may be noisy until certs are stable.
+
+- [ ] **Bot posture** - Surface bot protection level: off vs Bot Fight Mode vs Bot Management (plan-dependent).
+  - Data: settings or account features API; product names change over time; small enum in `zone_health` or security rollup.
+  - Shape: info or warning when bots are fully off on a proxied web zone; suppress DNS-only zones.
+  - Risk: false positives on API-only zones; plan-gated features need clear unavailable handling.
+
+- [ ] **WAF depth (managed ruleset / OWASP CRS)** - Separate "WAF on" from managed ruleset / CRS when the API exposes it.
+  - Data: rulesets API; confirm stable phase/group IDs in docs.
+  - Shape: optional second line (e.g. CRS off or simulate-only) if detectable.
+  - Risk: UI/API naming churn; tests must tolerate unavailable.
+
+- [ ] **Rate limiting** - Flag zones with zero rate limit rules when HTTP traffic is above an optional threshold.
+  - Data: ruleset phase `http_ratelimit`; distinguish rate limits from WAF custom rules.
+  - Shape: new rule + phrase; default to info to avoid noise on small sites.
+  - Risk: many zones rely only on managed challenge; product judgment.
+
+- [ ] **Rules clarity for executives** - CTO-readable counts: "N custom WAF rules, M rate limits" (ruleset-based, not legacy Firewall Rules API); optional dashboard hint in action text.
+  - Data: largely present; extend phrase labeling if counts suffice without new API.
+
+- [ ] **Declarative operator baseline (YAML)** - Optional external YAML (check id, severity, phrase key, optional when-expression) for Git-managed baselines.
+  - Shape: loader merges or overrides subsets; keep `phrase_catalog` as source for text/NIST unless fully migrating.
+  - Risk: two sources of truth; prefer generate-from-catalog or single compile step.
+
+- [ ] **Multi-zone portfolio view** - After per-zone summaries, rank zones by critical risk count or by numeric score.
+  - Shape: CLI output or multi-zone PDF cover table; no change to single-zone contract.
+  - Risk: keep factual (counts), not subjective labels.
+
+### Guidelines for implementing a new check
+
+1. Verify against current Cloudflare API docs (method + response shape).
+2. Add or extend `zone_health` or the relevant aggregator output; no fake defaults.
+3. Add phrase (+ NIST ids) in `phrase_catalog`; wire rule in `rules.py`; add `pytest` for the rule and for unavailable/edge cases.
+4. Keep executive copy short; put dashboard path in action text only when it stays accurate.
+5. If plan-gated, emit unavailable or info, not a false critical.
