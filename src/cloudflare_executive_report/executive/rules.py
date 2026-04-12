@@ -7,7 +7,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from cloudflare_executive_report.common.constants import HTTPS_ENCRYPTED_GAP_ACTION_MAX_PCT
+from cloudflare_executive_report.common.constants import (
+    HSTS_RECOMMENDED_MAX_AGE_SECONDS,
+    HTTPS_ENCRYPTED_GAP_ACTION_MAX_PCT,
+)
 from cloudflare_executive_report.executive.phrase_catalog import get_phrase_meta, render_phrase
 from cloudflare_executive_report.zone_health import SKIPPED, UNAVAILABLE
 
@@ -19,8 +22,8 @@ _TOKEN_KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 # the [OK]/[!] prefix and tone. Section only decides which bucket a line appears in and merge
 # order in the flat takeaways list (see TX_ORDER).
 #
-# SECT_WINS ("wins"): Improvements versus the previous report period (traffic up, latency
-# down, apex proxied, SSL upgraded, DNSSEC enabled). Only emitted when comparison is allowed.
+# SECT_WINS ("wins"): Improvements versus the previous report period (traffic up, latency down,
+# apex proxied, SSL upgraded, DNSSEC enabled). Only emitted when comparison is allowed.
 #
 # SECT_RISKS ("risks"): Current-zone configuration and exposure issues (SSL mode, WAF off, apex
 # unproxied, cert expiry). Comparison gate messages live in SECT_DELTAS so they do not affect
@@ -324,6 +327,32 @@ def build_executive_rule_output(
     tls13 = _zone_health_str(zh, "tls_1_3")
     if _zone_health_config_known(tls13) and tls13 not in ("on", "zrt"):
         add_takeaway(SECT_RISKS, "warning", "tls_1_3_disabled")
+
+    hsts = zh.get("hsts")
+    hsts_d = hsts if isinstance(hsts, dict) else {}
+    if not hsts_d.get("skipped") and hsts_d.get("available") is True:
+        always_https_on = _zone_health_str(zh, "always_https") == "on"
+        edge_uses_tls = ssl_mode not in ("", "off")
+        hsts_enabled = hsts_d.get("enabled")
+        if hsts_enabled is False and always_https_on and edge_uses_tls:
+            add_takeaway(SECT_RISKS, "warning", "hsts_disabled")
+        elif hsts_enabled is True:
+            hsts_issues: list[str] = []
+            max_age = hsts_d.get("max_age")
+            if max_age is not None and max_age < HSTS_RECOMMENDED_MAX_AGE_SECONDS:
+                hsts_issues.append(
+                    f"max-age is {max_age}s (set at least "
+                    f"{HSTS_RECOMMENDED_MAX_AGE_SECONDS} for one year)"
+                )
+            if hsts_d.get("include_subdomains") is False:
+                hsts_issues.append("Include Subdomains is off")
+            if hsts_issues:
+                add_takeaway(
+                    SECT_RISKS,
+                    "info",
+                    "hsts_suboptimal",
+                    issues="; ".join(hsts_issues),
+                )
 
     browser_chk = _zone_health_str(zh, "browser_check")
     if _zone_health_config_known(browser_chk) and browser_chk != "on":

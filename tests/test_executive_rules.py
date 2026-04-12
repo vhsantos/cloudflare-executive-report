@@ -59,7 +59,7 @@ def test_comparison_gate_rejects_overlapping_periods():
 
 
 def test_comparison_gate_warning_merged_into_deltas_not_risks():
-    """Blocked comparison missing deltas; must not count toward risks-only posture score."""
+    """Gate line is a delta, not a risk (ignored for risks-only posture score)."""
     gate = evaluate_comparison_gate(
         current_zone_id="z1",
         previous_report=None,
@@ -409,7 +409,7 @@ def test_min_tls_version_weak_takeaway() -> None:
 
 
 def test_phrases_include_metadata_fields() -> None:
-    """Every phrase entry must carry text, id, service and nist in the single RULE_CATALOG table."""
+    """Every phrase entry must carry text, id, service, nist, and weight in ``RULE_CATALOG``."""
     from cloudflare_executive_report.executive.phrase_catalog import RULE_CATALOG
 
     for key, entry in RULE_CATALOG.items():
@@ -419,6 +419,7 @@ def test_phrases_include_metadata_fields() -> None:
         assert "service" in entry, key
         assert "nist" in entry, key
         assert isinstance(entry["nist"], list), key
+        assert "weight" in entry, key
 
 
 def test_executive_message_filter_regex() -> None:

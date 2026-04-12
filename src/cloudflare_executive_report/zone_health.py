@@ -127,6 +127,85 @@ def _ruleset_rules_active_count(sdk: Any, zone_id: str, warnings: list[str]) -> 
     return total
 
 
+def _coerce_bool(v: Any) -> bool | None:
+    """Return bool or None when value is absent or unusable."""
+    if v is None:
+        return None
+    return bool(v)
+
+
+def _coerce_int(v: Any) -> int | None:
+    """Return int or None when value is absent or unusable."""
+    if v is None:
+        return None
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalize_sts_dict(sts: Any) -> dict[str, Any]:
+    """Normalize strict_transport_security payload to a flat snapshot dict."""
+    if sts is None:
+        return {
+            "available": True,
+            "enabled": False,
+            "max_age": None,
+            "include_subdomains": None,
+            "preload": None,
+        }
+    if hasattr(sts, "model_dump"):
+        sts = sts.model_dump()
+    if not isinstance(sts, dict):
+        return {
+            "available": False,
+            "enabled": None,
+            "max_age": None,
+            "include_subdomains": None,
+            "preload": None,
+        }
+    return {
+        "available": True,
+        "enabled": _coerce_bool(sts.get("enabled")),
+        "max_age": _coerce_int(sts.get("max_age")),
+        "include_subdomains": _coerce_bool(sts.get("include_subdomains")),
+        "preload": _coerce_bool(sts.get("preload")),
+    }
+
+
+def _hsts_security_header_snapshot(
+    sdk: Any,
+    zone_id: str,
+    warnings: list[str],
+) -> dict[str, Any]:
+    """Read HSTS fields from zone setting ``security_header`` (Cloudflare API)."""
+    try:
+        r = sdk.zones.settings.get(zone_id=zone_id, setting_id="security_header")
+    except PermissionDeniedError:
+        _warn(
+            warnings,
+            "Zone health security_header (HSTS) unavailable (permission denied)",
+        )
+        return {"available": False, "skipped": False}
+    except Exception as e:
+        _warn(warnings, f"Zone health security_header (HSTS) unavailable: {e}")
+        return {"available": False, "skipped": False}
+    if r is None:
+        _warn(warnings, "Zone health security_header (HSTS) empty response")
+        return {"available": False, "skipped": False}
+    dumped = r.model_dump()
+    val = dumped.get("value")
+    if hasattr(val, "model_dump"):
+        val = val.model_dump()
+    if val is None:
+        return {"available": False, "skipped": False}
+    if not isinstance(val, dict):
+        _warn(warnings, "Zone health security_header (HSTS) value has unexpected shape")
+        return {"available": False, "skipped": False}
+    sts = val.get("strict_transport_security")
+    return _normalize_sts_dict(sts)
+
+
 def fetch_zone_health(
     client: CloudflareClient,
     zone_id: str,
@@ -143,6 +222,7 @@ def fetch_zone_health(
             "ssl_mode": SKIPPED,
             "always_https": SKIPPED,
             "min_tls_version": SKIPPED,
+            "hsts": {"available": False, "skipped": True},
             "tls_1_3": SKIPPED,
             "browser_check": SKIPPED,
             "email_obfuscation": SKIPPED,
@@ -208,5 +288,7 @@ def fetch_zone_health(
         out["security_rules_active"] = UNAVAILABLE
     else:
         out["security_rules_active"] = cnt
+
+    out["hsts"] = _hsts_security_header_snapshot(sdk, zone_id, warnings)
 
     return out, warnings

@@ -389,6 +389,23 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "nist": ["SC-8", "SC-13"],
         "weight": 5,
     },
+    "hsts_disabled": {
+        "text": (
+            "HTTP Strict Transport Security (HSTS) is not enabled at the edge - enable it under "
+            "SSL/TLS > Edge Certificates (adds Strict-Transport-Security beyond Always Use HTTPS alone)."
+        ),
+        "id": "TLS-015",
+        "service": "SSL/TLS",
+        "nist": ["SC-8", "SC-13"],
+        "weight": 8,
+    },
+    "hsts_suboptimal": {
+        "text": "HSTS is on but suboptimal: {issues}.",
+        "id": "TLS-016",
+        "service": "SSL/TLS",
+        "nist": ["SC-8", "SC-13"],
+        "weight": 4,
+    },
     "browser_integrity_disabled": {
         "text": "Browser Integrity Check is off - consider enabling to reduce automated abuse.",
         "id": "SEC-014",
