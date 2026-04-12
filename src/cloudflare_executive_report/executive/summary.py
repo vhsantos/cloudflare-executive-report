@@ -6,6 +6,9 @@ from collections.abc import Sequence
 from datetime import date
 from typing import Any
 
+from cloudflare_executive_report.common.constants import (
+    VERDICT_WARN_THRESHOLD,
+)
 from cloudflare_executive_report.common.dates import format_date_with_days_from_iso, utc_today
 from cloudflare_executive_report.common.formatting import (
     format_count_compact,
@@ -177,8 +180,12 @@ def _threats_mitigated(security: dict[str, Any]) -> int:
 
 
 def _verdict(
-    zone_health: dict[str, Any], warnings: list[str], http: dict[str, Any]
+    zone_health: dict[str, Any],
+    warnings: list[str],
+    http: dict[str, Any],
+    dns_records: dict[str, Any],
 ) -> tuple[str, list[str]]:
+    """Classify zone rollup health for the executive verdict KPI."""
     reasons: list[str] = []
     critical = False
 
@@ -187,10 +194,12 @@ def _verdict(
         reasons.append(f"zone_status={zone_status}")
         critical = True
 
-    if _as_int(http.get("total_requests")) <= 0:
+    has_proxied = _as_int(dns_records.get("proxied_records")) > 0
+    has_http_traffic = _as_int(http.get("total_requests")) > 0
+    if has_proxied and not has_http_traffic:
         reasons.append("no_http_traffic")
 
-    if warnings:
+    if len(warnings) > VERDICT_WARN_THRESHOLD:
         reasons.append("warnings_present")
 
     if critical:
@@ -240,7 +249,7 @@ def build_executive_summary(
     mitigated = _threats_mitigated(s)
     sampled_requests = _as_int(s.get("http_requests_sampled"))
     not_mitigated = _as_int(s.get("not_mitigated_sampled"))
-    verdict, reasons = _verdict(zh, warn, h)
+    verdict, reasons = _verdict(zh, warn, h, dr)
 
     ssl_mode = _as_str(zh.get("ssl_mode"))
     always_https = _as_str(zh.get("always_https"))

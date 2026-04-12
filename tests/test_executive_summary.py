@@ -91,7 +91,7 @@ def test_build_executive_summary_warning_with_warnings_and_inactive_zone():
     )
     assert out["verdict"] == "critical"
     assert "zone_status=pending" in out["verdict_reasons"]
-    assert "warnings_present" in out["verdict_reasons"]
+    assert "warnings_present" not in out["verdict_reasons"]
     assert out["warnings_count"] >= 1
     assert len(out["actions"]) >= 1
     assert set(out["takeaways_categorized"].keys()) == {
@@ -301,6 +301,107 @@ def test_build_executive_summary_includes_baseline_reference_takeaway_when_compa
         previous_zone=previous_zone,
     )
     assert any("Comparing to: 2026-03-25 to 2026-03-31" in t for t in out["takeaways"])
+
+
+def test_verdict_dns_only_no_proxied_zero_http_stays_healthy_despite_one_pipeline_warning() -> None:
+    out = build_executive_summary(
+        zone_name="dns.example",
+        zone_health={"zone_status": "active"},
+        dns={"total_queries": 10000, "average_qps": 1.0},
+        http={"total_requests": 0, "total_requests_human": "0", "cache_hit_ratio": 0.0},
+        security={},
+        cache={},
+        dns_records={
+            "total_records": 5,
+            "proxied_records": 0,
+            "dns_only_records": 5,
+            "apex_unproxied_a_aaaa": 0,
+        },
+        audit={"total_events": 0},
+        certificates={"total_certificate_packs": 0},
+        warnings=["DNS for zone dns.example on 2026-04-01 unavailable (cache miss)"],
+    )
+    assert out["verdict"] == "healthy"
+    assert "no_http_traffic" not in out["verdict_reasons"]
+    assert "warnings_present" not in out["verdict_reasons"]
+
+
+def test_verdict_proxied_but_zero_http_is_warning() -> None:
+    out = build_executive_summary(
+        zone_name="www.example.com",
+        zone_health={"zone_status": "active"},
+        dns={"total_queries": 100, "average_qps": 0.1},
+        http={"total_requests": 0, "total_requests_human": "0", "cache_hit_ratio": 0.0},
+        security={"mitigated_count": 0, "mitigation_rate_pct": 0.0},
+        cache={},
+        dns_records={
+            "total_records": 3,
+            "proxied_records": 2,
+            "dns_only_records": 1,
+            "apex_unproxied_a_aaaa": 0,
+        },
+        audit={"total_events": 0},
+        certificates={"total_certificate_packs": 1, "expiring_in_30_days": 0},
+        warnings=[],
+    )
+    assert out["verdict"] == "warning"
+    assert "no_http_traffic" in out["verdict_reasons"]
+    assert "warnings_present" not in out["verdict_reasons"]
+
+
+def test_verdict_four_pipeline_warnings_add_warnings_present() -> None:
+    warns = [
+        "DNS for zone example.com on 2026-04-01 unavailable (cache miss)",
+        "HTTP for zone example.com on 2026-04-02 unavailable (cache miss)",
+        "Security for zone example.com on 2026-04-03 unavailable (cache miss)",
+        "Cache for zone example.com on 2026-04-04 unavailable (cache miss)",
+    ]
+    out = build_executive_summary(
+        zone_name="example.com",
+        zone_health={"zone_status": "active"},
+        dns={"total_queries": 100, "average_qps": 0.1},
+        http={"total_requests": 1000, "total_requests_human": "1K", "cache_hit_ratio": 0.0},
+        security={"mitigated_count": 0, "mitigation_rate_pct": 0.0},
+        cache={},
+        dns_records={
+            "total_records": 2,
+            "proxied_records": 1,
+            "dns_only_records": 1,
+            "apex_unproxied_a_aaaa": 0,
+        },
+        audit={"total_events": 0},
+        certificates={"total_certificate_packs": 1, "expiring_in_30_days": 0},
+        warnings=warns,
+    )
+    assert out["verdict"] == "warning"
+    assert "warnings_present" in out["verdict_reasons"]
+
+
+def test_verdict_three_pipeline_warnings_no_warnings_present() -> None:
+    warns = [
+        "DNS for zone example.com on 2026-04-01 unavailable (cache miss)",
+        "HTTP for zone example.com on 2026-04-02 unavailable (cache miss)",
+        "Security for zone example.com on 2026-04-03 unavailable (cache miss)",
+    ]
+    out = build_executive_summary(
+        zone_name="example.com",
+        zone_health={"zone_status": "active"},
+        dns={"total_queries": 100, "average_qps": 0.1},
+        http={"total_requests": 1000, "total_requests_human": "1K", "cache_hit_ratio": 0.0},
+        security={"mitigated_count": 0, "mitigation_rate_pct": 0.0},
+        cache={},
+        dns_records={
+            "total_records": 2,
+            "proxied_records": 1,
+            "dns_only_records": 1,
+            "apex_unproxied_a_aaaa": 0,
+        },
+        audit={"total_events": 0},
+        certificates={"total_certificate_packs": 1, "expiring_in_30_days": 0},
+        warnings=warns,
+    )
+    assert out["verdict"] == "healthy"
+    assert "warnings_present" not in out["verdict_reasons"]
 
 
 def test_build_executive_summary_ignore_messages_drops_matching_actions() -> None:

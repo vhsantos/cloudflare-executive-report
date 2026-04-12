@@ -26,3 +26,7 @@ PDF_RANKED_TABLE_ROW_PAD_PT: int = 2
 # Executive action: if Always Use HTTPS is on but encrypted traffic share is below (100 - this)
 # percent of requests, emit the HTTPS gap review action (percentage points of unencrypted share).
 HTTPS_ENCRYPTED_GAP_ACTION_MAX_PCT: float = 5.0
+
+# Executive verdict: pipeline warning strings must exceed this count to set ``warnings_present``.
+# Single cache misses do not downgrade the verdict below healthy (when zone is active).
+VERDICT_WARN_THRESHOLD: int = 3
