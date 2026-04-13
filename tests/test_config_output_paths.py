@@ -3,6 +3,7 @@ import pytest
 from cloudflare_executive_report.config import (
     AppConfig,
     ExecutiveConfig,
+    PdfConfig,
     PortfolioConfig,
     save_config_template,
 )
@@ -59,3 +60,19 @@ def test_portfolio_sort_by_yaml_round_trip() -> None:
 def test_portfolio_sort_by_rejects_invalid_value() -> None:
     with pytest.raises(ValueError, match="portfolio.sort_by"):
         AppConfig.from_yaml_dict({"zones": [], "portfolio": {"sort_by": "critical_risks"}})
+
+
+def test_pdf_profile_yaml_round_trip() -> None:
+    cfg = AppConfig(pdf=PdfConfig(profile="minimal"))
+    back = AppConfig.from_yaml_dict(cfg.to_yaml_dict())
+    assert back.pdf.profile == "minimal"
+
+
+def test_pdf_profile_defaults_to_executive() -> None:
+    cfg = AppConfig.from_yaml_dict({"zones": []})
+    assert cfg.pdf.profile == "executive"
+
+
+def test_pdf_profile_rejects_invalid_value() -> None:
+    with pytest.raises(ValueError, match="pdf.profile"):
+        AppConfig.from_yaml_dict({"zones": [], "pdf": {"profile": "full"}})

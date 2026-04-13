@@ -5,10 +5,11 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from cloudflare_executive_report.config import AppConfig, CoverConfig, ZoneEntry
+from cloudflare_executive_report.config import AppConfig, CoverConfig, PdfConfig, ZoneEntry
 from cloudflare_executive_report.pdf.layout_spec import ReportSpec
 
 pytest.importorskip("reportlab")
@@ -41,6 +42,7 @@ def test_write_report_pdf_security_smoke(tmp_path: Path) -> None:
         api_token="x",
         cache_dir=str(FIXTURE_CACHE.resolve()),
         zones=[ZoneEntry(id=ZONE_ID, name="example.com")],
+        pdf=PdfConfig(profile="detailed"),
     )
     spec = ReportSpec(
         zone_ids=[ZONE_ID],
@@ -61,6 +63,7 @@ def test_write_report_pdf_smoke(tmp_path: Path) -> None:
         api_token="x",
         cache_dir=str(FIXTURE_CACHE.resolve()),
         zones=[ZoneEntry(id=ZONE_ID, name="example.com")],
+        pdf=PdfConfig(profile="detailed"),
     )
     spec = ReportSpec(
         zone_ids=[ZONE_ID],
@@ -81,6 +84,7 @@ def test_write_report_pdf_security_and_cache_smoke(tmp_path: Path) -> None:
         api_token="x",
         cache_dir=str(FIXTURE_CACHE.resolve()),
         zones=[ZoneEntry(id=ZONE_ID, name="example.com")],
+        pdf=PdfConfig(profile="detailed"),
     )
     spec = ReportSpec(
         zone_ids=[ZONE_ID],
@@ -101,6 +105,7 @@ def test_write_report_pdf_cache_smoke(tmp_path: Path) -> None:
         api_token="x",
         cache_dir=str(FIXTURE_CACHE.resolve()),
         zones=[ZoneEntry(id=ZONE_ID, name="example.com")],
+        pdf=PdfConfig(profile="detailed"),
     )
     spec = ReportSpec(
         zone_ids=[ZONE_ID],
@@ -146,6 +151,40 @@ def test_write_report_pdf_cover_config_smoke(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(not FIXTURE_CACHE.is_dir(), reason="sample cache fixtures missing")
+def test_write_report_pdf_warns_when_executive_disabled_but_profile_not_minimal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    import logging
+
+    cfg = AppConfig(
+        api_token="x",
+        cache_dir=str(FIXTURE_CACHE.resolve()),
+        zones=[ZoneEntry(id=ZONE_ID, name="example.com")],
+        pdf=PdfConfig(profile="executive"),
+    )
+    spec = ReportSpec(
+        zone_ids=[ZONE_ID],
+        start="2026-04-01",
+        end="2026-04-01",
+        streams=("dns",),
+        include_executive_summary=False,
+        top=5,
+    )
+
+    def _boom(*args: Any, **kwargs: Any) -> None:  # pragma: no cover
+        raise AssertionError("fetch_zone_health should not run")
+
+    monkeypatch.setattr("cloudflare_executive_report.pdf.orchestrate.fetch_zone_health", _boom)
+
+    caplog.set_level(logging.WARNING)
+    out = tmp_path / "warn_profile.pdf"
+    write_report_pdf(out, cfg, spec, allow_live_health_fetch=False)
+    assert out.is_file()
+    assert "pdf.profile" in caplog.text
+    assert "executive summary is disabled" in caplog.text
+
+
+@pytest.mark.skipif(not FIXTURE_CACHE.is_dir(), reason="sample cache fixtures missing")
 def test_write_report_pdf_offline_mode_does_not_fetch_health(tmp_path: Path, monkeypatch) -> None:
     cfg = AppConfig(
         api_token="x",
@@ -170,3 +209,66 @@ def test_write_report_pdf_offline_mode_does_not_fetch_health(tmp_path: Path, mon
     write_report_pdf(out, cfg, spec, allow_live_health_fetch=False)
     assert out.is_file()
     assert out.stat().st_size > 1000
+
+
+@pytest.mark.skipif(not FIXTURE_CACHE.is_dir(), reason="sample cache fixtures missing")
+def test_write_report_pdf_executive_profile_skips_security_stream(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    touched: list[str] = []
+
+    def _stub_security(*args: Any, **kwargs: Any) -> None:
+        touched.append("security")
+
+    monkeypatch.setattr(
+        "cloudflare_executive_report.pdf.orchestrate.append_security_stream",
+        _stub_security,
+    )
+    cfg = AppConfig(
+        api_token="x",
+        cache_dir=str(FIXTURE_CACHE.resolve()),
+        zones=[ZoneEntry(id=ZONE_ID, name="example.com")],
+        pdf=PdfConfig(profile="executive"),
+    )
+    spec = ReportSpec(
+        zone_ids=[ZONE_ID],
+        start="2026-04-01",
+        end="2026-04-01",
+        streams=("security",),
+        top=5,
+    )
+    out = tmp_path / "executive_profile.pdf"
+    write_report_pdf(out, cfg, spec)
+    assert touched == []
+    assert out.is_file()
+
+
+@pytest.mark.skipif(not FIXTURE_CACHE.is_dir(), reason="sample cache fixtures missing")
+def test_write_report_pdf_detailed_profile_renders_security_stream(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    touched: list[str] = []
+
+    def _stub_security(*args: Any, **kwargs: Any) -> None:
+        touched.append("security")
+
+    monkeypatch.setattr(
+        "cloudflare_executive_report.pdf.orchestrate.append_security_stream",
+        _stub_security,
+    )
+    cfg = AppConfig(
+        api_token="x",
+        cache_dir=str(FIXTURE_CACHE.resolve()),
+        zones=[ZoneEntry(id=ZONE_ID, name="example.com")],
+        pdf=PdfConfig(profile="detailed"),
+    )
+    spec = ReportSpec(
+        zone_ids=[ZONE_ID],
+        start="2026-04-01",
+        end="2026-04-01",
+        streams=("security",),
+        top=5,
+    )
+    out = tmp_path / "detailed_profile.pdf"
+    write_report_pdf(out, cfg, spec)
+    assert touched == ["security"]

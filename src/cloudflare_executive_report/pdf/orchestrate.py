@@ -147,16 +147,33 @@ def write_report_pdf(
             theme=th,
         )
         after_cover_insert_index = len(story)
+        include_stream_details = cfg.pdf.profile == "detailed"
+        include_zone_summary = spec.include_executive_summary and cfg.pdf.profile in (
+            "executive",
+            "detailed",
+        )
         want_portfolio_page = spec.include_executive_summary and len(spec.zone_ids) >= 2
+        need_executive_build = spec.include_executive_summary and (
+            include_zone_summary or want_portfolio_page
+        )
         portfolio_zone_blocks: list[dict[str, Any]] = []
+
+        if not spec.include_executive_summary and cfg.pdf.profile != "minimal":
+            log.warning(
+                "pdf.profile is %r but executive summary is disabled for this PDF; "
+                "no per-zone executive sections will be rendered. "
+                "Use profile 'minimal' or enable the executive summary.",
+                cfg.pdf.profile,
+            )
 
         cache_stream_in_report = any(s.strip().lower() == "cache" for s in spec.streams)
 
         for zi, zone_key in enumerate(spec.zone_ids):
             zone_id, zone_name = resolve_zone(cfg, zone_key)
-            if zi > 0:
-                story.append(PageBreak())
-            story.append(Spacer(1, PDF_SPACE_SMALL_PT))
+            if include_zone_summary or include_stream_details:
+                if zi > 0:
+                    story.append(PageBreak())
+                story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
             loaded_dns = None
             loaded_http = None
@@ -213,7 +230,7 @@ def write_report_pdf(
 
             snapshot_zone = _find_zone_snapshot(report_snapshot, zone_id)
 
-            if spec.include_executive_summary:
+            if need_executive_build:
                 loaded_http_adaptive = load_http_adaptive_for_range(
                     cache_root,
                     zone_id,
@@ -301,19 +318,20 @@ def write_report_pdf(
                         previous_zone=find_previous_zone_in_report(previous_report, zone_id),
                         disabled_rules=cfg.executive.disabled_rules,
                     )
-                append_executive_summary(
-                    story,
-                    zone_name=zone_name,
-                    period_start=spec.start,
-                    period_end=spec.end,
-                    summary=executive_summary,
-                    report_type=_report_type_for_pdf(
-                        report_snapshot=report_snapshot,
-                        sync_opts=sync_opts,
-                    ),
-                    theme=th,
-                    include_nist_appendix=cfg.executive.include_nist_appendix,
-                )
+                if include_zone_summary:
+                    append_executive_summary(
+                        story,
+                        zone_name=zone_name,
+                        period_start=spec.start,
+                        period_end=spec.end,
+                        summary=executive_summary,
+                        report_type=_report_type_for_pdf(
+                            report_snapshot=report_snapshot,
+                            sync_opts=sync_opts,
+                        ),
+                        theme=th,
+                        include_nist_appendix=cfg.executive.include_nist_appendix,
+                    )
                 if want_portfolio_page:
                     portfolio_zone_blocks.append(
                         {
@@ -323,8 +341,11 @@ def write_report_pdf(
                         }
                     )
 
+            if not include_stream_details:
+                continue
+
             for si, stream in enumerate(spec.streams):
-                if si > 0 or spec.include_executive_summary:
+                if si > 0 or include_zone_summary:
                     story.append(PageBreak())
                 sid = stream.strip().lower()
                 if sid == "dns":
@@ -440,7 +461,8 @@ def write_report_pdf(
                 period_end=spec.end,
                 theme=th,
             )
-            portfolio_story.append(PageBreak())
+            if include_zone_summary or include_stream_details:
+                portfolio_story.append(PageBreak())
             story[after_cover_insert_index:after_cover_insert_index] = portfolio_story
 
         if not story:

@@ -41,6 +41,19 @@ def parse_pdf_image_format(
     return cast(Literal["png", "svg"], value)
 
 
+def parse_pdf_profile(
+    raw: str | None,
+    *,
+    field_name: str = "pdf.profile",
+) -> Literal["minimal", "executive", "detailed"]:
+    """Return validated PDF output profile (report length preset)."""
+    value = (raw or "executive").strip().lower()
+    if value not in {"minimal", "executive", "detailed"}:
+        msg = f"{field_name} must be minimal, executive, or detailed (got {value!r})"
+        raise ValueError(msg)
+    return cast(Literal["minimal", "executive", "detailed"], value)
+
+
 @dataclass
 class ZoneEntry:
     id: str
@@ -76,6 +89,7 @@ class PdfConfig:
     image_quality: str = "medium"
     chart_format: Literal["png", "svg"] = "png"
     map_format: Literal["png", "svg"] = "png"
+    profile: Literal["minimal", "executive", "detailed"] = "executive"
 
 
 @dataclass
@@ -154,6 +168,7 @@ class AppConfig:
                 "image_quality": self.pdf.image_quality,
                 "chart_format": self.pdf.chart_format,
                 "map_format": self.pdf.map_format,
+                "profile": self.pdf.profile,
             },
             "executive": {
                 "disabled_rules": list(self.executive.disabled_rules),
@@ -205,6 +220,10 @@ class AppConfig:
         pdf_map_format = parse_pdf_image_format(
             str(pmf_raw) if pmf_raw is not None else None,
             field_name="pdf.map_format",
+        )
+        pdf_profile_raw = pdf_raw.get("profile")
+        pdf_profile = parse_pdf_profile(
+            str(pdf_profile_raw) if pdf_profile_raw is not None else None,
         )
 
         executive_raw = data.get("executive") or {}
@@ -269,6 +288,7 @@ class AppConfig:
                 image_quality=pdf_image_quality,
                 chart_format=pdf_chart_format,
                 map_format=pdf_map_format,
+                profile=pdf_profile,
             ),
             executive=ExecutiveConfig(
                 disabled_rules=disabled_rules,
@@ -327,7 +347,7 @@ def save_config_template(cfg: AppConfig, path: Path | None = None) -> None:
         "# default_period is reserved for future period presets",
         "#",
         "# Sections:",
-        "# - pdf: PDF generation options",
+        "# - pdf: PDF generation options (profile: minimal | executive | detailed)",
         "# - executive: executive summary behavior",
         "# - email: future delivery settings",
         "# - portfolio: multi-zone summary ordering",
@@ -353,6 +373,7 @@ def template_config() -> AppConfig:
             image_quality="medium",
             chart_format="png",
             map_format="png",
+            profile="executive",
         ),
         executive=ExecutiveConfig(
             disabled_rules=[],

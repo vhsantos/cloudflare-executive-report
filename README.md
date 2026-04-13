@@ -59,6 +59,7 @@ pdf:
   image_quality: "medium" # low | medium | high
   chart_format: "png" # png | svg (time-series charts and table charts)
   map_format: "png" # png | svg (world maps)
+  profile: "executive" # minimal | executive | detailed (report length; cover still uses cover.enabled)
 
 executive:
   disabled_rules:
@@ -94,6 +95,7 @@ cover:
 - **`pdf.image_quality`**: Raster DPI preset (`low|medium|high`) for PNG charts/maps.
 - **`pdf.chart_format`**: Chart format (`png|svg`), default `png`.
 - **`pdf.map_format`**: World map format (`png|svg`), default `png` (recommended for smaller PDFs).
+- **`pdf.profile`**: Report length preset: `minimal` (cover if enabled, multi-zone portfolio when 2+ zones, no per-zone executive or stream sections), `executive` (default, adds per-zone executive summary, no stream sections), `detailed` (full report with stream sections for the streams you configure). Cover still follows `cover.enabled`.
 - **`executive.disabled_rules`**: Remove executive rules by phrase key or regex (affects text and score).
 - **`portfolio.sort_by`**: Multi-zone portfolio ordering (`score` or `zone_name`).
 - **SVG dependency**: If using `pdf.chart_format: svg` or `pdf.map_format: svg`, install optional dependency:
