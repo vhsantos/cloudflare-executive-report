@@ -90,7 +90,7 @@ story.append(flex_row([
 
 ---
 
-## `flex_section` - Append + Spacer
+## `flex_row_section` - Append + Spacer
 
 **What it does:** If `tables` is not empty, appends `flex_row(tables)` + a small `Spacer` to `story`.
 
@@ -107,7 +107,7 @@ if tables:
     story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
 # Just write:
-flex_section(story, tables)
+flex_row_section(story, tables)
 ```
 
 ---
@@ -152,7 +152,7 @@ story.append(kpi_row([
 | One ranked list, full width         | `table_with_bars(title, rows, ratios)`                          |
 | One ranked list inside a map layout | `table_with_bars(..., total_width_in=X, show_outer_card=False)` |
 | 2 or 3 ranked lists side by side    | `flex_row([(t1, r1, rt1), (t2, r2, rt2)])`                      |
-| Same as above + standard spacer     | `flex_section(story, tables)`                                   |
+| Same as above + standard spacer     | `flex_row_section(story, tables)`                               |
 | Big numbers in a header band        | `kpi_row([(label, value), ...])`                                |
 
 ---
@@ -173,9 +173,9 @@ if "timeseries" in blocks:
 
 ## File Map
 
-| What                                                       | Where                     |
-| ---------------------------------------------------------- | ------------------------- |
-| `table_with_bars`, `flex_row`, `flex_section`, `kpi_row`   | `pdf/primitives.py`       |
-| `initialize`, `get_render_context`, `clear_render_context` | `pdf/primitives.py`       |
-| `append_timeseries_chart`, `append_chart_section`          | `pdf/stream_fragments.py` |
-| Stream assembly                                            | `pdf/streams/*.py`        |
+| What                                                         | Where                     |
+| ------------------------------------------------------------ | ------------------------- |
+| `table_with_bars`, `flex_row`, `flex_row_section`, `kpi_row` | `pdf/primitives.py`       |
+| `initialize`, `get_render_context`, `clear_render_context`   | `pdf/primitives.py`       |
+| `append_timeseries_chart`, `append_chart_section`            | `pdf/stream_fragments.py` |
+| Stream assembly                                              | `pdf/streams/*.py`        |

@@ -10,7 +10,6 @@
 ## Adaptive HTTP integration follow-up
 
 - [ ] Confirm `http_adaptive` metrics are always included in report runs used for executive summaries (`--types` usage/documentation).
-- [ ] Add a fallback explanatory note when latency percentiles are unavailable and only origin average latency is present.
 - [ ] Decide whether `origin_response_duration_avg_ms` should be shown directly in executive PDF KPI rows.
 
 ## Product/content consistency
@@ -35,19 +34,6 @@
 - [ ] Add guardrails for `--types` combinations that can exceed budget on Free plan.
 - [ ] Add observability counters in logs (queries attempted, succeeded, failed, rate-limited) per run.
 - [ ] Evaluate cache-first behavior for PDF/report generation to avoid unnecessary live API requests.
-
-## PDF status markers (no emoji)
-
-- [ ] Replace/standardize status markers with non-emoji rendering only.
-  - Decision: emoji are not supported reliably in our PDF environments and should not be used.
-  - Preferred options:
-    - ASCII/text markers (`[OK]`, `[i]`, `[!]`, `[!!]`, `[>]`) with color.
-    - Bundled SVG status icons (pass/info/warning/critical/action) for deterministic rendering.
-  - Acceptance criteria:
-    - No emoji glyphs in generated PDFs.
-    - No black-box/tofu glyphs in supported environments.
-    - If SVG path is chosen, rendering is consistent without requiring user font installation.
-    - Document the chosen marker system in README.
 
 ## Validated
 

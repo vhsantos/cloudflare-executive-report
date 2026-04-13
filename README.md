@@ -97,6 +97,8 @@ Each zone in `cf_report_output.json` includes `executive_summary`, derived from 
 - Core fields include `verdict`, `verdict_reasons`, `kpis`, `takeaways`, and `actions` (up to five).
 - The same shared builder (`build_executive_summary`) is used by both JSON sync output and PDF rendering.
 - Reliability wording for adaptive HTTP uses shared thresholds in `executive/constants.py`.
+- If you narrow `--types` on `sync` or `report`, include `http_adaptive` when executive
+  error/latency KPIs are required.
 - Executive security wording is business-facing:
   - `Blocked/Challenged`
   - `Mitigation rate`
@@ -164,7 +166,7 @@ Illustrative cache layout and interim JSON report: **[docs/sample-data/](docs/sa
 - `--include-today`: include today in report (live API; not cached as day file).
 - `--output` / `-o`: report path (default `./cf_report_output.json`).
 - `--zone`: one zone id/name from config; if omitted, uses `default_zone` when set.
-- `--types`: comma-separated streams: `dns`, `http`, `http_adaptive`, `security`, `cache`, `dns_records`, `audit`, `certificates` (default all registered).
+- `--types`: comma-separated streams: `dns`, `http`, `http_adaptive`, `security`, `cache`, `dns_records`, `audit`, `certificates` (default all registered). Include `http_adaptive` for executive error/latency KPIs.
 - `--top N`: ranked-list length (default 10).
 - `--skip-zone-health`: omit zone health REST calls.
 

@@ -31,7 +31,9 @@ def append_executive_nist_appendix(
         return
     styles = get_render_context().styles
     story.append(Spacer(1, PDF_SPACE_LARGE_PT * 3))
-    story.append(Paragraph("Appendix: NIST Control Reference", styles["RepSection"]))
+    story.append(
+        Paragraph("Appendix: Security Controls Reference (NIST 800-53)", styles["RepSection"])
+    )
     for row in nist_rows:
         nid = str(row.get("nist_id") or "")
         title = str(row.get("title") or "")

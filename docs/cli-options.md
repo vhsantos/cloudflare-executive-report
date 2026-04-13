@@ -35,7 +35,7 @@ Source of truth: `src/cloudflare_executive_report/cli.py`.
 | `--refresh-health`   | bool      | `False`               | Refresh live zone health for this report window and rebuild report JSON |
 | `--output`, `-o`     | path      | `None`                | Output PDF path (required for `report`).                                |
 | `--zone`             | str       | `None`                | Zone id or name; if omitted, uses default zone or all configured zones. |
-| `--types`            | str (csv) | `default_types_csv()` | Comma-separated stream ids.                                             |
+| `--types`            | str (csv) | `default_types_csv()` | Comma-separated stream ids. Include `http_adaptive` for executive error/latency KPIs. |
 | `--top`              | int       | `10`                  | Top-N size for ranked lists.                                            |
 | `--skip-zone-health` | bool      | `False`               | Omit zone health REST fetch.                                            |
 | `--output-dir`       | path      | `None`                | Override JSON/history output root for this run.                         |
@@ -59,7 +59,7 @@ Source of truth: `src/cloudflare_executive_report/cli.py`.
 | `--include-today` | bool | `False` | Include today (possibly incomplete data). |
 | `--output`, `-o` | path | `None` | Not supported (`sync` is data-only). |
 | `--zone` | str | `None` | Zone id or name; if omitted, uses default zone when set. |
-| `--types` | str (csv) | `default_types_csv()` | Comma-separated stream ids. |
+| `--types` | str (csv) | `default_types_csv()` | Comma-separated stream ids. Include `http_adaptive` for executive error/latency KPIs. |
 | `--top` | int | `10` | Top-N size for ranked lists. |
 | `--skip-zone-health` | bool | `False` | Omit zone health REST fetch. |
 | `--output-dir` | path | `None` | Override JSON/history output root for this run. |
