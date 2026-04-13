@@ -42,7 +42,7 @@
 
 ## Security and posture checks (backlog)
 
-Suggested order when choosing the next item: HSTS (if one clear settings read), then bot posture (if API stable for your tiers), then rate-limit presence (reuse ruleset enumeration), then WAF/CRS depth (after durable API fields), then multi-zone ranking as a product call, Zero Trust only as a deliberate scope expansion.
+Suggested order when choosing the next item: bot posture (if API stable for your tiers), then rate-limit presence (reuse ruleset enumeration), then WAF/CRS depth (after durable API fields), then multi-zone ranking as a product call, Zero Trust only as a deliberate scope expansion.
 
 - [ ] **Bot posture** - Surface bot protection level: off vs Bot Fight Mode vs Bot Management (plan-dependent).
   - Data: settings or account features API; product names change over time; small enum in `zone_health` or security rollup.
@@ -65,10 +65,6 @@ Suggested order when choosing the next item: HSTS (if one clear settings read), 
 - [ ] **Declarative operator baseline (YAML)** - Optional external YAML (check id, severity, phrase key, optional when-expression) for Git-managed baselines.
   - Shape: loader merges or overrides subsets; keep `phrase_catalog` as source for text/NIST unless fully migrating.
   - Risk: two sources of truth; prefer generate-from-catalog or single compile step.
-
-- [ ] **Multi-zone portfolio view** - After per-zone summaries, rank zones by critical risk count or by numeric score.
-  - Shape: CLI output or multi-zone PDF cover table; no change to single-zone contract.
-  - Risk: keep factual (counts), not subjective labels.
 
 ### Guidelines for implementing a new check
 

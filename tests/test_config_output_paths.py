@@ -1,4 +1,11 @@
-from cloudflare_executive_report.config import AppConfig, ExecutiveConfig, save_config_template
+import pytest
+
+from cloudflare_executive_report.config import (
+    AppConfig,
+    ExecutiveConfig,
+    PortfolioConfig,
+    save_config_template,
+)
 
 
 def test_default_output_dir_separate_from_cache():
@@ -40,3 +47,15 @@ def test_save_config_template_includes_comments_and_sections(tmp_path) -> None:
     assert "pdf:" in text
     assert "executive:" in text
     assert "email:" in text
+    assert "portfolio:" in text
+
+
+def test_portfolio_sort_by_yaml_round_trip() -> None:
+    cfg = AppConfig(portfolio=PortfolioConfig(sort_by="zone_name"))
+    back = AppConfig.from_yaml_dict(cfg.to_yaml_dict())
+    assert back.portfolio.sort_by == "zone_name"
+
+
+def test_portfolio_sort_by_rejects_invalid_value() -> None:
+    with pytest.raises(ValueError, match="portfolio.sort_by"):
+        AppConfig.from_yaml_dict({"zones": [], "portfolio": {"sort_by": "critical_risks"}})

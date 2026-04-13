@@ -15,6 +15,7 @@ from cloudflare_executive_report.common.constants import PDF_SPACE_SMALL_PT
 from cloudflare_executive_report.common.dates import parse_ymd
 from cloudflare_executive_report.common.period_resolver import report_type_for_options
 from cloudflare_executive_report.config import AppConfig
+from cloudflare_executive_report.executive.portfolio import build_portfolio_summary
 from cloudflare_executive_report.executive.summary import build_executive_summary
 from cloudflare_executive_report.pdf.cover import append_cover_page
 from cloudflare_executive_report.pdf.document import build_simple_doc, footer_canvas_factory
@@ -42,6 +43,7 @@ from cloudflare_executive_report.pdf.streams.cache import append_cache_stream
 from cloudflare_executive_report.pdf.streams.dns import append_dns_stream
 from cloudflare_executive_report.pdf.streams.executive_summary import append_executive_summary
 from cloudflare_executive_report.pdf.streams.http import append_http_stream
+from cloudflare_executive_report.pdf.streams.portfolio import append_portfolio_summary
 from cloudflare_executive_report.pdf.streams.security import append_security_stream
 from cloudflare_executive_report.pdf.theme import (
     Theme,
@@ -137,13 +139,16 @@ def write_report_pdf(
     try:
         styles = get_render_context().styles
         story: list[Any] = []
-        append_cover_page(
+        cover_appended = append_cover_page(
             story,
             cover=cfg.cover,
             spec=spec,
             styles=styles,
             theme=th,
         )
+        after_cover_insert_index = len(story)
+        want_portfolio_page = spec.include_executive_summary and len(spec.zone_ids) >= 2
+        portfolio_zone_blocks: list[dict[str, Any]] = []
 
         cache_stream_in_report = any(s.strip().lower() == "cache" for s in spec.streams)
 
@@ -309,6 +314,14 @@ def write_report_pdf(
                     theme=th,
                     include_nist_appendix=cfg.executive.include_nist_appendix,
                 )
+                if want_portfolio_page:
+                    portfolio_zone_blocks.append(
+                        {
+                            "zone_name": zone_name,
+                            "zone_id": zone_id,
+                            "executive_summary": executive_summary,
+                        }
+                    )
 
             for si, stream in enumerate(spec.streams):
                 if si > 0 or spec.include_executive_summary:
@@ -407,6 +420,28 @@ def write_report_pdf(
                     )
                 else:
                     log.warning("Unknown stream %r - skipped", stream)
+
+        if want_portfolio_page and len(portfolio_zone_blocks) >= 2:
+            log.info(
+                "Inserting multi-zone portfolio summary for %d zones",
+                len(portfolio_zone_blocks),
+            )
+            portfolio_summary = build_portfolio_summary(
+                portfolio_zone_blocks,
+                sort_by=cfg.portfolio.sort_by,
+            )
+            portfolio_story: list[Any] = []
+            if cover_appended:
+                portfolio_story.append(PageBreak())
+            append_portfolio_summary(
+                portfolio_story,
+                summary=portfolio_summary,
+                period_start=spec.start,
+                period_end=spec.end,
+                theme=th,
+            )
+            portfolio_story.append(PageBreak())
+            story[after_cover_insert_index:after_cover_insert_index] = portfolio_story
 
         if not story:
             msg = "No report content: no cached API data for selected zones and streams."

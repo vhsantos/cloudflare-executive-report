@@ -98,6 +98,13 @@ class EmailConfig:
 
 
 @dataclass
+class PortfolioConfig:
+    """Multi-zone portfolio summary options."""
+
+    sort_by: Literal["score", "zone_name"] = "score"
+
+
+@dataclass
 class AppConfig:
     """Application settings loaded from config.yaml."""
 
@@ -112,6 +119,7 @@ class AppConfig:
     pdf: PdfConfig = field(default_factory=PdfConfig)
     executive: ExecutiveConfig = field(default_factory=ExecutiveConfig)
     email: EmailConfig = field(default_factory=EmailConfig)
+    portfolio: PortfolioConfig = field(default_factory=PortfolioConfig)
     cover: CoverConfig = field(default_factory=CoverConfig)
 
     def cache_path(self) -> Path:
@@ -157,6 +165,9 @@ class AppConfig:
                 "smtp_host": self.email.smtp_host,
                 "smtp_port": self.email.smtp_port,
                 "recipients": list(self.email.recipients),
+            },
+            "portfolio": {
+                "sort_by": self.portfolio.sort_by,
             },
             "cover": {
                 "enabled": self.cover.enabled,
@@ -217,6 +228,13 @@ class AppConfig:
         smtp_port_raw = email_raw.get("smtp_port")
         smtp_port = int(smtp_port_raw) if smtp_port_raw is not None else 587
 
+        portfolio_raw = data.get("portfolio") or {}
+        if not isinstance(portfolio_raw, dict):
+            raise ValueError("portfolio must be a mapping")
+        sort_by_raw = str(portfolio_raw.get("sort_by") or "score").strip().lower()
+        if sort_by_raw not in {"score", "zone_name"}:
+            raise ValueError(f"portfolio.sort_by must be score or zone_name (got {sort_by_raw!r})")
+
         cover_raw = data.get("cover") or {}
         if not isinstance(cover_raw, dict):
             raise ValueError("cover must be a mapping")
@@ -263,6 +281,7 @@ class AppConfig:
                 smtp_port=smtp_port,
                 recipients=recipients,
             ),
+            portfolio=PortfolioConfig(sort_by=cast(Literal["score", "zone_name"], sort_by_raw)),
             cover=cover,
         )
 
@@ -311,6 +330,7 @@ def save_config_template(cfg: AppConfig, path: Path | None = None) -> None:
         "# - pdf: PDF generation options",
         "# - executive: executive summary behavior",
         "# - email: future delivery settings",
+        "# - portfolio: multi-zone summary ordering",
         "# - cover: cover page text and branding",
         "",
         body.rstrip(),
@@ -345,5 +365,6 @@ def template_config() -> AppConfig:
             smtp_port=587,
             recipients=[],
         ),
+        portfolio=PortfolioConfig(sort_by="score"),
         cover=CoverConfig(),
     )

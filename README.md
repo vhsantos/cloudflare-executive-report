@@ -64,7 +64,7 @@ executive:
   disabled_rules:
     - review_dnssec
     - hsts_suboptimal
-    - security_*
+    - security_.*
   include_nist_appendix: true
   reference_risk_weight: 60
   verdict_warn_threshold: 3
@@ -73,6 +73,9 @@ email:
   smtp_host: ""
   smtp_port: 587
   recipients: []
+
+portfolio:
+  sort_by: "score" # score | zone_name
 
 cover:
   enabled: true
@@ -92,6 +95,7 @@ cover:
 - **`pdf.chart_format`**: Chart format (`png|svg`), default `png`.
 - **`pdf.map_format`**: World map format (`png|svg`), default `png` (recommended for smaller PDFs).
 - **`executive.disabled_rules`**: Remove executive rules by phrase key or regex (affects text and score).
+- **`portfolio.sort_by`**: Multi-zone portfolio ordering (`score` or `zone_name`).
 - **SVG dependency**: If using `pdf.chart_format: svg` or `pdf.map_format: svg`, install optional dependency:
   - `pip install '.[svg]'`
 
