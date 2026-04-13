@@ -82,6 +82,6 @@ def update_zone_json_block_health_and_executive(
         current_period={"start": report_start, "end": report_end},
         previous_report=previous_report,
         previous_zone=find_previous_zone_in_report(previous_report, zone_id),
-        ignore_messages=cfg.ignore_messages,
+        ignore_messages=cfg.executive.ignore_messages,
     )
     return zw

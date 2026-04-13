@@ -34,6 +34,7 @@ from cloudflare_executive_report.config import (
     default_config_path,
     load_config,
     save_config,
+    save_config_template,
     template_config,
 )
 from cloudflare_executive_report.fetchers.registry import (
@@ -145,7 +146,7 @@ def cmd_init(
     token = getpass.getpass("Cloudflare API token: ").strip()
     cfg = template_config()
     cfg.api_token = token or cfg.api_token
-    save_config(cfg, path)
+    save_config_template(cfg, path)
     typer.echo(f"Wrote {path}")
 
 

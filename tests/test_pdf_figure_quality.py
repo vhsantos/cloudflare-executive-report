@@ -31,13 +31,13 @@ def test_theme_with_pdf_image_quality_dpis():
 
 
 def test_config_from_yaml_validates_figure_quality():
-    cfg = AppConfig.from_yaml_dict({"pdf_image_quality": "high", "zones": []})
-    assert cfg.pdf_image_quality == "high"
+    cfg = AppConfig.from_yaml_dict({"pdf": {"image_quality": "high"}, "zones": []})
+    assert cfg.pdf.image_quality == "high"
 
 
 def test_config_from_yaml_rejects_bad_figure_quality():
     with pytest.raises(ValueError, match="pdf_image_quality"):
-        AppConfig.from_yaml_dict({"pdf_image_quality": "x", "zones": []})
+        AppConfig.from_yaml_dict({"pdf": {"image_quality": "x"}, "zones": []})
 
 
 def test_default_theme_matches_medium_preset():

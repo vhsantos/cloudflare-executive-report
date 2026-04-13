@@ -123,14 +123,14 @@ def write_report_pdf(
 ) -> None:
     if theme is not None:
         th = theme_with_map_format(
-            theme_with_chart_format(theme, cfg.pdf_chart_format),
-            cfg.pdf_map_format,
+            theme_with_chart_format(theme, cfg.pdf.chart_format),
+            cfg.pdf.map_format,
         )
     else:
-        q = parse_pdf_image_quality(cfg.pdf_image_quality)
+        q = parse_pdf_image_quality(cfg.pdf.image_quality)
         th = theme_with_map_format(
-            theme_with_chart_format(theme_with_pdf_image_quality(q), cfg.pdf_chart_format),
-            cfg.pdf_map_format,
+            theme_with_chart_format(theme_with_pdf_image_quality(q), cfg.pdf.chart_format),
+            cfg.pdf.map_format,
         )
     cache_root = cfg.cache_path()
     initialize(th)
@@ -294,7 +294,7 @@ def write_report_pdf(
                         current_period={"start": spec.start, "end": spec.end},
                         previous_report=previous_report,
                         previous_zone=find_previous_zone_in_report(previous_report, zone_id),
-                        ignore_messages=cfg.ignore_messages,
+                        ignore_messages=cfg.executive.ignore_messages,
                     )
                 append_executive_summary(
                     story,
@@ -307,7 +307,7 @@ def write_report_pdf(
                         sync_opts=sync_opts,
                     ),
                     theme=th,
-                    include_nist_appendix=cfg.pdf_include_nist_appendix,
+                    include_nist_appendix=cfg.executive.include_nist_appendix,
                 )
 
             for si, stream in enumerate(spec.streams):

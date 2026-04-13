@@ -70,24 +70,49 @@ class CoverConfig:
 
 
 @dataclass
+class PdfConfig:
+    """PDF rendering options."""
+
+    image_quality: str = "medium"
+    chart_format: Literal["png", "svg"] = "png"
+    map_format: Literal["png", "svg"] = "png"
+
+
+@dataclass
+class ExecutiveConfig:
+    """Executive summary generation options."""
+
+    ignore_messages: list[str] = field(default_factory=list)
+    include_nist_appendix: bool = True
+    reference_risk_weight: int = 60
+    verdict_warn_threshold: int = 3
+
+
+@dataclass
+class EmailConfig:
+    """Email delivery options."""
+
+    smtp_host: str = ""
+    smtp_port: int = 587
+    recipients: list[str] = field(default_factory=list)
+
+
+@dataclass
 class AppConfig:
+    """Application settings loaded from config.yaml."""
+
     api_token: str = ""
     cache_dir: str = "~/.cache/cf-report"
     output_dir: str = "~/.cf-report"
     default_zone: str = ""
     log_level: str = "info"
-    # low | medium | high - matplotlib DPI for PDF maps/charts (smaller file vs sharper plots)
-    pdf_image_quality: str = "medium"
-    # png | svg - chart output format inside generated PDF.
-    pdf_chart_format: Literal["png", "svg"] = "png"
-    # png | svg - world-map output format inside generated PDF.
-    pdf_map_format: Literal["png", "svg"] = "png"
+    default_period: str = "last_month"
+    types: list[str] = field(default_factory=list)
     zones: list[ZoneEntry] = field(default_factory=list)
+    pdf: PdfConfig = field(default_factory=PdfConfig)
+    executive: ExecutiveConfig = field(default_factory=ExecutiveConfig)
+    email: EmailConfig = field(default_factory=EmailConfig)
     cover: CoverConfig = field(default_factory=CoverConfig)
-    # Executive summary: suppress rule messages by phrase key (identifier) or regex string.
-    ignore_messages: list[str] = field(default_factory=list)
-    # When True, render the NIST control appendix on the executive summary page (same page).
-    pdf_include_nist_appendix: bool = True
 
     def cache_path(self) -> Path:
         return expand_path(self.cache_dir)
@@ -114,10 +139,25 @@ class AppConfig:
             "output_dir": self.output_dir,
             "default_zone": self.default_zone,
             "log_level": self.log_level,
-            "pdf_image_quality": self.pdf_image_quality,
-            "pdf_chart_format": self.pdf_chart_format,
-            "pdf_map_format": self.pdf_map_format,
+            "default_period": self.default_period,
+            "types": list(self.types),
             "zones": [{"id": z.id, "name": z.name} for z in self.zones],
+            "pdf": {
+                "image_quality": self.pdf.image_quality,
+                "chart_format": self.pdf.chart_format,
+                "map_format": self.pdf.map_format,
+            },
+            "executive": {
+                "ignore_messages": list(self.executive.ignore_messages),
+                "include_nist_appendix": self.executive.include_nist_appendix,
+                "reference_risk_weight": self.executive.reference_risk_weight,
+                "verdict_warn_threshold": self.executive.verdict_warn_threshold,
+            },
+            "email": {
+                "smtp_host": self.email.smtp_host,
+                "smtp_port": self.email.smtp_port,
+                "recipients": list(self.email.recipients),
+            },
             "cover": {
                 "enabled": self.cover.enabled,
                 "company_name": self.cover.company_name,
@@ -129,31 +169,57 @@ class AppConfig:
                 "classification": self.cover.classification,
                 "date_format": self.cover.date_format,
             },
-            "ignore_messages": list(self.ignore_messages),
-            "pdf_include_nist_appendix": self.pdf_include_nist_appendix,
         }
 
     @classmethod
     def from_yaml_dict(cls, data: dict[str, Any]) -> AppConfig:
+        if not isinstance(data, dict):
+            raise ValueError("Config root must be a mapping")
         zones_raw = data.get("zones") or []
         zones = [ZoneEntry(id=str(z["id"]), name=str(z["name"])) for z in zones_raw]
-        pq_raw = data.get("pdf_image_quality")
+
+        pdf_raw = data.get("pdf") or {}
+        if not isinstance(pdf_raw, dict):
+            raise ValueError("pdf must be a mapping")
+        pq_raw = pdf_raw.get("image_quality")
         pdf_image_quality = parse_pdf_image_quality(
             str(pq_raw) if pq_raw is not None else None
         ).value
-        pcf_raw = data.get("pdf_chart_format")
+        pcf_raw = pdf_raw.get("chart_format")
         pdf_chart_format = parse_pdf_image_format(
             str(pcf_raw) if pcf_raw is not None else None,
-            field_name="pdf_chart_format",
+            field_name="pdf.chart_format",
         )
-        pmf_raw = data.get("pdf_map_format")
+        pmf_raw = pdf_raw.get("map_format")
         pdf_map_format = parse_pdf_image_format(
             str(pmf_raw) if pmf_raw is not None else None,
-            field_name="pdf_map_format",
+            field_name="pdf.map_format",
         )
+
+        executive_raw = data.get("executive") or {}
+        if not isinstance(executive_raw, dict):
+            raise ValueError("executive must be a mapping")
+        raw_ignore = executive_raw.get("ignore_messages")
+        if isinstance(raw_ignore, list):
+            ignore_messages = [str(x) for x in raw_ignore]
+        else:
+            ignore_messages = []
+        raw_nist = executive_raw.get("include_nist_appendix")
+        include_nist_appendix = True if raw_nist is None else bool(raw_nist)
+        reference_risk_weight = int(executive_raw.get("reference_risk_weight") or 60)
+        verdict_warn_threshold = int(executive_raw.get("verdict_warn_threshold") or 3)
+
+        email_raw = data.get("email") or {}
+        if not isinstance(email_raw, dict):
+            raise ValueError("email must be a mapping")
+        raw_recipients = email_raw.get("recipients")
+        recipients = [str(x) for x in raw_recipients] if isinstance(raw_recipients, list) else []
+        smtp_port_raw = email_raw.get("smtp_port")
+        smtp_port = int(smtp_port_raw) if smtp_port_raw is not None else 587
+
         cover_raw = data.get("cover") or {}
         if not isinstance(cover_raw, dict):
-            cover_raw = {}
+            raise ValueError("cover must be a mapping")
         cover = CoverConfig(
             enabled=bool(cover_raw.get("enabled", True)),
             company_name=str(cover_raw.get("company_name") or ""),
@@ -165,26 +231,39 @@ class AppConfig:
             classification=str(cover_raw.get("classification") or ""),
             date_format=str(cover_raw.get("date_format") or "%d/%b/%Y"),
         )
-        raw_ignore = data.get("ignore_messages")
-        if isinstance(raw_ignore, list):
-            ignore_messages = [str(x) for x in raw_ignore]
+
+        raw_types = data.get("types")
+        if isinstance(raw_types, list):
+            types = [str(value) for value in raw_types]
         else:
-            ignore_messages = []
-        raw_nist = data.get("pdf_include_nist_appendix")
-        pdf_include_nist_appendix = True if raw_nist is None else bool(raw_nist)
+            types = []
+
         return cls(
             api_token=str(data.get("api_token") or ""),
             cache_dir=str(data.get("cache_dir") or "~/.cache/cf-report"),
             output_dir=str(data.get("output_dir") or "~/.cf-report"),
             default_zone=str(data.get("default_zone") or ""),
             log_level=str(data.get("log_level") or "info"),
-            pdf_image_quality=pdf_image_quality,
-            pdf_chart_format=pdf_chart_format,
-            pdf_map_format=pdf_map_format,
+            default_period=str(data.get("default_period") or "last_month"),
+            types=types,
             zones=zones,
+            pdf=PdfConfig(
+                image_quality=pdf_image_quality,
+                chart_format=pdf_chart_format,
+                map_format=pdf_map_format,
+            ),
+            executive=ExecutiveConfig(
+                ignore_messages=ignore_messages,
+                include_nist_appendix=include_nist_appendix,
+                reference_risk_weight=reference_risk_weight,
+                verdict_warn_threshold=verdict_warn_threshold,
+            ),
+            email=EmailConfig(
+                smtp_host=str(email_raw.get("smtp_host") or ""),
+                smtp_port=smtp_port,
+                recipients=recipients,
+            ),
             cover=cover,
-            ignore_messages=ignore_messages,
-            pdf_include_nist_appendix=pdf_include_nist_appendix,
         )
 
 
@@ -213,6 +292,33 @@ def save_config(cfg: AppConfig, path: Path | None = None) -> None:
         )
 
 
+def save_config_template(cfg: AppConfig, path: Path | None = None) -> None:
+    """Write config template YAML with explanatory comments."""
+    p = path or default_config_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    body = yaml.safe_dump(
+        cfg.to_yaml_dict(),
+        default_flow_style=False,
+        allow_unicode=True,
+        sort_keys=False,
+    )
+    lines = [
+        "# Core settings",
+        "# default_zone is used when CLI --zone is omitted",
+        "# default_period is reserved for future period presets",
+        "#",
+        "# Sections:",
+        "# - pdf: PDF generation options",
+        "# - executive: executive summary behavior",
+        "# - email: future delivery settings",
+        "# - cover: cover page text and branding",
+        "",
+        body.rstrip(),
+        "",
+    ]
+    p.write_text("\n".join(lines), encoding="utf-8")
+
+
 def template_config() -> AppConfig:
     return AppConfig(
         api_token="cfat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
@@ -220,9 +326,24 @@ def template_config() -> AppConfig:
         output_dir="~/.cf-report",
         default_zone="",
         log_level="info",
-        pdf_image_quality="medium",
-        pdf_chart_format="png",
-        pdf_map_format="png",
+        default_period="last_month",
+        types=[],
         zones=[],
+        pdf=PdfConfig(
+            image_quality="medium",
+            chart_format="png",
+            map_format="png",
+        ),
+        executive=ExecutiveConfig(
+            ignore_messages=[],
+            include_nist_appendix=True,
+            reference_risk_weight=60,
+            verdict_warn_threshold=3,
+        ),
+        email=EmailConfig(
+            smtp_host="",
+            smtp_port=587,
+            recipients=[],
+        ),
         cover=CoverConfig(),
     )

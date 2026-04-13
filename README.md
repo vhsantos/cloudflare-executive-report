@@ -48,13 +48,28 @@ cache_dir: "~/.cache/cf-report"
 output_dir: "~/.cf-report"
 default_zone: "" # optional: used when `sync` is run without `--zone`
 log_level: "info" # e.g. debug, warning (same idea as verbose for logging)
-pdf_image_quality: "medium" # low | medium | high
-pdf_chart_format: "png" # png | svg (time-series charts and table charts)
-pdf_map_format: "png" # png | svg (world maps)
+default_period: "last_month" # reserved for future default period selection
+types: [] # optional default stream ids
 
 zones:
   - id: "a1b2c3d4e5f6789012345678abcdef01"
     name: "example.com"
+
+pdf:
+  image_quality: "medium" # low | medium | high
+  chart_format: "png" # png | svg (time-series charts and table charts)
+  map_format: "png" # png | svg (world maps)
+
+executive:
+  ignore_messages: [] # phrase keys or regex patterns
+  include_nist_appendix: true
+  reference_risk_weight: 60
+  verdict_warn_threshold: 3
+
+email:
+  smtp_host: ""
+  smtp_port: 587
+  recipients: []
 
 cover:
   enabled: true
@@ -70,10 +85,11 @@ cover:
 
 - **`default_zone`**: If set and you omit **`--zone`** on **`sync`**, only that zone (by id or name) is processed; if empty, all configured zones run.
 - **`output_dir`**: Root for JSON outputs/history used by `sync` and `report` (default `~/.cf-report`).
-- **`pdf_image_quality`**: Raster DPI preset (`low|medium|high`) for PNG charts/maps.
-- **`pdf_chart_format`**: Chart format (`png|svg`), default `png`.
-- **`pdf_map_format`**: World map format (`png|svg`), default `png` (recommended for smaller PDFs).
-- **SVG dependency**: If using `pdf_chart_format: svg` or `pdf_map_format: svg`, install optional dependency:
+- **`pdf.image_quality`**: Raster DPI preset (`low|medium|high`) for PNG charts/maps.
+- **`pdf.chart_format`**: Chart format (`png|svg`), default `png`.
+- **`pdf.map_format`**: World map format (`png|svg`), default `png` (recommended for smaller PDFs).
+- **`executive.ignore_messages`**: Suppress executive messages by phrase key or regex.
+- **SVG dependency**: If using `pdf.chart_format: svg` or `pdf.map_format: svg`, install optional dependency:
   - `pip install '.[svg]'`
 
 ## What gets collected
