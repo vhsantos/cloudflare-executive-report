@@ -404,7 +404,7 @@ def test_verdict_three_pipeline_warnings_no_warnings_present() -> None:
     assert "warnings_present" not in out["verdict_reasons"]
 
 
-def test_build_executive_summary_ignore_messages_drops_matching_actions() -> None:
+def test_build_executive_summary_disabled_rules_drops_matching_actions() -> None:
     out = build_executive_summary(
         zone_name="example.com",
         zone_health={
@@ -425,6 +425,6 @@ def test_build_executive_summary_ignore_messages_drops_matching_actions() -> Non
         audit={"total_events": 0},
         certificates={"total_certificate_packs": 1, "expiring_in_30_days": 0},
         warnings=[],
-        ignore_messages=["review_dnssec"],
+        disabled_rules=["review_dnssec"],
     )
     assert not any("Enable DNSSEC" in a for a in out["actions"])

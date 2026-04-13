@@ -280,11 +280,11 @@ def build_executive_summary(
     current_period: dict[str, Any] | None = None,
     previous_report: dict[str, Any] | None = None,
     previous_zone: dict[str, Any] | None = None,
-    ignore_messages: Sequence[str] | None = None,
+    disabled_rules: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     """Build a compact CTO summary object from existing section rollups.
 
-    ``ignore_messages`` entries are either bare phrase keys (letters, digits, underscore) for
+    ``disabled_rules`` entries are either bare phrase keys (letters, digits, underscore) for
     exact match, or any other string treated as a regular expression (``re.search`` on key).
     """
     zh = _as_dict(zone_health)
@@ -316,7 +316,7 @@ def build_executive_summary(
 
     mitigation_rate = float(s.get("mitigation_rate_pct") or 0.0)
 
-    msg_filt = ExecutiveMessageFilter.from_entries(list(ignore_messages or []))
+    msg_filt = ExecutiveMessageFilter.from_entries(list(disabled_rules or []))
     gate = evaluate_comparison_gate(
         current_zone_id=zone_id,
         previous_report=previous_report,

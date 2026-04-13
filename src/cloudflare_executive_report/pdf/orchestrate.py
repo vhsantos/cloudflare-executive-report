@@ -294,7 +294,7 @@ def write_report_pdf(
                         current_period={"start": spec.start, "end": spec.end},
                         previous_report=previous_report,
                         previous_zone=find_previous_zone_in_report(previous_report, zone_id),
-                        ignore_messages=cfg.executive.ignore_messages,
+                        disabled_rules=cfg.executive.disabled_rules,
                     )
                 append_executive_summary(
                     story,

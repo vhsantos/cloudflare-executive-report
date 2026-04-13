@@ -82,7 +82,7 @@ class PdfConfig:
 class ExecutiveConfig:
     """Executive summary generation options."""
 
-    ignore_messages: list[str] = field(default_factory=list)
+    disabled_rules: list[str] = field(default_factory=list)
     include_nist_appendix: bool = True
     reference_risk_weight: int = 60
     verdict_warn_threshold: int = 3
@@ -148,7 +148,7 @@ class AppConfig:
                 "map_format": self.pdf.map_format,
             },
             "executive": {
-                "ignore_messages": list(self.executive.ignore_messages),
+                "disabled_rules": list(self.executive.disabled_rules),
                 "include_nist_appendix": self.executive.include_nist_appendix,
                 "reference_risk_weight": self.executive.reference_risk_weight,
                 "verdict_warn_threshold": self.executive.verdict_warn_threshold,
@@ -199,11 +199,11 @@ class AppConfig:
         executive_raw = data.get("executive") or {}
         if not isinstance(executive_raw, dict):
             raise ValueError("executive must be a mapping")
-        raw_ignore = executive_raw.get("ignore_messages")
-        if isinstance(raw_ignore, list):
-            ignore_messages = [str(x) for x in raw_ignore]
+        raw_disabled_rules = executive_raw.get("disabled_rules")
+        if isinstance(raw_disabled_rules, list):
+            disabled_rules = [str(x) for x in raw_disabled_rules]
         else:
-            ignore_messages = []
+            disabled_rules = []
         raw_nist = executive_raw.get("include_nist_appendix")
         include_nist_appendix = True if raw_nist is None else bool(raw_nist)
         reference_risk_weight = int(executive_raw.get("reference_risk_weight") or 60)
@@ -253,7 +253,7 @@ class AppConfig:
                 map_format=pdf_map_format,
             ),
             executive=ExecutiveConfig(
-                ignore_messages=ignore_messages,
+                disabled_rules=disabled_rules,
                 include_nist_appendix=include_nist_appendix,
                 reference_risk_weight=reference_risk_weight,
                 verdict_warn_threshold=verdict_warn_threshold,
@@ -335,7 +335,7 @@ def template_config() -> AppConfig:
             map_format="png",
         ),
         executive=ExecutiveConfig(
-            ignore_messages=[],
+            disabled_rules=[],
             include_nist_appendix=True,
             reference_risk_weight=60,
             verdict_warn_threshold=3,

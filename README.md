@@ -61,7 +61,10 @@ pdf:
   map_format: "png" # png | svg (world maps)
 
 executive:
-  ignore_messages: [] # phrase keys or regex patterns
+  disabled_rules:
+    - review_dnssec
+    - hsts_suboptimal
+    - security_*
   include_nist_appendix: true
   reference_risk_weight: 60
   verdict_warn_threshold: 3
@@ -88,7 +91,7 @@ cover:
 - **`pdf.image_quality`**: Raster DPI preset (`low|medium|high`) for PNG charts/maps.
 - **`pdf.chart_format`**: Chart format (`png|svg`), default `png`.
 - **`pdf.map_format`**: World map format (`png|svg`), default `png` (recommended for smaller PDFs).
-- **`executive.ignore_messages`**: Suppress executive messages by phrase key or regex.
+- **`executive.disabled_rules`**: Remove executive rules by phrase key or regex (affects text and score).
 - **SVG dependency**: If using `pdf.chart_format: svg` or `pdf.map_format: svg`, install optional dependency:
   - `pip install '.[svg]'`
 

@@ -44,8 +44,6 @@
 
 Suggested order when choosing the next item: HSTS (if one clear settings read), then bot posture (if API stable for your tiers), then rate-limit presence (reuse ruleset enumeration), then WAF/CRS depth (after durable API fields), then multi-zone ranking as a product call, Zero Trust only as a deliberate scope expansion.
 
-- [x] **HSTS** - Done: Zone Settings API `security_header` -> `zone_health.hsts` in `zone_health.py`; rules `hsts_disabled` / `hsts_suboptimal` (TLS-015/016, SC-8). Disabled line only if Always Use HTTPS is on and TLS mode is not off; suboptimal if max-age under one year (`HSTS_RECOMMENDED_MAX_AGE_SECONDS`) or Include Subdomains off. Preload not surfaced yet (keep noise down).
-
 - [ ] **Bot posture** - Surface bot protection level: off vs Bot Fight Mode vs Bot Management (plan-dependent).
   - Data: settings or account features API; product names change over time; small enum in `zone_health` or security rollup.
   - Shape: info or warning when bots are fully off on a proxied web zone; suppress DNS-only zones.
