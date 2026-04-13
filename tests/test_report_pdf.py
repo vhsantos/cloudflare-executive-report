@@ -34,6 +34,7 @@ def test_cf_report_report_help() -> None:
     assert "COMMAND [ARGS]" not in out
     assert "--last" in out and "--types" in out and "--cache-only" in out
     assert "--refresh-health" in out
+    assert "--email" in out
 
 
 @pytest.mark.skipif(not FIXTURE_CACHE.is_dir(), reason="sample cache fixtures missing")

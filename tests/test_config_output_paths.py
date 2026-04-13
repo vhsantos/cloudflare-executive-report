@@ -2,6 +2,7 @@ import pytest
 
 from cloudflare_executive_report.config import (
     AppConfig,
+    EmailConfig,
     ExecutiveConfig,
     PdfConfig,
     PortfolioConfig,
@@ -76,3 +77,38 @@ def test_pdf_profile_defaults_to_executive() -> None:
 def test_pdf_profile_rejects_invalid_value() -> None:
     with pytest.raises(ValueError, match="pdf.profile"):
         AppConfig.from_yaml_dict({"zones": [], "pdf": {"profile": "full"}})
+
+
+def test_email_ssl_and_starttls_both_true_rejected() -> None:
+    with pytest.raises(ValueError, match="email.smtp_ssl"):
+        AppConfig.from_yaml_dict(
+            {
+                "zones": [],
+                "email": {"smtp_ssl": True, "smtp_starttls": True, "smtp_host": "x"},
+            }
+        )
+
+
+def test_email_yaml_round_trip() -> None:
+    cfg = AppConfig(
+        email=EmailConfig(
+            enabled=True,
+            smtp_host="smtp.example.com",
+            smtp_port=465,
+            smtp_ssl=True,
+            smtp_starttls=False,
+            smtp_user="u@example.com",
+            smtp_password="secret",
+            smtp_from="Reports <reports@example.com>",
+            recipients=["a@b.com"],
+            subject="S {{date}}",
+            body="B {{period}}",
+        )
+    )
+    back = AppConfig.from_yaml_dict(cfg.to_yaml_dict())
+    assert back.email.enabled is True
+    assert back.email.smtp_ssl is True
+    assert back.email.smtp_starttls is False
+    assert back.email.smtp_from.startswith("Reports")
+    assert back.email.subject == "S {{date}}"
+    assert back.email.body == "B {{period}}"

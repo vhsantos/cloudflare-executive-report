@@ -14,6 +14,14 @@ from cloudflare_executive_report.pdf.figure_quality import parse_pdf_image_quali
 CONFIG_DIR_NAME = ".cf-report"
 CONFIG_FILE_NAME = "config.yaml"
 
+DEFAULT_EMAIL_SUBJECT_TEMPLATE = "Cloudflare Executive Report - {{date}}"
+DEFAULT_EMAIL_BODY_TEMPLATE = (
+    "Hello,\n\n"
+    "Attached is the Cloudflare Executive Report for {{period}} ({{zone_count}} zone(s)).\n\n"
+    "Regards,\n"
+    "Cloudflare Report Tool\n"
+)
+
 
 def default_config_path() -> Path:
     if os.name == "nt":
@@ -104,11 +112,19 @@ class ExecutiveConfig:
 
 @dataclass
 class EmailConfig:
-    """Email delivery options."""
+    """SMTP settings and message templates for optional PDF delivery."""
 
+    enabled: bool = False
     smtp_host: str = ""
     smtp_port: int = 587
+    smtp_ssl: bool = False
+    smtp_starttls: bool = True
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
     recipients: list[str] = field(default_factory=list)
+    subject: str = DEFAULT_EMAIL_SUBJECT_TEMPLATE
+    body: str = DEFAULT_EMAIL_BODY_TEMPLATE
 
 
 @dataclass
@@ -177,9 +193,17 @@ class AppConfig:
                 "verdict_warn_threshold": self.executive.verdict_warn_threshold,
             },
             "email": {
+                "enabled": self.email.enabled,
                 "smtp_host": self.email.smtp_host,
                 "smtp_port": self.email.smtp_port,
+                "smtp_ssl": self.email.smtp_ssl,
+                "smtp_starttls": self.email.smtp_starttls,
+                "smtp_user": self.email.smtp_user,
+                "smtp_password": self.email.smtp_password,
+                "smtp_from": self.email.smtp_from,
                 "recipients": list(self.email.recipients),
+                "subject": self.email.subject,
+                "body": self.email.body,
             },
             "portfolio": {
                 "sort_by": self.portfolio.sort_by,
@@ -242,10 +266,23 @@ class AppConfig:
         email_raw = data.get("email") or {}
         if not isinstance(email_raw, dict):
             raise ValueError("email must be a mapping")
+        email_enabled = bool(email_raw.get("enabled", False))
+        smtp_ssl = bool(email_raw.get("smtp_ssl", False))
+        raw_starttls = email_raw.get("smtp_starttls")
+        if smtp_ssl:
+            smtp_starttls = False if raw_starttls is None else bool(raw_starttls)
+        else:
+            smtp_starttls = True if raw_starttls is None else bool(raw_starttls)
+        if smtp_ssl and smtp_starttls:
+            raise ValueError("email.smtp_ssl and email.smtp_starttls cannot both be true")
         raw_recipients = email_raw.get("recipients")
         recipients = [str(x) for x in raw_recipients] if isinstance(raw_recipients, list) else []
         smtp_port_raw = email_raw.get("smtp_port")
         smtp_port = int(smtp_port_raw) if smtp_port_raw is not None else 587
+        raw_subject = email_raw.get("subject")
+        email_subject = DEFAULT_EMAIL_SUBJECT_TEMPLATE if raw_subject is None else str(raw_subject)
+        raw_body = email_raw.get("body")
+        email_body = DEFAULT_EMAIL_BODY_TEMPLATE if raw_body is None else str(raw_body)
 
         portfolio_raw = data.get("portfolio") or {}
         if not isinstance(portfolio_raw, dict):
@@ -297,9 +334,17 @@ class AppConfig:
                 verdict_warn_threshold=verdict_warn_threshold,
             ),
             email=EmailConfig(
+                enabled=email_enabled,
                 smtp_host=str(email_raw.get("smtp_host") or ""),
                 smtp_port=smtp_port,
+                smtp_ssl=smtp_ssl,
+                smtp_starttls=smtp_starttls,
+                smtp_user=str(email_raw.get("smtp_user") or ""),
+                smtp_password=str(email_raw.get("smtp_password") or ""),
+                smtp_from=str(email_raw.get("smtp_from") or ""),
                 recipients=recipients,
+                subject=email_subject,
+                body=email_body,
             ),
             portfolio=PortfolioConfig(sort_by=cast(Literal["score", "zone_name"], sort_by_raw)),
             cover=cover,
@@ -349,7 +394,7 @@ def save_config_template(cfg: AppConfig, path: Path | None = None) -> None:
         "# Sections:",
         "# - pdf: PDF generation options (profile: minimal | executive | detailed)",
         "# - executive: executive summary behavior",
-        "# - email: future delivery settings",
+        "# - email: optional SMTP delivery (use cf-report report --email when enabled)",
         "# - portfolio: multi-zone summary ordering",
         "# - cover: cover page text and branding",
         "",
@@ -381,11 +426,7 @@ def template_config() -> AppConfig:
             reference_risk_weight=60,
             verdict_warn_threshold=3,
         ),
-        email=EmailConfig(
-            smtp_host="",
-            smtp_port=587,
-            recipients=[],
-        ),
+        email=EmailConfig(),
         portfolio=PortfolioConfig(sort_by="score"),
         cover=CoverConfig(),
     )

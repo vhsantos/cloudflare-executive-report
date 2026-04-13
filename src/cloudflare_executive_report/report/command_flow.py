@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import smtplib
+import ssl
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -36,6 +38,55 @@ class ReportPdfOutcome:
     exit_code: int
     stderr: str | None = None
     pdf_written_line: str | None = None
+    email_sent_line: str | None = None
+
+
+def _finalize_pdf_and_optional_email(
+    *,
+    cfg: AppConfig,
+    output: Path,
+    period_start: str,
+    period_end: str,
+    zone_keys: list[str],
+    send_email: bool,
+    pdf_written_line: str | None,
+) -> ReportPdfOutcome:
+    """Return success outcome, optionally sending the PDF via SMTP."""
+    if not send_email:
+        return ReportPdfOutcome(
+            exit_code=exits.SUCCESS,
+            pdf_written_line=pdf_written_line,
+        )
+    if not cfg.email.enabled:
+        return ReportPdfOutcome(
+            exit_code=exits.INVALID_PARAMS,
+            stderr="Error: --email requires email.enabled: true in config.",
+        )
+    from cloudflare_executive_report.email.smtp import send_pdf_report_email
+
+    try:
+        send_pdf_report_email(
+            cfg.email,
+            pdf_path=output.resolve(),
+            period_start=period_start,
+            period_end=period_end,
+            zone_count=len(zone_keys),
+        )
+    except ValueError as e:
+        return ReportPdfOutcome(exit_code=exits.INVALID_PARAMS, stderr=str(e))
+    except (OSError, smtplib.SMTPException, ssl.SSLError) as e:
+        return ReportPdfOutcome(
+            exit_code=exits.GENERAL_ERROR,
+            stderr=f"Email send failed: {e}",
+        )
+    shown = ", ".join(r.strip() for r in cfg.email.recipients if str(r).strip())
+    if len(shown) > 200:
+        shown = shown[:197] + "..."
+    return ReportPdfOutcome(
+        exit_code=exits.SUCCESS,
+        pdf_written_line=pdf_written_line,
+        email_sent_line=f"Sent report by email to {shown}",
+    )
 
 
 def run_report_pdf_command(
@@ -52,6 +103,7 @@ def run_report_pdf_command(
     include_today: bool,
     cache_only: bool,
     refresh_health: bool,
+    send_email: bool = False,
 ) -> ReportPdfOutcome:
     """Execute report flow: optional sync/health refresh, then write PDF."""
     try:
@@ -110,8 +162,13 @@ def run_report_pdf_command(
             return ReportPdfOutcome(
                 exit_code=exits.GENERAL_ERROR, stderr=f"PDF generation failed: {e}"
             )
-        return ReportPdfOutcome(
-            exit_code=exits.SUCCESS,
+        return _finalize_pdf_and_optional_email(
+            cfg=cfg,
+            output=output,
+            period_start=ps,
+            period_end=pe,
+            zone_keys=zone_keys,
+            send_email=send_email,
             pdf_written_line=f"Wrote {output.resolve()}",
         )
 

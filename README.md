@@ -71,9 +71,23 @@ executive:
   verdict_warn_threshold: 3
 
 email:
+  enabled: false
   smtp_host: ""
   smtp_port: 587
+  smtp_ssl: false # true for SMTPS (e.g. port 465); cannot combine with smtp_starttls
+  smtp_starttls: true # upgrade plain SMTP with STARTTLS (typical on port 587)
+  smtp_user: ""
+  smtp_password: ""
+  smtp_from: "" # optional display; defaults to smtp_user
   recipients: []
+  subject: 'Cloudflare Executive Report - {{date}}' # {{period}}, {{zone_count}}
+  body: |
+    Hello,
+
+    Attached is the Cloudflare Executive Report for {{period}} ({{zone_count}} zone(s)).
+
+    Regards,
+    Cloudflare Report Tool
 
 portfolio:
   sort_by: "score" # score | zone_name
@@ -98,6 +112,7 @@ cover:
 - **`pdf.profile`**: Report length preset: `minimal` (cover if enabled, multi-zone portfolio when 2+ zones, no per-zone executive or stream sections), `executive` (default, adds per-zone executive summary, no stream sections), `detailed` (full report with stream sections for the streams you configure). Cover still follows `cover.enabled`.
 - **`executive.disabled_rules`**: Remove executive rules by phrase key or regex (affects text and score).
 - **`portfolio.sort_by`**: Multi-zone portfolio ordering (`score` or `zone_name`).
+- **`email`**: Optional SMTP. Set **`enabled: true`**, fill **`smtp_host`**, **`recipients`**, and **`smtp_user`** (or **`smtp_from`**). After `cf-report report -o out.pdf`, add **`--email`** to send that PDF. Templates support **`{{date}}`**, **`{{period}}`**, **`{{zone_count}}`**.
 - **SVG dependency**: If using `pdf.chart_format: svg` or `pdf.map_format: svg`, install optional dependency:
   - `pip install '.[svg]'`
 

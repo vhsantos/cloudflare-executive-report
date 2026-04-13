@@ -191,6 +191,11 @@ def cmd_report(
             "(takes precedence over --cache-only reuse)."
         ),
     ),
+    email: bool = typer.Option(
+        False,
+        "--email",
+        help=("After a successful PDF, send it via SMTP when email.enabled is true in config."),
+    ),
     output: Path | None = typer.Option(
         None,
         "-o",
@@ -320,11 +325,14 @@ def cmd_report(
         include_today=include_today,
         cache_only=cache_only,
         refresh_health=refresh_health,
+        send_email=email,
     )
     if outcome.stderr:
         typer.echo(outcome.stderr, err=True)
     if outcome.pdf_written_line:
         typer.echo(outcome.pdf_written_line)
+    if outcome.email_sent_line:
+        typer.echo(outcome.email_sent_line)
     raise typer.Exit(outcome.exit_code)
 
 
