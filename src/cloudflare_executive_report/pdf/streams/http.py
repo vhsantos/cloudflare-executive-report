@@ -13,8 +13,8 @@ from cloudflare_executive_report.common.constants import (
     PDF_SPACE_SMALL_PT,
 )
 from cloudflare_executive_report.pdf.charts import (
-    prepare_daily_metric_series,
-    prepare_dual_line_daily_metric_series,
+    prepare_dual_line_daily_series,
+    prepare_single_line_daily_series,
 )
 from cloudflare_executive_report.pdf.layout_spec import HttpStreamLayout
 from cloudflare_executive_report.pdf.maps import (
@@ -186,7 +186,7 @@ def append_http_stream(
     )
 
     if "timeseries" in blocks:
-        chart_bytes_uniques, sub_u = prepare_daily_metric_series(
+        chart_bytes_uniques, sub_u = prepare_single_line_daily_series(
             daily_uniques,
             theme,
             chart_title="Unique visitors",
@@ -196,7 +196,7 @@ def append_http_stream(
 
         if not cache_stream_in_report:
             req_pairs = _zip_cached_uncached_pairs(daily_requests_cached, daily_requests_uncached)
-            chart_bytes_requests, sub_r = prepare_dual_line_daily_metric_series(
+            chart_bytes_requests, sub_r = prepare_dual_line_daily_series(
                 req_pairs,
                 theme,
                 chart_title="HTTP requests",
@@ -208,7 +208,7 @@ def append_http_stream(
             )
 
         bw_pairs = _zip_cached_uncached_pairs(daily_bytes_cached, daily_bytes_uncached)
-        chart_bytes_bandwidth, sub_b = prepare_dual_line_daily_metric_series(
+        chart_bytes_bandwidth, sub_b = prepare_dual_line_daily_series(
             bw_pairs,
             theme,
             chart_title="HTTP bandwidth",

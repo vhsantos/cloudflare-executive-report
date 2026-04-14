@@ -13,7 +13,7 @@ from reportlab.lib.units import inch
 class Theme:
     primary: str = "#2563eb"
     accent: str = "#f38020"
-    mitigated: str = "#16a34a"
+    tertiary: str = "#16a34a"
     slate: str = "#0f172a"
     muted: str = "#64748b"
     border: str = "#e2e8f0"

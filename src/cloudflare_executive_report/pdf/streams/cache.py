@@ -15,7 +15,7 @@ from cloudflare_executive_report.common.constants import (
     PDF_SPACE_MEDIUM_PT,
     PDF_SPACE_SMALL_PT,
 )
-from cloudflare_executive_report.pdf.charts import prepare_dual_line_daily_metric_series
+from cloudflare_executive_report.pdf.charts import prepare_dual_line_daily_series
 from cloudflare_executive_report.pdf.layout_spec import CacheStreamLayout
 from cloudflare_executive_report.pdf.primitives import (
     flex_row,
@@ -135,7 +135,7 @@ def append_cache_stream(
         story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
     if "timeseries" in blocks:
-        chart_bytes_timeseries, sub_t = prepare_dual_line_daily_metric_series(
+        chart_bytes_timeseries, sub_t = prepare_dual_line_daily_series(
             daily_cache_cf_origin,
             theme,
             chart_title="Cache requests",

@@ -163,11 +163,23 @@ Time series charts live in `pdf/stream_fragments.py`:
 
 ```python
 if "timeseries" in blocks:
-    chart_bytes, subtitle = prepare_dual_line_daily_metric_series(...)
+    chart_bytes, subtitle = prepare_dual_line_daily_series(...)
     append_timeseries_chart(story, styles, theme, blocks, chart_bytes, subtitle)
 ```
 
 > ⚠️ **Important:** Keep `if "timeseries" in blocks` outside the helper. The `prepare_*` functions do expensive aggregation and rendering. Don't call them if the block is disabled.
+
+### Time-series color policy
+
+Line charts follow a fixed semantic color policy from `pdf/charts.py`:
+
+| Chart shape | Color order                      | Intended meaning                                                   |
+| ----------- | -------------------------------- | ------------------------------------------------------------------ |
+| Single line | `accent`                         | Primary Cloudflare-associated metric                               |
+| Dual line   | `accent`, `primary`              | Cloudflare-associated metric first, counterpart second             |
+| Triple line | `accent`, `primary`, `tertiary`  | Primary series, secondary series, then other/tertiary series       |
+
+For stream usage, keep legends aligned with data tuple order so colors remain semantically stable.
 
 ---
 

@@ -14,7 +14,7 @@ from cloudflare_executive_report.common.constants import (
     PDF_SPACE_MEDIUM_PT,
     PDF_SPACE_SMALL_PT,
 )
-from cloudflare_executive_report.pdf.charts import prepare_daily_metric_series
+from cloudflare_executive_report.pdf.charts import prepare_single_line_daily_series
 from cloudflare_executive_report.pdf.maps import map_height_in_for_width
 from cloudflare_executive_report.pdf.primitives import (
     figure_from_bytes,
@@ -96,7 +96,7 @@ def append_timeseries_if_enabled(
     """Build a single-line daily chart from points and append it when timeseries is enabled."""
     if "timeseries" not in blocks:
         return
-    chart_bytes, sub = prepare_daily_metric_series(
+    chart_bytes, sub = prepare_single_line_daily_series(
         daily_points,
         theme,
         chart_title=chart_title,

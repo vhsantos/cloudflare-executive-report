@@ -13,7 +13,7 @@ from cloudflare_executive_report.common.constants import (
     PDF_SPACE_SMALL_PT,
 )
 from cloudflare_executive_report.common.formatting import format_count_human
-from cloudflare_executive_report.pdf.charts import prepare_triple_line_daily_metric_series
+from cloudflare_executive_report.pdf.charts import prepare_triple_line_daily_series
 from cloudflare_executive_report.pdf.layout_spec import SecurityStreamLayout
 from cloudflare_executive_report.pdf.maps import world_map_from_country_totals_bytes
 from cloudflare_executive_report.pdf.primitives import (
@@ -235,13 +235,13 @@ def append_security_stream(
     flex_row_section(story, attack_tables)
 
     if "timeseries" in blocks:
-        chart_bytes_timeseries, sub_t = prepare_triple_line_daily_metric_series(
+        chart_bytes_timeseries, sub_t = prepare_triple_line_daily_series(
             daily_security_triple,
             theme,
             chart_title="Security traffic",
-            legend_mit="Mitigated",
-            legend_cf="Served by Cloudflare",
-            legend_or="Served by origin",
+            legend_a="Served by Cloudflare",
+            legend_b="Served by origin",
+            legend_c="Mitigated",
         )
         append_prepared_timeseries_chart(
             story, styles, theme, blocks, chart_bytes_timeseries, sub_t

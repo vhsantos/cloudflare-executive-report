@@ -519,7 +519,8 @@ def _load_security_days_for_range(
             m = int(data.get("mitigated_count") or 0)
             cf = int(data.get("served_cf_count") or 0)
             org = int(data.get("served_origin_count") or 0)
-            daily_triple.append((d, (m, cf, org)))
+            # Canonical security chart order: (served_cf, served_origin, mitigated).
+            daily_triple.append((d, (cf, org, m)))
         else:
             daily_triple.append((d, (None, None, None)))
 
