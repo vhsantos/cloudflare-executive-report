@@ -34,6 +34,24 @@ from cloudflare_executive_report.pdf.stream_fragments import (
 from cloudflare_executive_report.pdf.theme import Theme
 
 
+def collect_http_appendix_notes(http: dict[str, Any], *, profile: str) -> list[str]:
+    """Return appendix notes derived from HTTP metrics present in this stream."""
+    notes: list[str] = []
+    if profile not in {"executive", "detailed"}:
+        return notes
+    if "unique_visitors" in http:
+        notes.append(
+            "Unique visitors are deduplicated for the selected period; daily totals may not "
+            "match dashboard windows that include partial current-day traffic."
+        )
+    if "cache_hit_ratio" in http:
+        notes.append(
+            "Cache hit ratio depends on workload profile (static vs dynamic/API) and should be "
+            "compared as a trend for the same zone."
+        )
+    return notes
+
+
 def _country_totals_from_rollup(http: dict[str, Any]) -> dict[str, int]:
     out: dict[str, int] = {}
     for row in http.get("top_countries") or []:
@@ -160,7 +178,7 @@ def append_http_stream(
         table_title="Top requests",
         side_table_ratios=(0.40, 0.16, 0.44),
         full_table_ratios=(0.42, 0.18, 0.40),
-        build_map_png_for_width=lambda map_width_in: world_map_from_country_totals_bytes(
+        build_map_image_for_width=lambda map_width_in: world_map_from_country_totals_bytes(
             country_totals,
             theme=theme,
             width_in=map_width_in,

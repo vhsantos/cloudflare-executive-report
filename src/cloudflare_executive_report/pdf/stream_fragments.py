@@ -169,7 +169,7 @@ def append_map_and_ranked_table(
     table_title: str,
     side_table_ratios: tuple[float, float, float],
     full_table_ratios: tuple[float, float, float],
-    build_map_png_for_width: Any,
+    build_map_image_for_width: Any,
     append_space_after_table_only: bool = False,
 ) -> None:
     """Append shared world-map + ranked-table section used by multiple streams."""
@@ -178,12 +178,14 @@ def append_map_and_ranked_table(
     side_table_w_in = w_content * (1.0 - map_frac)
     has_map = map_block_name in blocks
     has_table = table_block_name in blocks
+    map_width_in = w_content * map_frac if has_table and table_rows_side else w_content
+    map_image_bytes = b""
+    if has_map:
+        map_image_bytes = build_map_image_for_width(map_width_in)
 
-    if has_map and has_table and table_rows_side:
-        w_map_in = w_content * map_frac
-        map_h = map_height_in_for_width(w_map_in)
-        map_png = build_map_png_for_width(w_map_in)
-        map_fig = figure_from_bytes(map_png, width_in=w_map_in, height_in=map_h)
+    if map_image_bytes and has_table and table_rows_side:
+        map_h = map_height_in_for_width(map_width_in)
+        map_fig = figure_from_bytes(map_image_bytes, width_in=map_width_in, height_in=map_h)
         side_table = table_with_bars(
             table_title,
             table_rows_side,
@@ -195,13 +197,6 @@ def append_map_and_ranked_table(
         story.append(Spacer(1, PDF_SPACE_SMALL_PT))
         return
 
-    if has_map:
-        map_w = w_content
-        map_h = map_height_in_for_width(map_w)
-        map_png = build_map_png_for_width(map_w)
-        story.append(figure_from_bytes(map_png, width_in=map_w, height_in=map_h))
-        story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))
-
     if has_table and table_rows_full:
         full_table = table_with_bars(
             table_title,
@@ -212,3 +207,9 @@ def append_map_and_ranked_table(
         story.append(full_table)
         if append_space_after_table_only:
             story.append(Spacer(1, PDF_SPACE_SMALL_PT))
+        return
+
+    if map_image_bytes:
+        map_h = map_height_in_for_width(map_width_in)
+        story.append(figure_from_bytes(map_image_bytes, width_in=map_width_in, height_in=map_h))
+        story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))

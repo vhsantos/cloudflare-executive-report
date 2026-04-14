@@ -12,6 +12,8 @@ from reportlab.lib.units import inch
 @dataclass(frozen=True)
 class Theme:
     primary: str = "#2563eb"
+    accent: str = "#f38020"
+    mitigated: str = "#16a34a"
     slate: str = "#0f172a"
     muted: str = "#64748b"
     border: str = "#e2e8f0"
@@ -59,3 +61,10 @@ def theme_with_map_format(theme: Theme, map_format: Literal["png", "svg"]) -> Th
     if map_format == theme.map_format:
         return theme
     return replace(theme, map_format=map_format)
+
+
+def theme_with_brand_colors(theme: Theme, *, primary: str, accent: str) -> Theme:
+    """Return theme with report-level primary/accent color overrides."""
+    if primary == theme.primary and accent == theme.accent:
+        return theme
+    return replace(theme, primary=primary, accent=accent)

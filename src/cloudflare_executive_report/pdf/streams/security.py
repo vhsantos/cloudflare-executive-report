@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from reportlab.platypus import Paragraph, Spacer
+from reportlab.platypus import Spacer
 
 from cloudflare_executive_report.common.constants import (
     PDF_MAP_SIDE_TABLE_MAX_ROWS,
@@ -36,6 +36,24 @@ from cloudflare_executive_report.pdf.stream_fragments import (
     append_stream_header,
 )
 from cloudflare_executive_report.pdf.theme import Theme
+
+
+def collect_security_appendix_notes(security: dict[str, Any], *, profile: str) -> list[str]:
+    """Return appendix notes derived from security metrics and tables."""
+    notes: list[str] = []
+    if profile not in {"executive", "detailed"}:
+        return notes
+    if "mitigation_rate_pct" in security:
+        notes.append(
+            "Mitigation metrics reflect sampled events and configured actions; trend direction "
+            "is more reliable than single-day absolute counts."
+        )
+    if profile == "detailed" and list(security.get("top_attack_sources") or []):
+        notes.append(
+            "Frequently seen attacker IPs are merged from daily top 10 lists; consistently "
+            "active sources that never reach daily top 10 may not appear."
+        )
+    return notes
 
 
 def append_security_stream(
@@ -140,7 +158,7 @@ def append_security_stream(
         table_title="Top attacker countries",
         side_table_ratios=(0.42, 0.18, 0.40),
         full_table_ratios=(0.42, 0.18, 0.40),
-        build_map_png_for_width=lambda map_width_in: world_map_from_country_totals_bytes(
+        build_map_image_for_width=lambda map_width_in: world_map_from_country_totals_bytes(
             country_totals,
             theme=theme,
             width_in=map_width_in,
@@ -215,15 +233,6 @@ def append_security_stream(
     if attack_paths_enabled and path_rows:
         attack_tables.append(("Top attacked paths", path_rows, (0.48, 0.18, 0.34)))
     flex_row_section(story, attack_tables)
-    if attack_tables and rows_atk:
-        story.append(
-            Paragraph(
-                "<i>Note: For multi-day reports, IPs are merged from daily top 10 lists. "
-                "IPs that attack consistently but never reach daily top 10 may not appear.</i>",
-                styles["RepFootnote"],
-            )
-        )
-        story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
     if "timeseries" in blocks:
         chart_bytes_timeseries, sub_t = prepare_triple_line_daily_metric_series(

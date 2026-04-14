@@ -7,7 +7,13 @@ from typing import Any
 from reportlab.lib import colors
 from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
 
-from cloudflare_executive_report.common.constants import PDF_SPACE_MEDIUM_PT
+from cloudflare_executive_report.common.constants import (
+    PDF_SPACE_MEDIUM_PT,
+    PDF_TABLE_BOX_LINE_PT,
+    PDF_TABLE_CELL_PAD_X_PT,
+    PDF_TABLE_CELL_PAD_Y_PT,
+    PDF_TABLE_INNER_GRID_LINE_PT,
+)
 from cloudflare_executive_report.common.formatting import format_number_compact
 from cloudflare_executive_report.executive.portfolio import (
     GRADE_BAND_LABELS,
@@ -32,19 +38,25 @@ def _portfolio_table(
     table = Table(rows, colWidths=col_widths)
     last_row = len(rows) - 1
     style_cmds: list[tuple[Any, ...]] = [
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(theme.row_alt)),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor(theme.muted)),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(theme.accent)),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONT", (0, 0), (-1, 0), "Helvetica-Bold", 8),
         ("FONT", (0, 1), (-1, -1), "Helvetica", 8),
         ("TEXTCOLOR", (0, 1), (-1, -1), colors.HexColor(theme.slate)),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor(theme.row_alt)]),
-        ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor(theme.border)),
-        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor(theme.border)),
-        ("LEFTPADDING", (0, 0), (-1, -1), 6),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("BOX", (0, 0), (-1, -1), PDF_TABLE_BOX_LINE_PT, colors.HexColor(theme.border)),
+        (
+            "INNERGRID",
+            (0, 0),
+            (-1, -1),
+            PDF_TABLE_INNER_GRID_LINE_PT,
+            colors.HexColor(theme.border),
+        ),
+        ("LEFTPADDING", (0, 0), (-1, -1), PDF_TABLE_CELL_PAD_X_PT),
+        ("RIGHTPADDING", (0, 0), (-1, -1), PDF_TABLE_CELL_PAD_X_PT),
+        ("TOPPADDING", (0, 0), (-1, -1), PDF_TABLE_CELL_PAD_Y_PT),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), PDF_TABLE_CELL_PAD_Y_PT),
     ]
     for col in center_columns:
         style_cmds.append(("ALIGN", (col, 0), (col, last_row), "CENTER"))

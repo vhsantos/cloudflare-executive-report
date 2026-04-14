@@ -28,6 +28,7 @@ REPORT_JSON_SCHEMA_VERSION: int = 1
 PDF_SPACE_SMALL_PT: int = 4
 PDF_SPACE_MEDIUM_PT: int = 8
 PDF_SPACE_LARGE_PT: int = 12
+PDF_TOP_ACCENT_BAR_HEIGHT_PT: int = 9
 
 # World map beside ranked table: map column as a share of content width (rest is table).
 PDF_MAP_SIDE_BY_SIDE_MAP_WIDTH_SHARE: float = 2.0 / 3.0
@@ -43,6 +44,12 @@ PDF_RANKED_BAR_TRACK_HEIGHT_PT: float = 4.0
 
 # Top and bottom padding per body row in ranked tables (points).
 PDF_RANKED_TABLE_ROW_PAD_PT: int = 2
+
+# Shared table framing tokens for non-KPI report tables.
+PDF_TABLE_BOX_LINE_PT: float = 0.5
+PDF_TABLE_INNER_GRID_LINE_PT: float = 0.25
+PDF_TABLE_CELL_PAD_X_PT: int = 6
+PDF_TABLE_CELL_PAD_Y_PT: int = 3
 
 
 # ============================================================================

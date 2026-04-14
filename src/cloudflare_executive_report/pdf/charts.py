@@ -30,6 +30,7 @@ StackedPoint = tuple[float | None, float | None]
 StackedTriplePoint = tuple[float | None, float | None, float | None]
 CHART_MARKER_SIZE: float = 4.0
 CHART_MARKER_EDGE_WIDTH: float = 0.55
+CHART_LINE_WIDTH: float = 1.55
 
 
 def _marker_style(color: str) -> dict[str, Any]:
@@ -329,7 +330,7 @@ def line_chart_bytes(
     theme: Theme,
     time_granularity: ChartTimeGranularity = "day",
 ) -> bytes:
-    """Stacked-area style (single series): filled region + top edge; compact Y and X ticks."""
+    """Single-series line chart with markers and compact axis ticks."""
     fig_w = min(theme.content_width_in(), 7.1)
     fig_h = fig_w * 0.35
     fig, ax = plt.subplots(figsize=(fig_w, fig_h), facecolor="white")
@@ -351,15 +352,13 @@ def line_chart_bytes(
         if cur_x:
             segments.append((cur_x, cur_y))
 
-        line_c = theme.primary
-        fill_c = to_rgba(line_c, 0.22)
+        line_c = theme.accent
         for cx, cy in segments:
-            ax.fill_between(cx, 0, cy, color=fill_c, linewidth=0, interpolate=True)
             ax.plot(
                 cx,
                 cy,
                 color=line_c,
-                linewidth=1.4,
+                linewidth=CHART_LINE_WIDTH,
                 solid_capstyle="round",
                 **_marker_style(line_c),
             )
@@ -382,7 +381,14 @@ def line_chart_bytes(
         ax.spines["right"].set_visible(False)
 
         if segments:
-            leg_handle = Patch(facecolor=fill_c, edgecolor=line_c, linewidth=1.0, label=y_label)
+            leg_handle = Line2D(
+                [0],
+                [0],
+                color=line_c,
+                lw=CHART_LINE_WIDTH,
+                **_marker_style(line_c),
+                label=y_label,
+            )
             ax.legend(
                 handles=[leg_handle],
                 loc="upper right",
@@ -692,9 +698,8 @@ def line_chart_triple_bytes(
     """Three lines from ``(mitigated, served_cf, served_origin)`` per time bucket.
 
     Missing buckets (any ``None``) become NaN so Matplotlib breaks the lines.
-    Semi-transparent fills from zero + small round markers at each point.
+    Clean line-only style with round markers (no area fill).
     """
-    _fill_alpha = 0.22
     fig_w = min(theme.content_width_in(), 7.1)
     fig_h = fig_w * 0.35
     fig, ax = plt.subplots(figsize=(fig_w, fig_h), facecolor="white")
@@ -718,20 +723,13 @@ def line_chart_triple_bytes(
                 y_cf.append(float("nan"))
                 y_o.append(float("nan"))
 
-        c_mit = theme.section_blue
-        c_cf = theme.primary
-        c_or = theme.muted
-        fill_mit = to_rgba(c_mit, _fill_alpha)
-        fill_cf = to_rgba(c_cf, _fill_alpha)
-        fill_or = to_rgba(c_or, _fill_alpha)
-        # Fills first (back to front); lines + markers on top.
-        ax.fill_between(x, 0, y_m, color=fill_mit, linewidth=0, interpolate=True, zorder=1)
-        ax.fill_between(x, 0, y_o, color=fill_or, linewidth=0, interpolate=True, zorder=2)
-        ax.fill_between(x, 0, y_cf, color=fill_cf, linewidth=0, interpolate=True, zorder=3)
+        c_mit = theme.mitigated
+        c_cf = theme.accent
+        c_or = theme.primary
         plot_kw: dict = {
-            "linewidth": 1.35,
+            "linewidth": CHART_LINE_WIDTH,
             "solid_capstyle": "round",
-            "zorder": 4,
+            "zorder": 3,
         }
         ax.plot(x, y_m, color=c_mit, label=legend_mit, **plot_kw, **_marker_style(c_mit))
         ax.plot(x, y_cf, color=c_cf, label=legend_cf, **plot_kw, **_marker_style(c_cf))
@@ -762,7 +760,7 @@ def line_chart_triple_bytes(
                 [0],
                 [0],
                 color=c_mit,
-                lw=1.35,
+                lw=CHART_LINE_WIDTH,
                 **_marker_style(c_mit),
                 label=legend_mit,
             )
@@ -770,7 +768,7 @@ def line_chart_triple_bytes(
                 [0],
                 [0],
                 color=c_cf,
-                lw=1.35,
+                lw=CHART_LINE_WIDTH,
                 **_marker_style(c_cf),
                 label=legend_cf,
             )
@@ -778,7 +776,7 @@ def line_chart_triple_bytes(
                 [0],
                 [0],
                 color=c_or,
-                lw=1.35,
+                lw=CHART_LINE_WIDTH,
                 **_marker_style(c_or),
                 label=legend_or,
             )
@@ -813,7 +811,6 @@ def line_chart_dual_bytes(
     time_granularity: ChartTimeGranularity = "day",
 ) -> bytes:
     """Two lines: ``legend_a`` (first series) then ``legend_b`` (second)."""
-    _fill_alpha = 0.22
     fig_w = min(theme.content_width_in(), 7.1)
     fig_h = fig_w * 0.35
     fig, ax = plt.subplots(figsize=(fig_w, fig_h), facecolor="white")
@@ -835,13 +832,9 @@ def line_chart_dual_bytes(
                 y_b.append(float("nan"))
 
         c_a = theme.primary
-        c_b = theme.muted
-        fill_a = to_rgba(c_a, _fill_alpha)
-        fill_b = to_rgba(c_b, _fill_alpha)
-        ax.fill_between(x, 0, y_b, color=fill_b, linewidth=0, interpolate=True, zorder=1)
-        ax.fill_between(x, 0, y_a, color=fill_a, linewidth=0, interpolate=True, zorder=2)
+        c_b = theme.accent
         plot_kw: dict = {
-            "linewidth": 1.35,
+            "linewidth": CHART_LINE_WIDTH,
             "solid_capstyle": "round",
             "zorder": 3,
         }
@@ -873,7 +866,7 @@ def line_chart_dual_bytes(
                 [0],
                 [0],
                 color=c_a,
-                lw=1.35,
+                lw=CHART_LINE_WIDTH,
                 **_marker_style(c_a),
                 label=legend_a,
             )
@@ -881,7 +874,7 @@ def line_chart_dual_bytes(
                 [0],
                 [0],
                 color=c_b,
-                lw=1.35,
+                lw=CHART_LINE_WIDTH,
                 **_marker_style(c_b),
                 label=legend_b,
             )

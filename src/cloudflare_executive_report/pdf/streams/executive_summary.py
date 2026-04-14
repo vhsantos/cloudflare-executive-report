@@ -4,13 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from reportlab.platypus import Paragraph, Spacer
+from reportlab.lib import colors
+from reportlab.lib.units import inch
+from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
 
-from cloudflare_executive_report.common.constants import (
-    PDF_SPACE_LARGE_PT,
-    PDF_SPACE_MEDIUM_PT,
-    PDF_SPACE_SMALL_PT,
-)
+from cloudflare_executive_report.common.constants import PDF_SPACE_MEDIUM_PT, PDF_SPACE_SMALL_PT
 from cloudflare_executive_report.common.formatting import (
     format_count_compact,
     format_number_compact,
@@ -21,35 +19,43 @@ from cloudflare_executive_report.pdf.primitives import get_render_context, kpi_r
 from cloudflare_executive_report.pdf.theme import Theme
 
 
-def append_executive_nist_appendix(
-    story: list[Any],
-    nist_rows: list[dict[str, Any]],
+def _executive_header_block(
+    zone_name: str,
+    period_start: str,
+    period_end: str,
+    report_type: str | None,
+    styles: Any,
     theme: Theme,
-) -> None:
-    """Append NIST appendix on the current page (ReportLab uses ``<a href>``, not ``<link>``)."""
-    if not nist_rows:
-        return
-    styles = get_render_context().styles
-    story.append(Spacer(1, PDF_SPACE_LARGE_PT * 3))
-    story.append(
-        Paragraph("Appendix: Security Controls Reference (NIST 800-53)", styles["RepSection"])
+) -> Table:
+    """Title and subtitle in one block with divider below subtitle."""
+    title_text = "Executive summary"
+    subtitle_text = (
+        f"<font color='{theme.primary}'><b>{zone_name}</b></font>"
+        f"<font color='{theme.muted}'> · {period_start} to {period_end} (UTC)"
+        f"{_report_type_suffix(report_type)}</font>"
     )
-    for row in nist_rows:
-        nid = str(row.get("nist_id") or "")
-        title = str(row.get("title") or "")
-        url = str(row.get("url") or "").strip()
-        raw_ids = row.get("check_ids") or []
-        checks = ", ".join(str(x) for x in raw_ids) if isinstance(raw_ids, list) else ""
-        label = f"[{nid}]"
-        if url:
-            text = f'<a href="{url}" color="{theme.primary}">{label}</a>'
-        else:
-            text = label
-        if title:
-            text += f" {title}"
-        if checks:
-            text += f" ({checks})"
-        story.append(Paragraph(text, styles["RepTableCell"]))
+    width_pt = theme.content_width_in() * inch
+    table = Table(
+        [
+            [Paragraph(title_text, styles["RepStreamHeadLeft"])],
+            [Paragraph(subtitle_text, styles["RepSubtitle"])],
+        ],
+        colWidths=[width_pt],
+    )
+    table.setStyle(
+        TableStyle(
+            [
+                ("LINEBELOW", (0, 1), (0, 1), 3.0, colors.HexColor(theme.accent)),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (0, 0), 0),
+                ("BOTTOMPADDING", (0, 0), (0, 0), 0),
+                ("TOPPADDING", (0, 1), (0, 1), 0),
+                ("BOTTOMPADDING", (0, 1), (0, 1), 2),
+            ]
+        )
+    )
+    return table
 
 
 def _report_type_suffix(report_type: str | None) -> str:
@@ -103,18 +109,18 @@ def append_executive_summary(
     summary: dict[str, Any],
     report_type: str | None,
     theme: Theme,
-    include_nist_appendix: bool = True,
 ) -> None:
     styles = get_render_context().styles
 
     verdict = str(summary.get("verdict") or "warning").upper()
-    story.append(Paragraph("Executive summary", styles["RepStreamHeadLeft"]))
     story.append(
-        Paragraph(
-            f"<font color='{theme.primary}'><b>{zone_name}</b></font>"
-            f"<font color='{theme.muted}'> · {period_start} to {period_end} (UTC)"
-            f"{_report_type_suffix(report_type)}</font>",
-            styles["RepSubtitle"],
+        _executive_header_block(
+            zone_name=zone_name,
+            period_start=period_start,
+            period_end=period_end,
+            report_type=report_type,
+            styles=styles,
+            theme=theme,
         )
     )
     story.append(Spacer(1, PDF_SPACE_SMALL_PT))
@@ -280,8 +286,3 @@ def append_executive_summary(
             story.append(
                 Paragraph(format_pdf_status_line(row, level="action"), styles["RepTableCell"])
             )
-
-    if include_nist_appendix:
-        nist_rows = summary.get("nist_reference") or []
-        if isinstance(nist_rows, list) and nist_rows:
-            append_executive_nist_appendix(story, nist_rows, theme)

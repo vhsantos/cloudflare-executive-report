@@ -28,6 +28,19 @@ from cloudflare_executive_report.pdf.stream_fragments import (
 from cloudflare_executive_report.pdf.theme import Theme
 
 
+def collect_dns_appendix_notes(dns: dict[str, Any], *, profile: str) -> list[str]:
+    """Return appendix notes derived from DNS metrics present in this stream."""
+    notes: list[str] = []
+    if profile not in {"executive", "detailed"}:
+        return notes
+    if "average_qps" in dns:
+        notes.append(
+            "Average DNS QPS is period-level average throughput and should be interpreted with "
+            "query totals and peak intervals together."
+        )
+    return notes
+
+
 def append_dns_stream(
     story: list[Any],
     *,
@@ -86,7 +99,7 @@ def append_dns_stream(
         table_title="Top queries",
         side_table_ratios=(0.28, 0.26, 0.46),
         full_table_ratios=(0.28, 0.26, 0.46),
-        build_map_png_for_width=lambda map_width_in: world_map_from_colos_bytes(
+        build_map_image_for_width=lambda map_width_in: world_map_from_colos_bytes(
             top_colos[:top],
             theme=theme,
             width_in=map_width_in,

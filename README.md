@@ -60,13 +60,16 @@ pdf:
   chart_format: "png" # png | svg (time-series charts and table charts)
   map_format: "png" # png | svg (world maps)
   profile: "executive" # minimal | executive | detailed (report length; cover still uses cover.enabled)
+  colors:
+    primary: "#2563eb" # main report color
+    accent: "#f38020" # bars/separators/highlights
 
 executive:
   disabled_rules:
     - review_dnssec
     - hsts_suboptimal
     - security_.*
-  include_nist_appendix: true
+  include_appendix: true
   reference_risk_weight: 60
   verdict_warn_threshold: 3
 
@@ -110,6 +113,8 @@ cover:
 - **`pdf.chart_format`**: Chart format (`png|svg`), default `png`.
 - **`pdf.map_format`**: World map format (`png|svg`), default `png` (recommended for smaller PDFs).
 - **`pdf.profile`**: Report length preset: `minimal` (cover if enabled, multi-zone portfolio when 2+ zones, no per-zone executive or stream sections), `executive` (default, adds per-zone executive summary, no stream sections), `detailed` (full report with stream sections for the streams you configure). Cover still follows `cover.enabled`.
+- **`executive.include_appendix`**: Enables one final appendix page (shared metric notes plus aggregated security controls across zones).
+- **`pdf.colors`**: Optional brand colors for PDF visuals. `primary` and `accent` must be hex values like `#2563eb`.
 - **`executive.disabled_rules`**: Remove executive rules by phrase key or regex (affects text and score).
 - **`portfolio.sort_by`**: Multi-zone portfolio ordering (`score` or `zone_name`).
 - **`email`**: Optional SMTP. Set **`enabled: true`**, fill **`smtp_host`**, **`recipients`**, and **`smtp_user`** (or **`smtp_from`**). After `cf-report report -o out.pdf`, add **`--email`** to send that PDF. Templates support **`{{date}}`**, **`{{period}}`**, **`{{zone_count}}`**.

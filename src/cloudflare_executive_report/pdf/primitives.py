@@ -19,6 +19,9 @@ from cloudflare_executive_report.common.constants import (
     PDF_RANKED_TABLE_ROW_PAD_PT,
     PDF_SPACE_MEDIUM_PT,
     PDF_SPACE_SMALL_PT,
+    PDF_TABLE_BOX_LINE_PT,
+    PDF_TABLE_CELL_PAD_X_PT,
+    PDF_TABLE_INNER_GRID_LINE_PT,
 )
 from cloudflare_executive_report.common.formatting import format_count_human
 from cloudflare_executive_report.pdf.styles import build_styles
@@ -313,13 +316,21 @@ def _ranked_inner_table_style(num_rows: int, theme: Theme) -> list:
         ("ROWBACKGROUNDS", (0, 0), (-1, -1), [colors.white, colors.HexColor(theme.row_alt)]),
         ("TOPPADDING", (0, 0), (-1, last), vpad),
         ("BOTTOMPADDING", (0, 0), (-1, last), vpad),
-        ("LEFTPADDING", (0, 0), (1, last), 8),
-        ("RIGHTPADDING", (0, 0), (1, last), 6),
+        ("LEFTPADDING", (0, 0), (1, last), PDF_TABLE_CELL_PAD_X_PT),
+        ("RIGHTPADDING", (0, 0), (1, last), PDF_TABLE_CELL_PAD_X_PT),
         ("LEFTPADDING", (2, 0), (2, last), 0),
         ("RIGHTPADDING", (2, 0), (2, last), 0),
     ]
     for r in range(num_rows - 1):
-        styles.append(("LINEBELOW", (0, r), (-1, r), 0.25, colors.HexColor(theme.border)))
+        styles.append(
+            (
+                "LINEBELOW",
+                (0, r),
+                (-1, r),
+                PDF_TABLE_INNER_GRID_LINE_PT,
+                colors.HexColor(theme.border),
+            )
+        )
     return styles
 
 
@@ -355,7 +366,7 @@ def table_with_bars(
                 [
                     ("VALIGN", (0, 0), (-1, -1), "TOP"),
                     ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(theme.card_bg)),
-                    ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor(theme.border)),
+                    ("BOX", (0, 0), (-1, -1), PDF_TABLE_BOX_LINE_PT, colors.HexColor(theme.border)),
                     ("TOPPADDING", (0, 0), (0, 0), pad),
                     ("BOTTOMPADDING", (0, 0), (0, 0), 0),
                     ("LEFTPADDING", (0, 0), (0, 0), pad),

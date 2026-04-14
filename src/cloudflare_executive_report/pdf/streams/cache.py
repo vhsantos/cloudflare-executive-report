@@ -36,6 +36,19 @@ from cloudflare_executive_report.pdf.stream_fragments import (
 from cloudflare_executive_report.pdf.theme import Theme
 
 
+def collect_cache_appendix_notes(cache: dict[str, Any], *, profile: str) -> list[str]:
+    """Return appendix notes derived from cache metrics present in this stream."""
+    notes: list[str] = []
+    if profile not in {"executive", "detailed"}:
+        return notes
+    if "cache_hit_ratio" in cache:
+        notes.append(
+            "Cache hit ratio depends on workload profile (static vs dynamic/API) and should be "
+            "compared as a trend for the same zone."
+        )
+    return notes
+
+
 def _edge_and_origin_status_items(
     cache: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:

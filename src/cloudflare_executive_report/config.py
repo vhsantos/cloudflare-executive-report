@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -21,6 +22,21 @@ DEFAULT_EMAIL_BODY_TEMPLATE = (
     "Regards,\n"
     "Cloudflare Report Tool\n"
 )
+_HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def parse_hex_color(
+    raw: str | None,
+    *,
+    field_name: str,
+    default: str,
+) -> str:
+    """Return normalized #RRGGBB color or raise ValueError."""
+    value = (raw or default).strip()
+    if not _HEX_COLOR_RE.fullmatch(value):
+        msg = f"{field_name} must be a hex color like '#RRGGBB' (got {raw!r})"
+        raise ValueError(msg)
+    return value
 
 
 def default_config_path() -> Path:
@@ -98,6 +114,8 @@ class PdfConfig:
     chart_format: Literal["png", "svg"] = "png"
     map_format: Literal["png", "svg"] = "png"
     profile: Literal["minimal", "executive", "detailed"] = "executive"
+    primary_color: str = "#2563eb"
+    accent_color: str = "#f38020"
 
 
 @dataclass
@@ -105,7 +123,7 @@ class ExecutiveConfig:
     """Executive summary generation options."""
 
     disabled_rules: list[str] = field(default_factory=list)
-    include_nist_appendix: bool = True
+    include_appendix: bool = True
     reference_risk_weight: int = 60
     verdict_warn_threshold: int = 3
 
@@ -185,10 +203,14 @@ class AppConfig:
                 "chart_format": self.pdf.chart_format,
                 "map_format": self.pdf.map_format,
                 "profile": self.pdf.profile,
+                "colors": {
+                    "primary": self.pdf.primary_color,
+                    "accent": self.pdf.accent_color,
+                },
             },
             "executive": {
                 "disabled_rules": list(self.executive.disabled_rules),
-                "include_nist_appendix": self.executive.include_nist_appendix,
+                "include_appendix": self.executive.include_appendix,
                 "reference_risk_weight": self.executive.reference_risk_weight,
                 "verdict_warn_threshold": self.executive.verdict_warn_threshold,
             },
@@ -249,6 +271,21 @@ class AppConfig:
         pdf_profile = parse_pdf_profile(
             str(pdf_profile_raw) if pdf_profile_raw is not None else None,
         )
+        pdf_colors_raw = pdf_raw.get("colors") or {}
+        if not isinstance(pdf_colors_raw, dict):
+            raise ValueError("pdf.colors must be a mapping")
+        pdf_primary_color = parse_hex_color(
+            str(pdf_colors_raw.get("primary"))
+            if pdf_colors_raw.get("primary") is not None
+            else None,
+            field_name="pdf.colors.primary",
+            default="#2563eb",
+        )
+        pdf_accent_color = parse_hex_color(
+            str(pdf_colors_raw.get("accent")) if pdf_colors_raw.get("accent") is not None else None,
+            field_name="pdf.colors.accent",
+            default="#f38020",
+        )
 
         executive_raw = data.get("executive") or {}
         if not isinstance(executive_raw, dict):
@@ -258,8 +295,8 @@ class AppConfig:
             disabled_rules = [str(x) for x in raw_disabled_rules]
         else:
             disabled_rules = []
-        raw_nist = executive_raw.get("include_nist_appendix")
-        include_nist_appendix = True if raw_nist is None else bool(raw_nist)
+        raw_include_appendix = executive_raw.get("include_appendix")
+        include_appendix = True if raw_include_appendix is None else bool(raw_include_appendix)
         reference_risk_weight = int(executive_raw.get("reference_risk_weight") or 60)
         verdict_warn_threshold = int(executive_raw.get("verdict_warn_threshold") or 3)
 
@@ -326,10 +363,12 @@ class AppConfig:
                 chart_format=pdf_chart_format,
                 map_format=pdf_map_format,
                 profile=pdf_profile,
+                primary_color=pdf_primary_color,
+                accent_color=pdf_accent_color,
             ),
             executive=ExecutiveConfig(
                 disabled_rules=disabled_rules,
-                include_nist_appendix=include_nist_appendix,
+                include_appendix=include_appendix,
                 reference_risk_weight=reference_risk_weight,
                 verdict_warn_threshold=verdict_warn_threshold,
             ),
@@ -419,10 +458,12 @@ def template_config() -> AppConfig:
             chart_format="png",
             map_format="png",
             profile="executive",
+            primary_color="#2563eb",
+            accent_color="#f38020",
         ),
         executive=ExecutiveConfig(
             disabled_rules=[],
-            include_nist_appendix=True,
+            include_appendix=True,
             reference_risk_weight=60,
             verdict_warn_threshold=3,
         ),

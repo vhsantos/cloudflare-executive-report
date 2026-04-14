@@ -39,14 +39,31 @@ from cloudflare_executive_report.pdf.primitives import (
     get_render_context,
     initialize,
 )
-from cloudflare_executive_report.pdf.streams.cache import append_cache_stream
-from cloudflare_executive_report.pdf.streams.dns import append_dns_stream
+from cloudflare_executive_report.pdf.streams.appendix import (
+    aggregate_nist_reference_rows,
+    include_report_appendix,
+)
+from cloudflare_executive_report.pdf.streams.cache import (
+    append_cache_stream,
+    collect_cache_appendix_notes,
+)
+from cloudflare_executive_report.pdf.streams.dns import (
+    append_dns_stream,
+    collect_dns_appendix_notes,
+)
 from cloudflare_executive_report.pdf.streams.executive_summary import append_executive_summary
-from cloudflare_executive_report.pdf.streams.http import append_http_stream
+from cloudflare_executive_report.pdf.streams.http import (
+    append_http_stream,
+    collect_http_appendix_notes,
+)
 from cloudflare_executive_report.pdf.streams.portfolio import append_portfolio_summary
-from cloudflare_executive_report.pdf.streams.security import append_security_stream
+from cloudflare_executive_report.pdf.streams.security import (
+    append_security_stream,
+    collect_security_appendix_notes,
+)
 from cloudflare_executive_report.pdf.theme import (
     Theme,
+    theme_with_brand_colors,
     theme_with_chart_format,
     theme_with_map_format,
 )
@@ -134,6 +151,11 @@ def write_report_pdf(
             theme_with_chart_format(theme_with_pdf_image_quality(q), cfg.pdf.chart_format),
             cfg.pdf.map_format,
         )
+    th = theme_with_brand_colors(
+        th,
+        primary=cfg.pdf.primary_color,
+        accent=cfg.pdf.accent_color,
+    )
     cache_root = cfg.cache_path()
     initialize(th)
     try:
@@ -157,6 +179,8 @@ def write_report_pdf(
             include_zone_summary or want_portfolio_page
         )
         portfolio_zone_blocks: list[dict[str, Any]] = []
+        appendix_zone_summaries: list[dict[str, Any]] = []
+        appendix_metric_notes: list[str] = []
 
         if not spec.include_executive_summary and cfg.pdf.profile != "minimal":
             log.warning(
@@ -197,6 +221,9 @@ def write_report_pdf(
                         top=spec.top,
                     )
                     zone_warnings.extend(loaded_dns.warnings)
+                    appendix_metric_notes.extend(
+                        collect_dns_appendix_notes(loaded_dns.rollup, profile=cfg.pdf.profile)
+                    )
                 elif sid == "http":
                     loaded_http = load_http_for_range(
                         cache_root,
@@ -207,6 +234,9 @@ def write_report_pdf(
                         top=spec.top,
                     )
                     zone_warnings.extend(loaded_http.warnings)
+                    appendix_metric_notes.extend(
+                        collect_http_appendix_notes(loaded_http.rollup, profile=cfg.pdf.profile)
+                    )
                 elif sid == "security":
                     loaded_security = load_security_for_range(
                         cache_root,
@@ -217,6 +247,11 @@ def write_report_pdf(
                         top=spec.top,
                     )
                     zone_warnings.extend(loaded_security.warnings)
+                    appendix_metric_notes.extend(
+                        collect_security_appendix_notes(
+                            loaded_security.rollup, profile=cfg.pdf.profile
+                        )
+                    )
                 elif sid == "cache":
                     loaded_cache = load_cache_for_range(
                         cache_root,
@@ -227,6 +262,9 @@ def write_report_pdf(
                         top=spec.top,
                     )
                     zone_warnings.extend(loaded_cache.warnings)
+                    appendix_metric_notes.extend(
+                        collect_cache_appendix_notes(loaded_cache.rollup, profile=cfg.pdf.profile)
+                    )
 
             snapshot_zone = _find_zone_snapshot(report_snapshot, zone_id)
 
@@ -330,8 +368,8 @@ def write_report_pdf(
                             sync_opts=sync_opts,
                         ),
                         theme=th,
-                        include_nist_appendix=cfg.executive.include_nist_appendix,
                     )
+                appendix_zone_summaries.append(executive_summary)
                 if want_portfolio_page:
                     portfolio_zone_blocks.append(
                         {
@@ -464,6 +502,18 @@ def write_report_pdf(
             if include_zone_summary or include_stream_details:
                 portfolio_story.append(PageBreak())
             story[after_cover_insert_index:after_cover_insert_index] = portfolio_story
+
+        if cfg.executive.include_appendix and appendix_zone_summaries:
+            metric_notes = sorted({note.strip() for note in appendix_metric_notes if note.strip()})
+            nist_rows = aggregate_nist_reference_rows(appendix_zone_summaries)
+            if metric_notes or nist_rows:
+                story.append(PageBreak())
+                include_report_appendix(
+                    story,
+                    theme=th,
+                    metric_notes=metric_notes,
+                    nist_reference_rows=nist_rows,
+                )
 
         if not story:
             msg = "No report content: no cached API data for selected zones and streams."

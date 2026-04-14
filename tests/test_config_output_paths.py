@@ -33,12 +33,12 @@ def test_to_yaml_dict_round_trip_disabled_rules() -> None:
     assert back.executive.disabled_rules == ["plan_tls_renewal"]
 
 
-def test_pdf_include_nist_appendix_yaml_round_trip() -> None:
-    cfg = AppConfig(executive=ExecutiveConfig(include_nist_appendix=False))
+def test_pdf_include_appendix_yaml_round_trip() -> None:
+    cfg = AppConfig(executive=ExecutiveConfig(include_appendix=False))
     back = AppConfig.from_yaml_dict(cfg.to_yaml_dict())
-    assert back.executive.include_nist_appendix is False
+    assert back.executive.include_appendix is False
     default_back = AppConfig.from_yaml_dict({"zones": []})
-    assert default_back.executive.include_nist_appendix is True
+    assert default_back.executive.include_appendix is True
 
 
 def test_save_config_template_includes_comments_and_sections(tmp_path) -> None:
@@ -77,6 +77,24 @@ def test_pdf_profile_defaults_to_executive() -> None:
 def test_pdf_profile_rejects_invalid_value() -> None:
     with pytest.raises(ValueError, match="pdf.profile"):
         AppConfig.from_yaml_dict({"zones": [], "pdf": {"profile": "full"}})
+
+
+def test_pdf_colors_yaml_round_trip() -> None:
+    cfg = AppConfig(
+        pdf=PdfConfig(
+            profile="executive",
+            primary_color="#0f4c81",
+            accent_color="#f38020",
+        )
+    )
+    back = AppConfig.from_yaml_dict(cfg.to_yaml_dict())
+    assert back.pdf.primary_color == "#0f4c81"
+    assert back.pdf.accent_color == "#f38020"
+
+
+def test_pdf_colors_reject_invalid_hex() -> None:
+    with pytest.raises(ValueError, match="pdf.colors.primary"):
+        AppConfig.from_yaml_dict({"zones": [], "pdf": {"colors": {"primary": "orange"}}})
 
 
 def test_email_ssl_and_starttls_both_true_rejected() -> None:
