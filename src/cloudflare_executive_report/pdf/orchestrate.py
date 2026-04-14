@@ -522,9 +522,10 @@ def write_report_pdf(
         generated = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
         footer_left = f"Generated: {generated}"
         footer = footer_canvas_factory(theme=th, left_text=footer_left)
+        first_page_canvas = (lambda _canvas, _doc: None) if cover_appended else footer
 
         doc = build_simple_doc(str(output_path), theme=th, title="Analytics report")
-        doc.build(story, onFirstPage=footer, onLaterPages=footer)
+        doc.build(story, onFirstPage=first_page_canvas, onLaterPages=footer)
         log.info("Wrote PDF %s", output_path.resolve())
     finally:
         clear_render_context()
