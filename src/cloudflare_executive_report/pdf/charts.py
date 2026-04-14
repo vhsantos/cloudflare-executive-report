@@ -14,16 +14,12 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib import ticker
-from matplotlib.colors import to_rgba
 from matplotlib.lines import Line2D
-from matplotlib.patches import Patch
 
 from cloudflare_executive_report.common.formatting import format_bytes_human, trim_decimal
 from cloudflare_executive_report.pdf.theme import Theme
 
 ChartTimeGranularity = Literal["day", "week", "month"]
-ChartYScale = Literal["compact_number", "bytes"]
-SecurityTripleStackMode = Literal["absolute", "percent"]
 
 # Bottom + top series for stacked charts (e.g. cached + uncached). ``None`` = missing day.
 StackedPoint = tuple[float | None, float | None]
@@ -250,12 +246,6 @@ def aggregate_triple_stacked_for_chart(
     return d, [cast(StackedTriplePoint, t) for t in v], s, g
 
 
-def _format_y_tick_percent(value: float, _pos: int | None = None) -> str:
-    if value == int(value):
-        return f"{int(value)}%"
-    return f"{value:.1f}%"
-
-
 def _format_y_tick_cf(value: float, _pos: int | None = None) -> str:
     """Compact Y ticks like Cloudflare analytics (0, 5k, 10k, 25.74k)."""
     if value == 0:
@@ -391,281 +381,6 @@ def line_chart_bytes(
             )
             ax.legend(
                 handles=[leg_handle],
-                loc="upper right",
-                frameon=False,
-                fontsize=7,
-                handlelength=1.1,
-                handletextpad=0.45,
-                borderaxespad=0.5,
-            )
-            leg = ax.get_legend()
-            if leg is not None:
-                for text in leg.get_texts():
-                    text.set_color(theme.slate)
-    ax.set_title(title, fontsize=10, color=theme.slate, pad=8)
-    if subtitle:
-        fig.text(0.5, 0.02, subtitle, ha="center", fontsize=7, color=theme.muted)
-    return _save_figure_bytes(fig, theme=theme)
-
-
-def _stacked_segments(
-    pairs: Sequence[StackedPoint],
-) -> list[tuple[list[int], list[float], list[float]]]:
-    """Contiguous index runs where both bottom and top are non-None."""
-    segments: list[tuple[list[int], list[float], list[float]]] = []
-    cur_x: list[int] = []
-    cur_b: list[float] = []
-    cur_u: list[float] = []
-    for i, (bo, up) in enumerate(pairs):
-        if bo is not None and up is not None:
-            cur_x.append(i)
-            cur_b.append(float(bo))
-            cur_u.append(float(up))
-            continue
-        if cur_x:
-            segments.append((cur_x, cur_b, cur_u))
-            cur_x, cur_b, cur_u = [], [], []
-    if cur_x:
-        segments.append((cur_x, cur_b, cur_u))
-    return segments
-
-
-def stacked_area_chart_bytes(
-    dates: Sequence[date],
-    pairs: Sequence[StackedPoint],
-    *,
-    title: str,
-    subtitle: str,
-    bottom_legend: str,
-    top_legend: str,
-    theme: Theme,
-    time_granularity: ChartTimeGranularity = "day",
-    y_scale: ChartYScale = "compact_number",
-) -> bytes:
-    """Stacked areas: bottom series from 0, top series stacked on bottom (CF-style)."""
-    fig_w = min(theme.content_width_in(), 7.1)
-    fig_h = fig_w * 0.35
-    fig, ax = plt.subplots(figsize=(fig_w, fig_h), facecolor="white")
-    plist = list(pairs)
-    if not dates:
-        ax.text(0.5, 0.5, "No data", ha="center", va="center", color=theme.muted)
-    else:
-        segments = _stacked_segments(plist)
-        line_lo = theme.section_blue
-        fill_lo = to_rgba(line_lo, 0.42)
-        line_hi = theme.primary
-        fill_hi = to_rgba(line_hi, 0.2)
-        for cx, cb, cu in segments:
-            ctop = [cb[i] + cu[i] for i in range(len(cx))]
-            ax.fill_between(cx, 0, cb, color=fill_lo, linewidth=0, interpolate=True)
-            ax.fill_between(cx, cb, ctop, color=fill_hi, linewidth=0, interpolate=True)
-            ax.plot(
-                cx,
-                cb,
-                color=line_lo,
-                linewidth=1.2,
-                solid_capstyle="round",
-                **_marker_style(line_lo),
-            )
-            ax.plot(
-                cx,
-                ctop,
-                color=line_hi,
-                linewidth=1.4,
-                solid_capstyle="round",
-                **_marker_style(line_hi),
-            )
-
-        tick_idx = _xtick_indices(len(dates))
-        full_labels = _x_axis_labels_cf(dates, time_granularity)
-        ax.set_xticks(tick_idx)
-        ax.set_xticklabels(
-            [full_labels[i] for i in tick_idx],
-            rotation=0,
-            ha="center",
-            fontsize=7,
-            color=theme.muted,
-        )
-        y_fmt = _format_y_tick_bytes if y_scale == "bytes" else _format_y_tick_cf
-        ax.yaxis.set_major_formatter(ticker.FuncFormatter(y_fmt))
-        ax.tick_params(axis="y", labelsize=7, colors=theme.muted)
-        ax.grid(axis="both", linestyle="-", alpha=0.2, color=theme.border)
-        ax.set_axisbelow(True)
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-
-        if segments:
-            h_lo = Patch(facecolor=fill_lo, edgecolor=line_lo, linewidth=1.0, label=bottom_legend)
-            h_hi = Patch(facecolor=fill_hi, edgecolor=line_hi, linewidth=1.0, label=top_legend)
-            ax.legend(
-                handles=[h_lo, h_hi],
-                loc="upper right",
-                frameon=False,
-                fontsize=7,
-                handlelength=1.1,
-                handletextpad=0.45,
-                borderaxespad=0.5,
-            )
-            leg = ax.get_legend()
-            if leg is not None:
-                for text in leg.get_texts():
-                    text.set_color(theme.slate)
-    ax.set_title(title, fontsize=10, color=theme.slate, pad=8)
-    if subtitle:
-        fig.text(0.5, 0.02, subtitle, ha="center", fontsize=7, color=theme.muted)
-    return _save_figure_bytes(fig, theme=theme)
-
-
-def _triple_to_percent_stack(
-    mit: list[float],
-    srv_cf: list[float],
-    srv_or: list[float],
-) -> tuple[list[float], list[float], list[float]]:
-    """Per-index shares of ``mit + served_cf + served_origin`` summing to 100."""
-    out_m: list[float] = []
-    out_cf: list[float] = []
-    out_or: list[float] = []
-    for i in range(len(mit)):
-        t = mit[i] + srv_cf[i] + srv_or[i]
-        if t <= 0:
-            out_m.append(0.0)
-            out_cf.append(0.0)
-            out_or.append(0.0)
-        else:
-            out_m.append(100.0 * mit[i] / t)
-            out_cf.append(100.0 * srv_cf[i] / t)
-            out_or.append(100.0 * srv_or[i] / t)
-    return out_m, out_cf, out_or
-
-
-def _stacked_triple_segments(
-    triples: Sequence[StackedTriplePoint],
-) -> list[tuple[list[int], list[float], list[float], list[float]]]:
-    segments: list[tuple[list[int], list[float], list[float], list[float]]] = []
-    cur_x: list[int] = []
-    cur_a: list[float] = []
-    cur_b: list[float] = []
-    cur_c: list[float] = []
-    for i, (a, b, c) in enumerate(triples):
-        if a is not None and b is not None and c is not None:
-            cur_x.append(i)
-            cur_a.append(float(a))
-            cur_b.append(float(b))
-            cur_c.append(float(c))
-            continue
-        if cur_x:
-            segments.append((cur_x, cur_a, cur_b, cur_c))
-            cur_x, cur_a, cur_b, cur_c = [], [], [], []
-    if cur_x:
-        segments.append((cur_x, cur_a, cur_b, cur_c))
-    return segments
-
-
-def stacked_area_chart_triple_bytes(
-    dates: Sequence[date],
-    triples: Sequence[StackedTriplePoint],
-    *,
-    title: str,
-    subtitle: str,
-    legend_bottom: str,
-    legend_mid: str,
-    legend_top: str,
-    theme: Theme,
-    time_granularity: ChartTimeGranularity = "day",
-    y_scale: ChartYScale = "compact_number",
-    stack_mode: SecurityTripleStackMode = "absolute",
-) -> bytes:
-    """Three stacked areas from triple ``(mitigated, served_cf, served_origin)``.
-
-    Drawn bottom→top: **mitigated**, **Served by origin**, **Served by Cloudflare**
-    so the largest pass bucket (usually Cloudflare) sits at the stack top.
-
-    ``stack_mode="percent"``: each day sums to 100% (share of sampled requests).
-    """
-    fig_w = min(theme.content_width_in(), 7.1)
-    fig_h = fig_w * 0.35
-    fig, ax = plt.subplots(figsize=(fig_w, fig_h), facecolor="white")
-    tlist = list(triples)
-    if not dates:
-        ax.text(0.5, 0.5, "No data", ha="center", va="center", color=theme.muted)
-    else:
-        segments = _stacked_triple_segments(tlist)
-        c_mit = theme.section_blue
-        fill_mit = to_rgba(c_mit, 0.45)
-        c_or = theme.muted
-        fill_or = to_rgba(c_or, 0.35)
-        c_cf = theme.primary
-        fill_cf = to_rgba(c_cf, 0.28)
-        ymax = 0.0
-        for cx, mit, srv_cf, srv_or in segments:
-            if stack_mode == "percent":
-                mit, srv_cf, srv_or = _triple_to_percent_stack(mit, srv_cf, srv_or)
-            # mitigated, served_origin, served_cf - stack origin then CF on top.
-            d1 = [mit[i] + srv_or[i] for i in range(len(cx))]
-            d2 = [mit[i] + srv_or[i] + srv_cf[i] for i in range(len(cx))]
-            for i in range(len(cx)):
-                ymax = max(ymax, d2[i])
-            ax.fill_between(cx, 0, mit, color=fill_mit, linewidth=0, interpolate=True)
-            ax.fill_between(cx, mit, d1, color=fill_or, linewidth=0, interpolate=True)
-            ax.fill_between(cx, d1, d2, color=fill_cf, linewidth=0, interpolate=True)
-            ax.plot(
-                cx,
-                mit,
-                color=c_mit,
-                linewidth=1.0,
-                solid_capstyle="round",
-                **_marker_style(c_mit),
-            )
-            ax.plot(
-                cx,
-                d1,
-                color=c_or,
-                linewidth=1.15,
-                solid_capstyle="round",
-                **_marker_style(c_or),
-            )
-            ax.plot(
-                cx,
-                d2,
-                color=c_cf,
-                linewidth=1.25,
-                solid_capstyle="round",
-                **_marker_style(c_cf),
-            )
-
-        if stack_mode == "percent":
-            ax.set_ylim(0, 100)
-        elif ymax > 0:
-            ax.set_ylim(0, ymax * 1.05)
-
-        tick_idx = _xtick_indices(len(dates))
-        full_labels = _x_axis_labels_cf(dates, time_granularity)
-        ax.set_xticks(tick_idx)
-        ax.set_xticklabels(
-            [full_labels[i] for i in tick_idx],
-            rotation=0,
-            ha="center",
-            fontsize=7,
-            color=theme.muted,
-        )
-        if stack_mode == "percent":
-            y_fmt = _format_y_tick_percent
-        else:
-            y_fmt = _format_y_tick_bytes if y_scale == "bytes" else _format_y_tick_cf
-        ax.yaxis.set_major_formatter(ticker.FuncFormatter(y_fmt))
-        ax.tick_params(axis="y", labelsize=7, colors=theme.muted)
-        ax.grid(axis="both", linestyle="-", alpha=0.2, color=theme.border)
-        ax.set_axisbelow(True)
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-
-        if segments:
-            h_mit = Patch(facecolor=fill_mit, edgecolor=c_mit, linewidth=1.0, label=legend_bottom)
-            h_or = Patch(facecolor=fill_or, edgecolor=c_or, linewidth=1.0, label=legend_top)
-            h_cf = Patch(facecolor=fill_cf, edgecolor=c_cf, linewidth=1.0, label=legend_mid)
-            # Legend top-to-bottom = stack top-to-bottom: Cloudflare, origin, mitigated.
-            ax.legend(
-                handles=[h_cf, h_or, h_mit],
                 loc="upper right",
                 frameon=False,
                 fontsize=7,
@@ -932,47 +647,6 @@ def prepare_dual_line_daily_metric_series(
     return png, sub
 
 
-def prepare_triple_stacked_daily_metric_series(
-    points: Sequence[tuple[date, tuple[int | None, int | None, int | None]]],
-    theme: Theme,
-    *,
-    chart_title: str,
-    legend_bottom: str,
-    legend_mid: str,
-    legend_top: str,
-    y_scale: ChartYScale = "compact_number",
-    stack_mode: SecurityTripleStackMode = "absolute",
-) -> tuple[bytes, str]:
-    as_floats: list[tuple[date, StackedTriplePoint]] = [
-        (
-            d,
-            (
-                float(a) if a is not None else None,
-                float(b) if b is not None else None,
-                float(c) if c is not None else None,
-            ),
-        )
-        for d, (a, b, c) in points
-    ]
-    d, trips, sub, gran = aggregate_triple_stacked_for_chart(as_floats)
-    if len(d) < 2:
-        return b"", sub
-    png = stacked_area_chart_triple_bytes(
-        d,
-        trips,
-        title=chart_title,
-        subtitle=sub,
-        legend_bottom=legend_bottom,
-        legend_mid=legend_mid,
-        legend_top=legend_top,
-        theme=theme,
-        time_granularity=gran,
-        y_scale=y_scale,
-        stack_mode=stack_mode,
-    )
-    return png, sub
-
-
 def prepare_triple_line_daily_metric_series(
     points: Sequence[tuple[date, tuple[int | None, int | None, int | None]]],
     theme: Theme,
@@ -1007,43 +681,6 @@ def prepare_triple_line_daily_metric_series(
         legend_or=legend_or,
         theme=theme,
         time_granularity=gran,
-    )
-    return png, sub
-
-
-def prepare_stacked_daily_metric_series(
-    points: Sequence[tuple[date, tuple[int | None, int | None]]],
-    theme: Theme,
-    *,
-    chart_title: str,
-    bottom_legend: str,
-    top_legend: str,
-    y_scale: ChartYScale = "compact_number",
-) -> tuple[bytes, str]:
-    """Stacked cached + uncached (or any bottom/top pair) from per-day ints."""
-    as_floats: list[tuple[date, StackedPoint]] = [
-        (
-            d,
-            (
-                float(b) if b is not None else None,
-                float(u) if u is not None else None,
-            ),
-        )
-        for d, (b, u) in points
-    ]
-    d, pairs, sub, gran = aggregate_stacked_pairs_for_chart(as_floats)
-    if len(d) < 2:
-        return b"", sub
-    png = stacked_area_chart_bytes(
-        d,
-        pairs,
-        title=chart_title,
-        subtitle=sub,
-        bottom_legend=bottom_legend,
-        top_legend=top_legend,
-        theme=theme,
-        time_granularity=gran,
-        y_scale=y_scale,
     )
     return png, sub
 
