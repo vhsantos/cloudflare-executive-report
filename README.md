@@ -1,73 +1,103 @@
-# cloudflare-executive-report
+# Cloudflare Executive Report
 
-Python CLI (**`cf-report`**) that pulls Cloudflare **DNS**, **HTTP**, **security**, and **cache** analytics, optional **zone health** (REST), caches daily payloads on disk, and writes a JSON report plus PDF. All dates are **UTC**.
+Turn Cloudflare analytics into executive-ready PDF reports with security scores, NIST mappings, and multi-zone portfolio views.
 
-## Requirements
+[![PyPI version](https://img.shields.io/pypi/v/cloudflare-executive-report)](https://pypi.org/project/cloudflare-executive-report/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-- **Python 3.11+**
-- **API token** - in the dashboard (**My Profile → API Tokens → Create Token**), under **Permissions**, add the **Zone** permission groups below (official names from [API token permissions](https://developers.cloudflare.com/fundamentals/api/reference/permissions/)). Set **Zone Resources** to the same zones you list in config (or all zones on the account, if you use that).
+## Why this tool exists
 
-### Always needed (sync + report)
+Cloudflare dashboard data is excellent for day-to-day operations, but executive reporting often needs:
 
-| Permission (Zone)  | Used for                                                                                                                   |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| **Zone Read**      | `zones.get` / `zones.list` - zone metadata (including `plan` for retention) and `cf-report zones`.                         |
-| **Analytics Read** | [GraphQL Analytics API](https://developers.cloudflare.com/analytics/graphql-api/) - DNS, HTTP, and firewall event queries. |
+- historical windows beyond dashboard convenience
+- one report across many zones
+- reusable PDF outputs for leadership and audit trails
+- concise risk scoring and action narrative
 
-### Also needed for zone health (default)
+Cloudflare Executive Report fills that gap with local caching and deterministic report generation.
 
-Zone health is extra REST calls on each report. Without these, matching fields are `unavailable` and a warning is logged; use **`--skip-zone-health`** to omit zone health entirely.
+## What you get
 
-| Permission (Zone)          | Used for                                                                          |
-| -------------------------- | --------------------------------------------------------------------------------- |
-| **Zone Settings Read**     | Per-setting reads (`ssl`, `always_use_https`, `security_level`, `advanced_ddos`). |
-| **DNS Read**               | DNSSEC status (`dns.dnssec`).                                                     |
-| **Firewall Services Read** | Count of active (unpaused) firewall rules (`firewall.rules`).                     |
-
-**Write** permissions are not required. If Cloudflare adds or renames permission groups, use the live list from the doc above or the [List permission groups](https://developers.cloudflare.com/api/resources/user/subresources/tokens/subresources/permission_groups/methods/list/) API.
+| Feature              | Outcome                                                          |
+| -------------------- | ---------------------------------------------------------------- |
+| Historical cache     | Sync once, generate reports later without re-querying everything |
+| Multi-zone portfolio | One page for score, grade, and common risks across zones         |
+| Executive summary    | Verdict, KPIs, takeaways, and actions per zone                   |
+| Security score       | 0-100 + grade, based on risk takeaways only                      |
+| NIST mapping         | Control references for compliance context                        |
+| Email delivery       | Optional SMTP send after successful PDF generation               |
+| Brand colors         | Primary/accent customization in PDF                              |
 
 ## Install
 
-In the project directory (after cloning or unpacking the sources):
-
 ```bash
-pip install .
+pip install cloudflare-executive-report
 ```
 
-This installs the **`cf-report`** command on your `PATH`.
+Optional SVG rendering:
+
+```bash
+pip install "cloudflare-executive-report[svg]"
+```
+
+## API token permissions (read-only)
+
+Create token in Cloudflare Dashboard: **My Profile -> API Tokens**.
+
+### Required
+
+| Permission (Zone) | Purpose                                   |
+| ----------------- | ----------------------------------------- |
+| Zone Read         | Zone metadata and zone management helpers |
+| Analytics Read    | DNS/HTTP/security/cache GraphQL analytics |
+
+### Required for zone health (default report behavior)
+
+| Permission (Zone)      | Purpose                          |
+| ---------------------- | -------------------------------- |
+| Zone Settings Read     | SSL/HTTPS/security/DDOS settings |
+| DNS Read               | DNSSEC status                    |
+| Firewall Services Read | Active firewall rule counts      |
+
+If zone-health permissions are missing, those fields become `unavailable` with warnings. Use `--skip-zone-health` to disable zone-health fetch.
+
+## Quick start
+
+```bash
+cf-report init
+cf-report sync --last 30
+cf-report report -o security-report.pdf
+```
+
+This initializes config, syncs 30 days of data, and generates a PDF report.
+Add `--email` to the report command to send it via SMTP when email is enabled in config.
 
 ## Configuration
 
-Default file: **`~/.cf-report/config.yaml`** (Windows: `%USERPROFILE%\.cf-report\config.yaml`).
-
-Example:
+Default file: `~/.cf-report/config.yaml`.
 
 ```yaml
-api_token: "cfat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+api_token: "cfat_xxx"
 cache_dir: "~/.cache/cf-report"
 output_dir: "~/.cf-report"
-default_zone: "" # optional: used when `sync` is run without `--zone`
-log_level: "info" # e.g. debug, warning (same idea as verbose for logging)
-default_period: "last_month" # reserved for future default period selection
-types: [] # optional default stream ids
+log_level: "info"
 
 zones:
-  - id: "a1b2c3d4e5f6789012345678abcdef01"
+  - id: "abc123..."
     name: "example.com"
 
 pdf:
-  image_quality: "medium" # low | medium | high
-  chart_format: "png" # png | svg (time-series charts and table charts)
-  map_format: "png" # png | svg (world maps)
-  profile: "executive" # minimal | executive | detailed (report length; cover still uses cover.enabled)
+  profile: "executive"     # minimal | executive | detailed
+  chart_format: "png"      # png | svg
+  map_format: "png"        # png | svg
   colors:
-    primary: "#2563eb" # main report color
-    accent: "#f38020" # bars/separators/highlights
+    primary: "#2563eb"
+    accent: "#f38020"
 
 executive:
   disabled_rules:
-    - review_dnssec
-    - hsts_suboptimal
+    - dnssec
     - security_.*
   include_appendix: true
   reference_risk_weight: 60
@@ -75,171 +105,128 @@ executive:
 
 email:
   enabled: false
-  smtp_host: ""
+  smtp_host: "smtp.example.com"
   smtp_port: 587
-  smtp_ssl: false # true for SMTPS (e.g. port 465); cannot combine with smtp_starttls
-  smtp_starttls: true # upgrade plain SMTP with STARTTLS (typical on port 587)
-  smtp_user: ""
-  smtp_password: ""
-  smtp_from: "" # optional display; defaults to smtp_user
-  recipients: []
-  subject: 'Cloudflare Executive Report - {{date}}' # {{period}}, {{zone_count}}
-  body: |
-    Hello,
-
-    Attached is the Cloudflare Executive Report for {{period}} ({{zone_count}} zone(s)).
-
-    Regards,
-    Cloudflare Report Tool
-
-portfolio:
-  sort_by: "score" # score | zone_name
-
-cover:
-  enabled: true
-  company_name: ""
-  logo_path: ""
-  title: "Cloudflare Executive Report"
-  subtitle: "Security & Performance Overview"
-  notes: ""
-  prepared_for: ""
-  classification: ""
-  date_format: "%d/%b/%Y"
+  smtp_starttls: true
+  smtp_user: "reports@example.com"
+  smtp_password: "..."
+  recipients:
+    - "security@example.com"
 ```
 
-- **`default_zone`**: If set and you omit **`--zone`** on **`sync`**, only that zone (by id or name) is processed; if empty, all configured zones run.
-- **`output_dir`**: Root for JSON outputs/history used by `sync` and `report` (default `~/.cf-report`).
-- **`pdf.image_quality`**: Raster DPI preset (`low|medium|high`) for PNG charts/maps.
-- **`pdf.chart_format`**: Chart format (`png|svg`), default `png`.
-- **`pdf.map_format`**: World map format (`png|svg`), default `png` (recommended for smaller PDFs).
-- **`pdf.profile`**: Report length preset: `minimal` (cover if enabled, multi-zone portfolio when 2+ zones, no per-zone executive or stream sections), `executive` (default, adds per-zone executive summary, no stream sections), `detailed` (full report with stream sections for the streams you configure). Cover still follows `cover.enabled`.
-- **`executive.include_appendix`**: Enables one final appendix page (shared metric notes plus aggregated security controls across zones).
-- **`pdf.colors`**: Optional brand colors for PDF visuals. `primary` and `accent` must be hex values like `#2563eb`.
-- **`executive.disabled_rules`**: Remove executive rules by phrase key or regex (affects text and score).
-- **`portfolio.sort_by`**: Multi-zone portfolio ordering (`score` or `zone_name`).
-- **`email`**: Optional SMTP. Set **`enabled: true`**, fill **`smtp_host`**, **`recipients`**, and **`smtp_user`** (or **`smtp_from`**). After `cf-report report -o out.pdf`, add **`--email`** to send that PDF. Templates support **`{{date}}`**, **`{{period}}`**, **`{{zone_count}}`**.
-- **SVG dependency**: If using `pdf.chart_format: svg` or `pdf.map_format: svg`, install optional dependency:
-  - `pip install '.[svg]'`
+## Report profiles
 
-## What gets collected
+| Profile     | Cover | Portfolio (2+ zones) | Zone summary | Stream details | Best for             |
+| ----------- | ----- | -------------------- | ------------ | -------------- | -------------------- |
+| `minimal`   | Yes   | Yes                  | No           | No             | quick status         |
+| `executive` | Yes   | Yes                  | Yes          | No             | leadership (default) |
+| `detailed`  | Yes   | Yes                  | Yes          | Yes            | technical deep dive  |
 
-| Piece         | Source                                                  | Cached per day                |
-| ------------- | ------------------------------------------------------- | ----------------------------- |
-| DNS           | GraphQL `dnsAnalyticsAdaptiveGroups`                    | `dns.json`                    |
-| HTTP (daily)  | GraphQL `httpRequests1dGroups`                          | `http.json`                   |
-| HTTP adaptive | GraphQL `httpRequestsAdaptiveGroups` (status + latency) | `http_adaptive.json`          |
-| Security      | GraphQL `httpRequestsAdaptiveGroups` (security-focused) | `security.json`               |
-| Cache         | GraphQL `httpRequestsAdaptiveGroups` (cache-focused)    | `cache.json`                  |
-| DNS records   | SDK (`dns.records.list`, snapshot)                      | `dns_records.json`            |
-| Audit logs    | SDK (`audit_logs.list`, snapshot)                       | `audit.json`                  |
-| Certificates  | SDK (`ssl.certificate_packs.list`, snapshot)            | `certificates.json`           |
-| Zone health   | REST (settings, DNSSEC, firewall rules)                 | Not cached (live each report) |
+## PDF examples (demo data)
 
-## Executive summary (v1)
+The repository includes sample PDFs generated from synthetic placeholder zones:
 
-Each zone in `cf_report_output.json` includes `executive_summary`, derived from synced rollups plus live `zone_health`: `dns`, `http`, `http_adaptive`, `security`, `cache`, `dns_records`, `audit`, `certificates`, and `zone_health`.
+- [Minimal profile](docs/examples/report-minimal-png-medium.pdf) - compact portfolio-focused output (`png`, medium quality).
+- [Executive profile](docs/examples/report-executive-png-medium.pdf) - leadership summary with score, takeaways, and actions (`png`, medium quality).
+- [Detailed profile](docs/examples/report-detailed-png-medium.pdf) - full stream pages for DNS, HTTP, Security, and Cache (`png`, medium quality).
+- [Detailed SVG (single page)](docs/examples/report-detailed-svg-high-single-page.pdf) - one extracted page rendered with SVG/high quality for visual comparison.
 
-- Core fields include `verdict`, `verdict_reasons`, `kpis`, `takeaways`, and `actions` (up to five).
-- The same shared builder (`build_executive_summary`) is used by both JSON sync output and PDF rendering.
-- Reliability wording for adaptive HTTP uses shared thresholds in `executive/constants.py`.
-- If you narrow `--types` on `sync` or `report`, include `http_adaptive` when executive
-  error/latency KPIs are required.
-- Executive security wording is business-facing:
-  - `Blocked/Challenged`
-  - `Mitigation rate`
+Note: SVG/high-quality rendering can increase PDF size significantly compared to `png` medium quality.
 
-### Security posture score (0-100)
+## Security score model
 
-The JSON `executive_summary` includes a **security score** so you can track one number over time (the PDF first-row KPI uses the label **Score** with a compact value like **72 C+**). It reflects **risks only** (bad posture lines in the **`risks`** takeaway bucket). **Wins**, period **comparisons** (`deltas`), and **correlations** (`signals`) do **not** change the score.
-
-- **Weights**: Each risk phrase uses its **`weight`** from `executive/phrase_catalog.py` (`RULE_CATALOG`, typically **1-10**). Unknown keys default to weight **5**.
-- **Formula**: `score = round(max(0, 100 - (total_risk_weight / REF * 100)), 1)` where **`REF`** is **`SECURITY_POSTURE_REFERENCE_RISK_WEIGHT`** (default **60** in `common/constants.py`). **No risks** means **100** (perfect). Risk weight **60** or more maps to **0** (then stays **0** if weight is higher).
-- **Letter grade** (from numeric score): **A+** >= 95, **A** >= 85, **B** >= 75, **C+** >= 65, **C** >= 55, **D+** >= 45, **D** >= 35, **F** below 35.
-- **JSON fields**: Top-level **`security_score`** and **`security_grade`**, plus **`kpis.security_posture`** with **`score`**, **`grade`**, and **`risk_weight`** (summed risk weights).
-
-**Example:** SSL off (10) + WAF off (9) = **19** risk weight, score **68.3** **C+**. This is a compact summary, not a full CSPM audit.
-
-PDF reports render this executive summary first (per zone) before stream detail pages.
-
-Analytics from Cloudflare may use different aggregation windows than raw logs; totals and rankings are approximate and may differ slightly from the dashboard.
-
-## Retention (UTC calendar days)
-
-**DNS** and **security** windows follow the zone **plan** (`plan.legacy_id` from the API), using the same tier grid:
-
-| Plan (legacy_id) | Typical window |
-| ---------------- | -------------- |
-| Free (default)   | 7 days         |
-| Pro / Business   | 31 days        |
-| Enterprise       | 62 days        |
-
-**HTTP** daily groups: **30 days** (same for all plans in this tool).
-
-Days outside retention are stored as **`_source: "null"`** in cache without calling the API.
-
-## Cache layout
-
-Under **`cache_dir`** (from config):
+Only `risk` takeaways in `risks` section affect score.
+`win`, `action`, `comparison`, and `observation` are informational for scoring.
 
 ```text
-{cache_dir}/
-├── .lock
-└── {zone_id}/
-    ├── _index.json
-    └── {YYYY-MM-DD}/
-        ├── dns.json
-        ├── http.json
-        └── security.json
+score = max(0, 100 - (total_risk_weight / 60) * 100)
 ```
 
-**`_index.json`** stores per-stream `earliest` / `latest` dates for incremental sync.
+Examples:
 
-Concurrent runs use **`.lock`**; if it is still held after **30 seconds**, exit code **5**.
+| Total risk weight | Score | Grade |
+| ----------------- | ----- | ----- |
+| 0                 | 100   | A+    |
+| 19                | 68.3  | C+    |
+| 26                | 56.7  | C     |
+| 60+               | 0     | F     |
 
-**`--include-today`**: Extends the **report** through today's UTC date and merges **live** partial-day API data into the JSON output. **Today is not written** as a `YYYY-MM-DD/*.json` day file.
+Example composition: `SSL off (10) + WAF disabled (9) = 19`, which maps to score `68.3` (`C+`).
 
-Illustrative cache layout and interim JSON report: **[docs/sample-data/](docs/sample-data/)**.
+## Data quality notes
 
-## CLI
+Some metrics are trend-oriented approximations:
 
-### `cf-report sync`
+- top entities are merged from daily top lists
+- mitigation/security analytics can be sampled
+- relative trends are more reliable than single-point absolutes
 
-- *(default)*: **Incremental** fetch of missing UTC days through **yesterday** (uses cache unless missing/error).
-- `--last N`: restrict work to last **N** complete UTC days (still uses cache unless `--refresh`).
-- `--start` / `--end`: fixed inclusive date range; `--end` cannot be after yesterday unless `--include-today`.
-- `--refresh`: refetch active window (ignore good cache).
-- `--include-today`: include today in report (live API; not cached as day file).
-- `--output` / `-o`: report path (default `./cf_report_output.json`).
-- `--zone`: one zone id/name from config; if omitted, uses `default_zone` when set.
-- `--types`: comma-separated streams: `dns`, `http`, `http_adaptive`, `security`, `cache`, `dns_records`, `audit`, `certificates` (default all registered). Include `http_adaptive` for executive error/latency KPIs.
-- `--top N`: ranked-list length (default 10).
-- `--skip-zone-health`: omit zone health REST calls.
+Use this report as executive posture guidance, not packet-level forensic truth.
 
-Global: **`--verbose` / `-v`** (debug for this run), **`--quiet` / -q** (errors only). Config **`log_level`** applies when not overridden.
+## Retention behavior
 
-First run with an empty cache: incremental sync does **not** backfill old history; use **`--last N`** or **`--start`/`--end`** once to seed days.
+Plan-aware windows currently enforced by this tool:
 
-### Other commands
+| Plan       | DNS | Security | HTTP |
+| ---------- | --- | -------- | ---- |
+| Free       | 7d  | 7d       | 30d  |
+| Pro        | 31d | 7d       | 30d  |
+| Business   | 31d | 31d      | 30d  |
+| Enterprise | 62d | 90d      | 30d  |
 
-- **`cf-report init`** - create config template and prompt for token.
-- **`cf-report zones list|add|remove`** - manage zones in config.
-- **`cf-report clean --older-than N`** or **`--all`** - prune or wipe cache.
+Days outside these windows are cached as `unavailable` and skipped from API calls.
+
+## CLI overview
+
+### Sync
+
+```bash
+cf-report sync --last 30
+cf-report sync --start 2026-01-01 --end 2026-03-31
+cf-report sync --zone example.com --last 30
+cf-report sync --last 7 --refresh
+```
+
+### Report
+
+```bash
+cf-report report -o report.pdf
+cf-report report -o report.pdf --email
+cf-report report -o report.pdf --cache-only
+cf-report report -o report.pdf --skip-zone-health
+```
+
+### Zones and cache cleanup
+
+```bash
+cf-report zones list
+cf-report zones add --id abc123 --name example.com
+cf-report zones remove --name example.com
+cf-report clean --older-than 90
+cf-report clean --all
+```
 
 ## Exit codes
 
-| Code | Meaning                           |
-| ---- | --------------------------------- |
-| 0    | Success                           |
-| 1    | General error                     |
-| 2    | Invalid parameters                |
-| 3    | Authentication failed             |
-| 4    | Rate limit exceeded after retries |
-| 5    | Cache lock timeout                |
+| Code | Meaning               |
+| ---- | --------------------- |
+| 0    | Success               |
+| 1    | General error         |
+| 2    | Invalid parameters    |
+| 3    | Authentication failed |
+| 4    | Rate limit exceeded   |
+| 5    | Cache lock timeout    |
 
 ## Contributing
 
-Developer setup, tests, and how to add a new analytics stream: **[CONTRIBUTING.md](CONTRIBUTING.md)**.
+Developer setup and architecture notes: [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## License / scope
+## Links
 
-This project is a CLI for cache sync and **PDF analytics reports** (`cf-report report`); it does not ship email.
+- [PyPI](https://pypi.org/project/cloudflare-executive-report/)
+- [GitHub](https://github.com/vhsantos/cloudflare-executive-report)
+- [Issues](https://github.com/vhsantos/cloudflare-executive-report/issues)
+
+## License
+
+MIT. See [LICENSE](LICENSE).

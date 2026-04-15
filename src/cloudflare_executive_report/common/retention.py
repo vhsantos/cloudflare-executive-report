@@ -27,8 +27,19 @@ def http_retention_days(_plan_legacy_id: str | None = None) -> int:
 
 
 def security_retention_days(plan_legacy_id: str | None) -> int:
-    """Return security retention days using the DNS tier grid."""
-    return dns_retention_days(plan_legacy_id)
+    """Return security retention days based on zone plan tier.
+
+    Values follow Security Analytics plan retention:
+    Free=7, Pro=7, Business=31, Enterprise=90.
+    """
+    lid = (plan_legacy_id or "free").lower()
+    if lid == "enterprise":
+        return 90
+    if lid == "business":
+        return 31
+    if lid in ("free", "pro"):
+        return 7
+    return 7
 
 
 def date_outside_dns_retention(day: date, retention_days: int, *, ref: date | None = None) -> bool:

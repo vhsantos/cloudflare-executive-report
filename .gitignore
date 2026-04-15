@@ -216,3 +216,5 @@ outputs
 logos/
 .cursorrules
 tools/
+!docs/examples/
+!docs/examples/*pdf

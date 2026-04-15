@@ -81,8 +81,13 @@ Observed behavior to document and revisit:
 - `--cache-only` reuses only `cf_report.json` (current snapshot), not history files.
 - Snapshot reuse requires exact fingerprint match (`start`, `end`, `zones`, `top`, `types`, `include_today`).
 - Changing `top` or `types` for an old period breaks reuse, even if cached daily data exists.
+- Reducing configured zones (for example, from 5 zones to 1) also breaks cache-only reuse because
+  `zones` is part of the strict fingerprint, even when the requested single-zone data already exists
+  in the snapshot.
 - When fingerprint mismatch happens (normal report run), PDF build may fetch fresh `zone_health` from "today",
   which can diverge from the original report period context.
+- Comparison semantics can become confusing when zone set changes over time (for example, month N had 5 zones,
+  month N+1 has 15 zones): strict fingerprint protects reproducibility, but blocks practical subset reruns.
 
 Questions for future evaluation:
 
@@ -90,6 +95,10 @@ Questions for future evaluation:
 2. Should we support reproducible reruns for old periods with modified layout/profile options but fixed historical health?
 3. Should profile-only changes bypass fingerprint mismatch logic (if data inputs are unchanged)?
 4. Should we add an explicit mode flag for "strict historical replay" versus "fresh health + cached streams"?
+5. Should cache-only allow subset-zone replay when requested zones are a subset of snapshot zones and all
+   other fingerprint fields match?
+6. If subset-zone replay is allowed, should comparison and portfolio behavior be recomputed only for the
+   selected zone set, with explicit labeling in the PDF/JSON metadata?
 
 ```bash
 cf-report  report  -o output.pdf --start 2026-04-06 --end 2026-04-08
