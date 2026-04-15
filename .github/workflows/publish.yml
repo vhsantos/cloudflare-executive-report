@@ -1,7 +1,13 @@
 # .github/workflows/publish.yml
 name: Publish Python 🐍 distribution 📦 to PyPI and TestPyPI
 
-on: push
+on:
+  push:
+  release:
+    types: [published]
+
+permissions:
+  contents: read  # Minimal top-level permission
 
 jobs:
   build:
