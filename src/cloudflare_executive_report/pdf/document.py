@@ -19,6 +19,11 @@ def build_simple_doc(
     *,
     theme: Theme,
     title: str = "Analytics report",
+    subject: str = "",
+    author: str = "",
+    creator: str = "",
+    producer: str = "",
+    keywords: str = "",
 ) -> SimpleDocTemplate:
     return SimpleDocTemplate(
         output_path,
@@ -28,6 +33,11 @@ def build_simple_doc(
         topMargin=theme.top_margin_in * inch,
         bottomMargin=theme.bottom_margin_in * inch,
         title=title,
+        subject=subject,
+        author=author,
+        creator=creator,
+        producer=producer,
+        keywords=keywords,
     )
 
 
@@ -73,7 +83,11 @@ def draw_report_chrome(
     canvas_obj.restoreState()
 
 
-def footer_canvas_factory(*, theme: Theme, left_text: str):
+def footer_canvas_factory(
+    *,
+    theme: Theme,
+    left_text: str,
+):
     return partial(
         draw_report_chrome,
         theme=theme,

@@ -24,6 +24,7 @@ from cloudflare_executive_report.cli_common import (
     zone_ids_for_report,
     zones_matching_filter,
 )
+from cloudflare_executive_report.common.constants import PROJECT_NAME
 from cloudflare_executive_report.common.logging_config import (
     effective_debug_enabled,
     setup_logging,
@@ -88,7 +89,7 @@ def _pdf_streams_from_types(type_set: frozenset[str]) -> tuple[str, ...]:
 
 
 app = typer.Typer(
-    help="Cloudflare Executive Report - multi-zone reporting and cache. All dates are UTC.",
+    help=f"{PROJECT_NAME} - multi-zone reporting and cache. All dates are UTC.",
     context_settings={"help_option_names": ["-h", "--help"]},
 )
 

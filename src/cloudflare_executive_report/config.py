@@ -10,15 +10,16 @@ from typing import Any, Literal, cast
 
 import yaml
 
+from cloudflare_executive_report.common.constants import PROJECT_NAME
 from cloudflare_executive_report.pdf.figure_quality import parse_pdf_image_quality
 
 CONFIG_DIR_NAME = ".cf-report"
 CONFIG_FILE_NAME = "config.yaml"
 
-DEFAULT_EMAIL_SUBJECT_TEMPLATE = "Cloudflare Executive Report - {{date}}"
+DEFAULT_EMAIL_SUBJECT_TEMPLATE = f"{PROJECT_NAME} - {{date}}"
 DEFAULT_EMAIL_BODY_TEMPLATE = (
     "Hello,\n\n"
-    "Attached is the Cloudflare Executive Report for {{period}} ({{zone_count}} zone(s)).\n\n"
+    f"Attached is the {PROJECT_NAME} for {{period}} ({{zone_count}} zone(s)).\n\n"
     "Regards,\n"
     "Cloudflare Report Tool\n"
 )
@@ -89,7 +90,7 @@ class CoverConfig:
     enabled: bool = True
     company_name: str = ""
     logo_path: str = ""
-    title: str = "Cloudflare Executive Report"
+    title: str = PROJECT_NAME
     subtitle: str = "Security & Performance Overview"
     notes: str = ""
     prepared_for: str = ""
@@ -335,7 +336,7 @@ class AppConfig:
             enabled=bool(cover_raw.get("enabled", True)),
             company_name=str(cover_raw.get("company_name") or ""),
             logo_path=str(cover_raw.get("logo_path") or ""),
-            title=str(cover_raw.get("title") or "Cloudflare Executive Report"),
+            title=str(cover_raw.get("title") or PROJECT_NAME),
             subtitle=str(cover_raw.get("subtitle") or "Security & Performance Overview"),
             notes=str(cover_raw.get("notes") or ""),
             prepared_for=str(cover_raw.get("prepared_for") or ""),

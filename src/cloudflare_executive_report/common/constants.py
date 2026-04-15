@@ -4,6 +4,16 @@ Keep this module for shared values used across multiple domains (PDF, executive,
 Use clear prefixes to keep ownership obvious.
 """
 
+
+# ============================================================================
+# PROJECT METADATA
+# ============================================================================
+
+PROJECT_NAME: str = "Cloudflare Executive Report"
+PROJECT_GITHUB_URL: str = "https://github.com/vhsantos/cloudflare-executive-report"
+PROJECT_PYPI_URL: str = "https://pypi.org/project/cloudflare-executive-report/"
+
+
 # ============================================================================
 # EMAIL / SMTP
 # ============================================================================
@@ -18,7 +28,6 @@ SMTP_TIMEOUT_SECONDS: int = 30
 
 # JSON report snapshot schema; bump when metadata shape changes.
 REPORT_JSON_SCHEMA_VERSION: int = 1
-
 
 # ============================================================================
 # PDF LAYOUT (points unless noted)

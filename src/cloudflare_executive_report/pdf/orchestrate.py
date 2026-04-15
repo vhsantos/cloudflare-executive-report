@@ -10,8 +10,14 @@ from typing import Any
 
 from reportlab.platypus import PageBreak, Spacer
 
+from cloudflare_executive_report import __version__
 from cloudflare_executive_report.cf_client import CloudflareClient
-from cloudflare_executive_report.common.constants import PDF_SPACE_SMALL_PT
+from cloudflare_executive_report.common.constants import (
+    PDF_SPACE_SMALL_PT,
+    PROJECT_GITHUB_URL,
+    PROJECT_NAME,
+    PROJECT_PYPI_URL,
+)
 from cloudflare_executive_report.common.dates import parse_ymd
 from cloudflare_executive_report.common.period_resolver import report_type_for_options
 from cloudflare_executive_report.config import AppConfig
@@ -521,10 +527,43 @@ def write_report_pdf(
 
         generated = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
         footer_left = f"Generated: {generated}"
+        if len(spec.zone_ids) == 1:
+            _, zone_name_for_title = resolve_zone(cfg, spec.zone_ids[0])
+            doc_title = f"{PROJECT_NAME} - {zone_name_for_title}"
+        else:
+            doc_title = f"{PROJECT_NAME} - {len(spec.zone_ids)} zones"
+        stream_list = ", ".join(spec.streams)
+        doc_subject = (
+            f"Security posture and performance report for {spec.start} to {spec.end}; "
+            f"profile={cfg.pdf.profile}; streams={stream_list}; "
+            f"GitHub={PROJECT_GITHUB_URL}; "
+            f"PyPI={PROJECT_PYPI_URL}"
+        )
+        metadata = {
+            "title": doc_title,
+            "subject": doc_subject,
+            "author": f"{PROJECT_NAME} v{__version__}",
+            "creator": PROJECT_NAME,
+            "producer": PROJECT_NAME,
+            "keywords": (
+                "Cloudflare, security, executive report, NIST, PDF, "
+                f"{PROJECT_GITHUB_URL}, "
+                f"{PROJECT_PYPI_URL}"
+            ),
+        }
         footer = footer_canvas_factory(theme=th, left_text=footer_left)
         first_page_canvas = (lambda _canvas, _doc: None) if cover_appended else footer
 
-        doc = build_simple_doc(str(output_path), theme=th, title="Analytics report")
+        doc = build_simple_doc(
+            str(output_path),
+            theme=th,
+            title=doc_title,
+            subject=doc_subject,
+            author=metadata["author"],
+            creator=metadata["creator"],
+            producer=metadata["producer"],
+            keywords=metadata["keywords"],
+        )
         doc.build(story, onFirstPage=first_page_canvas, onLaterPages=footer)
         log.info("Wrote PDF %s", output_path.resolve())
     finally:

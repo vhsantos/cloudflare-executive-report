@@ -73,3 +73,34 @@ Suggested order when choosing the next item: bot posture (if API stable for your
 3. Add phrase (+ NIST ids) in `phrase_catalog`; wire rule in `rules.py`; add `pytest` for the rule and for unavailable/edge cases.
 4. Keep executive copy short; put dashboard path in action text only when it stays accurate.
 5. If plan-gated, emit unavailable or info, not a false critical.
+
+### Historical Reproducibility (evaluate later)
+
+Observed behavior to document and revisit:
+
+- `--cache-only` reuses only `cf_report.json` (current snapshot), not history files.
+- Snapshot reuse requires exact fingerprint match (`start`, `end`, `zones`, `top`, `types`, `include_today`).
+- Changing `top` or `types` for an old period breaks reuse, even if cached daily data exists.
+- When fingerprint mismatch happens (normal report run), PDF build may fetch fresh `zone_health` from "today",
+  which can diverge from the original report period context.
+
+Questions for future evaluation:
+
+1. Should we support opt-in history snapshot lookup by exact fingerprint in cache-only mode?
+2. Should we support reproducible reruns for old periods with modified layout/profile options but fixed historical health?
+3. Should profile-only changes bypass fingerprint mismatch logic (if data inputs are unchanged)?
+4. Should we add an explicit mode flag for "strict historical replay" versus "fresh health + cached streams"?
+
+```bash
+cf-report  report  -o output.pdf --start 2026-04-06 --end 2026-04-08
+cf-report  report  -o output.pdf --start 2026-04-06 --end 2026-04-08 --cache-only
+cf-report  report  -o output.pdf --start 2026-04-09 --end 2026-04-10
+# Everything works... except, if we ran it again
+cf-report  report  -o output.pdf --start 2026-04-06 --end 2026-04-08 --cache-only
+Error: No matching report snapshot for this request. Run `cf-report report` without --cache-only first, then retry.
+```
+
+## Release automation
+
+- [ ] Automate version bump in `src/cloudflare_executive_report/__init__.py` during GitHub releases (no manual edit).
+  - Suggested flow: derive version from release/tag, update `__version__`, create release artifact, publish to PyPI.

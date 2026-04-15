@@ -10,6 +10,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import inch
 from reportlab.platypus import Image, KeepInFrame, Paragraph, Spacer
 
+from cloudflare_executive_report.common.constants import PROJECT_NAME
 from cloudflare_executive_report.config import CoverConfig
 from cloudflare_executive_report.pdf.layout_spec import ReportSpec
 from cloudflare_executive_report.pdf.theme import Theme
@@ -121,7 +122,7 @@ def append_cover_page(
         Paragraph(
             (
                 f"<para align='center' leading='24'><font color='{theme.slate}' size='24'>"
-                f"<b>{escape(cover.title.strip() or 'Cloudflare Executive Report')}</b>"
+                f"<b>{escape(cover.title.strip() or PROJECT_NAME)}</b>"
                 "</font></para>"
             ),
             styles["RepH1"],
