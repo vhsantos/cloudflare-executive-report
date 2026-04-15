@@ -105,6 +105,14 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "nist": ["SI-4"],
         "comparison": {"text": "Attack volume increasing: threats up {pct}% alongside traffic"},
     },
+    "missing_data_warning": {
+        "id": "CMP-011",
+        "service": "Data Quality",
+        "nist": ["SI-4"],
+        "observation": {
+            "text": "Missing data for {warning_count} metrics - verdict may be affected."
+        },
+    },
     "apex_proxy": {
         "id": "APEX-001",
         "service": "DNS",

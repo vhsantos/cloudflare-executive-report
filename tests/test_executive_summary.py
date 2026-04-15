@@ -375,6 +375,9 @@ def test_verdict_four_pipeline_warnings_add_warnings_present() -> None:
     )
     assert out["verdict"] == "warning"
     assert "warnings_present" in out["verdict_reasons"]
+    assert any(
+        "Missing data for 4 metrics - verdict may be affected." in t for t in out["takeaways"]
+    )
 
 
 def test_verdict_three_pipeline_warnings_no_warnings_present() -> None:
@@ -402,6 +405,7 @@ def test_verdict_three_pipeline_warnings_no_warnings_present() -> None:
     )
     assert out["verdict"] == "healthy"
     assert "warnings_present" not in out["verdict_reasons"]
+    assert not any("Missing data for" in t for t in out["takeaways"])
 
 
 def test_build_executive_summary_disabled_rules_drops_matching_actions() -> None:

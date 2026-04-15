@@ -24,6 +24,7 @@ from cloudflare_executive_report.executive.phrase_catalog import (
 from cloudflare_executive_report.executive.rules import (
     SECT_DELTAS,
     SECT_RISKS,
+    SECT_SIGNALS,
     TX_ORDER,
     ExecutiveMessageFilter,
     ExecutiveRuleOutput,
@@ -364,6 +365,18 @@ def build_executive_summary(
         gate_warning=gate.blocked_takeaway,
         comparison_baseline=comparison_baseline,
     )
+    augmented_takeaways = list(rule_out.takeaways)
+    if len(warn) > VERDICT_WARN_THRESHOLD:
+        missing_data_line = exec_msg(
+            "info",
+            "missing_data_warning",
+            state="observation",
+            section=SECT_SIGNALS,
+            filt=msg_filt,
+            warning_count=len(warn),
+        )
+        if missing_data_line is not None:
+            augmented_takeaways.append(missing_data_line)
     security_posture = build_security_posture_score(rule_out)
 
     categorized_takeaways = {
@@ -379,13 +392,14 @@ def build_executive_summary(
                     line.severity, line.check_id, line.body
                 ),
             }
-            for line in rule_out.lines_for_section(section_key)
+            for line in augmented_takeaways
+            if line.section == section_key
         ]
         for section_key in TX_ORDER
     }
     takeaways = [item["display"] for bucket in categorized_takeaways.values() for item in bucket]
     actions = [f"[{line.check_id}] {line.body}" for line in rule_out.actions]
-    nist_reference = build_nist_reference_rows(list(rule_out.takeaways) + list(rule_out.actions))
+    nist_reference = build_nist_reference_rows(augmented_takeaways + list(rule_out.actions))
     prev_http = _as_dict(previous_zone.get("http")) if previous_zone else {}
     prev_dns = _as_dict(previous_zone.get("dns")) if previous_zone else {}
     prev_ha = _as_dict(previous_zone.get("http_adaptive")) if previous_zone else {}
