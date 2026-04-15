@@ -1,3 +1,8 @@
 """Cloudflare Executive Report CLI - multi-zone reporting, cache, and JSON output."""
 
-__version__ = "0.1.0"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("cloudflare-executive-report")
+except PackageNotFoundError:
+    __version__ = "0.0.0"
