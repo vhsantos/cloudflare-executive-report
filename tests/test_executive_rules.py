@@ -1,6 +1,6 @@
 from cloudflare_executive_report.executive.phrase_catalog import (
     format_line_with_severity_prefix,
-    render_phrase,
+    get_phrase,
 )
 from cloudflare_executive_report.executive.rules import (
     SECT_DELTAS,
@@ -30,8 +30,18 @@ def test_comparison_gate_first_report_phrase():
     )
     assert gate.allowed is False
     assert gate.blocked_takeaway is not None
-    assert gate.blocked_takeaway.body == render_phrase("no_comparison_first_report")
+    assert gate.blocked_takeaway.body == str(
+        get_phrase("comparison_first_report", "comparison")["text"]
+    )
     assert gate.blocked_takeaway.section == SECT_DELTAS
+
+
+def test_get_phrase_only_risk_has_weight() -> None:
+    assert get_phrase("dnssec", "risk")["weight"] == 7
+    assert get_phrase("dnssec", "win")["weight"] == 0
+    assert get_phrase("dnssec", "action")["weight"] == 0
+    assert get_phrase("comparison_baseline", "comparison")["weight"] == 0
+    assert get_phrase("email_obfuscation", "observation")["weight"] == 0
 
 
 def test_comparison_gate_period_mismatch_phrase():
@@ -90,8 +100,8 @@ def test_comparison_gate_warning_merged_into_deltas_not_risks():
     )
     delta_keys = {m.phrase_key for m in out.lines_for_section(SECT_DELTAS)}
     risk_keys = {m.phrase_key for m in out.lines_for_section(SECT_RISKS)}
-    assert "no_comparison_first_report" in delta_keys
-    assert "no_comparison_first_report" not in risk_keys
+    assert "comparison_first_report" in delta_keys
+    assert "comparison_first_report" not in risk_keys
 
 
 def test_correlation_origin_overloaded_uses_exact_phrase():
@@ -139,14 +149,14 @@ def test_action_rules_migrated_from_summary_logic():
     action_keys = [m.phrase_key for m in out.actions]
     action_texts = [m.body for m in out.actions]
     warning_keys = {m.phrase_key for m in out.lines_for_section(SECT_RISKS)}
-    assert "ssl_full" in warning_keys
-    assert "enable_always_https" in action_keys
-    assert "review_dnssec" in action_keys
-    assert "ssl_upgrade_full_to_strict" in action_keys
-    assert "review_waf_posture" in action_keys
-    assert "enable_apex_proxy" in action_keys
-    assert "plan_tls_renewal" in action_keys
-    assert "review_audit_activity" in action_keys
+    assert "ssl_mode_full" in warning_keys
+    assert "https_enforcement" in action_keys
+    assert "dnssec" in action_keys
+    assert "ssl_mode_full" in action_keys
+    assert "waf" in action_keys
+    assert "apex_proxy" in action_keys
+    assert "cert_expire_30" in action_keys
+    assert "audit_activity" in action_keys
     assert "Enable Always Use HTTPS - redirects HTTP to HTTPS for all traffic." in action_texts
     assert "Enable DNSSEC - prevents DNS spoofing and domain hijacking." in action_texts
     assert (
@@ -211,15 +221,15 @@ def test_all_action_phrase_keys_are_reachable_by_rules():
         ).actions
     }
     expected = {
-        "enable_always_https",
-        "review_dnssec",
-        "review_ssl_mode",
-        "ssl_upgrade_full_to_strict",
-        "review_waf_posture",
-        "enable_apex_proxy",
-        "plan_tls_renewal",
-        "review_audit_activity",
-        "enable_cloudflare_security_level_auto",
+        "https_enforcement",
+        "dnssec",
+        "ssl_mode_flexible",
+        "ssl_mode_full",
+        "waf",
+        "apex_proxy",
+        "cert_expire_30",
+        "audit_activity",
+        "security_level_off",
     }
     assert keys_flex | keys_full == expected
 
@@ -249,8 +259,8 @@ def test_https_gap_action_not_enable_when_always_https_on() -> None:
             current_zone=zone, previous_zone=None, comparison_allowed=False
         ).actions
     }
-    assert "enable_always_https" not in keys
-    assert "review_https_encryption_gap" in keys
+    assert "https_enforcement" not in keys
+    assert "https_encryption_gap" in keys
 
 
 def _zone_minimal_for_security_level(*, security_level: str, ssl_mode: str = "strict") -> dict:
@@ -283,7 +293,7 @@ def test_security_level_medium_no_low_high_under_attack_correlations() -> None:
     ckeys = {m.phrase_key for m in out.lines_for_section(SECT_SIGNALS)}
     assert "security_level_low" not in ckeys
     assert "security_level_high" not in ckeys
-    assert "security_under_attack_mode" not in ckeys
+    assert "security_level_under_attack" not in ckeys
 
 
 def test_security_level_low_info_correlation() -> None:
@@ -313,8 +323,8 @@ def test_security_level_off_warns_and_action() -> None:
         comparison_allowed=False,
     )
     wkeys = {m.phrase_key for m in out.lines_for_section(SECT_RISKS)}
-    assert "security_level_off_or_minimal" in wkeys
-    assert "enable_cloudflare_security_level_auto" in {m.phrase_key for m in out.actions}
+    assert "security_level_off" in wkeys
+    assert "security_level_off" in {m.phrase_key for m in out.actions}
 
 
 def test_security_level_essentially_off_warns_and_action() -> None:
@@ -324,8 +334,8 @@ def test_security_level_essentially_off_warns_and_action() -> None:
         comparison_allowed=False,
     )
     wkeys = {m.phrase_key for m in out.lines_for_section(SECT_RISKS)}
-    assert "security_level_off_or_minimal" in wkeys
-    assert "enable_cloudflare_security_level_auto" in {m.phrase_key for m in out.actions}
+    assert "security_level_off" in wkeys
+    assert "security_level_off" in {m.phrase_key for m in out.actions}
 
 
 def test_security_level_under_attack_info_correlation() -> None:
@@ -335,7 +345,7 @@ def test_security_level_under_attack_info_correlation() -> None:
         comparison_allowed=False,
     )
     corr = {m.phrase_key: m.severity for m in out.lines_for_section(SECT_SIGNALS)}
-    assert corr.get("security_under_attack_mode") == "info"
+    assert corr.get("security_level_under_attack") == "info"
 
 
 def test_ignore_messages_filters_exact_key() -> None:
@@ -355,19 +365,19 @@ def test_ignore_messages_filters_exact_key() -> None:
         "audit": {"total_events": 0},
         "certificates": {},
     }
-    filt = ExecutiveMessageFilter.from_entries(["review_dnssec"])
+    filt = ExecutiveMessageFilter.from_entries(["dnssec"])
     out = build_executive_rule_output(
         current_zone=current_zone,
         previous_zone=None,
         comparison_allowed=False,
         message_filter=filt,
     )
-    assert "review_dnssec" not in {m.phrase_key for m in out.actions}
+    assert "dnssec" not in {m.phrase_key for m in out.actions}
 
 
 def test_exec_msg_rejects_invalid_severity() -> None:
     try:
-        exec_msg("bogus", "cert_14", section=SECT_RISKS, days=1)
+        exec_msg("bogus", "cert_expire_14", state="risk", section=SECT_RISKS, days=1)
         raise AssertionError("expected ValueError")
     except ValueError as e:
         assert "bogus" in str(e)
@@ -405,24 +415,27 @@ def test_min_tls_version_weak_takeaway() -> None:
         current_zone=zone, previous_zone=None, comparison_allowed=False
     )
     keys = {ln.phrase_key for ln in out.lines_for_section("risks")}
-    assert "min_tls_version_weak" in keys
+    assert "min_tls_version" in keys
 
 
 def test_phrases_include_metadata_fields() -> None:
-    """Every phrase entry must carry text, id, service, nist, and weight in ``RULE_CATALOG``."""
+    """Every phrase entry must carry id/service/nist and at least one state dict."""
     from cloudflare_executive_report.executive.phrase_catalog import RULE_CATALOG
 
     for key, entry in RULE_CATALOG.items():
         assert isinstance(entry, dict), f"RULE_CATALOG[{key!r}] must be a dict"
-        assert "text" in entry, key
         assert "id" in entry, key
         assert "service" in entry, key
         assert "nist" in entry, key
         assert isinstance(entry["nist"], list), key
-        assert "weight" in entry, key
+        has_state = any(
+            isinstance(entry.get(state), dict)
+            for state in ("risk", "win", "action", "comparison", "observation")
+        )
+        assert has_state, key
 
 
 def test_executive_message_filter_regex() -> None:
     filt = ExecutiveMessageFilter.from_entries([r"^ssl_"])
-    assert filt.is_ignored("ssl_off")
-    assert not filt.is_ignored("review_ssl_mode")
+    assert filt.is_ignored("ssl_mode_off")
+    assert not filt.is_ignored("dnssec")

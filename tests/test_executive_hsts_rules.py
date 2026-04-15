@@ -1,7 +1,11 @@
 """Tests for HSTS executive takeaways from ``zone_health.hsts``."""
 
 from cloudflare_executive_report.common.constants import HSTS_RECOMMENDED_MAX_AGE_SECONDS
-from cloudflare_executive_report.executive.rules import SECT_RISKS, build_executive_rule_output
+from cloudflare_executive_report.executive.rules import (
+    SECT_RISKS,
+    SECT_SIGNALS,
+    build_executive_rule_output,
+)
 
 
 def _base_zone(*, zone_health: dict[str, object]) -> dict[str, object]:
@@ -46,7 +50,7 @@ def test_hsts_disabled_when_always_https_on_and_hsts_off() -> None:
         comparison_allowed=False,
     )
     keys = {ln.phrase_key for ln in out.lines_for_section(SECT_RISKS)}
-    assert "hsts_disabled" in keys
+    assert "hsts" in keys
 
 
 def test_hsts_no_line_when_always_https_off_even_if_hsts_disabled() -> None:
@@ -77,7 +81,7 @@ def test_hsts_no_line_when_always_https_off_even_if_hsts_disabled() -> None:
         comparison_allowed=False,
     )
     keys = {ln.phrase_key for ln in out.lines_for_section(SECT_RISKS)}
-    assert "hsts_disabled" not in keys
+    assert "hsts" not in keys
 
 
 def test_hsts_no_line_when_ssl_mode_off() -> None:
@@ -103,7 +107,7 @@ def test_hsts_no_line_when_ssl_mode_off() -> None:
         comparison_allowed=False,
     )
     keys = {ln.phrase_key for ln in out.lines_for_section(SECT_RISKS)}
-    assert "hsts_disabled" not in keys
+    assert "hsts" not in keys
 
 
 def test_hsts_skipped_or_unavailable_emits_nothing() -> None:
@@ -131,8 +135,7 @@ def test_hsts_skipped_or_unavailable_emits_nothing() -> None:
             comparison_allowed=False,
         )
         keys = {ln.phrase_key for ln in out.lines_for_section(SECT_RISKS)}
-        assert "hsts_disabled" not in keys
-        assert "hsts_suboptimal" not in keys
+        assert "hsts" not in keys
 
 
 def test_hsts_suboptimal_low_max_age_and_no_include_subdomains() -> None:
@@ -162,7 +165,7 @@ def test_hsts_suboptimal_low_max_age_and_no_include_subdomains() -> None:
         previous_zone=None,
         comparison_allowed=False,
     )
-    sub = [ln for ln in out.lines_for_section(SECT_RISKS) if ln.phrase_key == "hsts_suboptimal"]
+    sub = [ln for ln in out.lines_for_section(SECT_SIGNALS) if ln.phrase_key == "hsts"]
     assert len(sub) == 1
     body = sub[0].body
     assert "86400" in body

@@ -25,8 +25,8 @@ def test_build_portfolio_summary_sorts_by_score_and_aggregates_risks() -> None:
             score=70.1,
             grade="B",
             risks=[
-                {"phrase_key": "review_dnssec", "severity": "warning"},
-                {"phrase_key": "waf_off", "severity": "critical"},
+                {"phrase_key": "dnssec", "severity": "warning"},
+                {"phrase_key": "waf", "severity": "critical"},
             ],
         ),
         _zone(
@@ -34,7 +34,7 @@ def test_build_portfolio_summary_sorts_by_score_and_aggregates_risks() -> None:
             score=92.3,
             grade="A",
             risks=[
-                {"phrase_key": "review_dnssec", "severity": "warning"},
+                {"phrase_key": "dnssec", "severity": "warning"},
             ],
         ),
     ]
@@ -46,7 +46,7 @@ def test_build_portfolio_summary_sorts_by_score_and_aggregates_risks() -> None:
     assert out.zones[1].critical_risks == 0
     assert out.grade_distribution["A"] == 1
     assert out.grade_distribution["B"] == 1
-    assert out.common_risks[0].phrase_key == "review_dnssec"
+    assert out.common_risks[0].phrase_key == "dnssec"
     assert out.common_risks[0].zone_count == 2
 
 

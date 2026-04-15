@@ -19,7 +19,7 @@ from cloudflare_executive_report.common.formatting import (
 from cloudflare_executive_report.executive.nist_catalog import build_nist_reference_rows
 from cloudflare_executive_report.executive.phrase_catalog import (
     format_line_with_severity_prefix,
-    get_weight,
+    get_phrase,
 )
 from cloudflare_executive_report.executive.rules import (
     SECT_DELTAS,
@@ -61,7 +61,13 @@ def build_security_posture_score(rule_out: ExecutiveRuleOutput) -> dict[str, Any
     risk_weight = 0
     for line in rule_out.takeaways:
         if line.section == SECT_RISKS:
-            risk_weight += get_weight(line.phrase_key)
+            phrase_data = get_phrase(line.phrase_key, line.state)
+            weight = phrase_data["weight"]
+            if not isinstance(weight, int):
+                raise ValueError(
+                    f"Invalid weight for phrase key {line.phrase_key!r} state {line.state!r}"
+                )
+            risk_weight += weight
 
     if risk_weight <= 0:
         return {
@@ -342,7 +348,8 @@ def build_executive_summary(
         if ps and pe:
             comparison_baseline = exec_msg(
                 "info",
-                "baseline_reference",
+                "comparison_baseline",
+                state="comparison",
                 section=SECT_DELTAS,
                 filt=msg_filt,
                 start=ps,

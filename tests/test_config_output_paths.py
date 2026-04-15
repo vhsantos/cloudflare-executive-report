@@ -21,16 +21,16 @@ def test_from_yaml_dict_disabled_rules() -> None:
     cfg = AppConfig.from_yaml_dict(
         {
             "zones": [],
-            "executive": {"disabled_rules": ["review_dnssec", r"^ssl_"]},
+            "executive": {"disabled_rules": ["dnssec", r"^ssl_"]},
         }
     )
-    assert cfg.executive.disabled_rules == ["review_dnssec", r"^ssl_"]
+    assert cfg.executive.disabled_rules == ["dnssec", r"^ssl_"]
 
 
 def test_to_yaml_dict_round_trip_disabled_rules() -> None:
-    cfg = AppConfig(executive=ExecutiveConfig(disabled_rules=["plan_tls_renewal"]))
+    cfg = AppConfig(executive=ExecutiveConfig(disabled_rules=["cert_expire_30"]))
     back = AppConfig.from_yaml_dict(cfg.to_yaml_dict())
-    assert back.executive.disabled_rules == ["plan_tls_renewal"]
+    assert back.executive.disabled_rules == ["cert_expire_30"]
 
 
 def test_pdf_include_appendix_yaml_round_trip() -> None:

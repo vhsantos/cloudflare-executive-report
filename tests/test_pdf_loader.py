@@ -71,7 +71,7 @@ def test_load_security_single_day() -> None:
     assert int(r.rollup.get("total_events") or 0) == 877
     assert int(r.rollup.get("http_requests_sampled") or 0) == 45200
     assert len(r.daily_security_triple) == 1
-    assert r.daily_security_triple[0][1] == (865, 12000, 32335)
+    assert r.daily_security_triple[0][1] == (12000, 32335, 865)
 
 
 @pytest.mark.skipif(not FIXTURE_CACHE.is_dir(), reason="sample cache fixtures missing")

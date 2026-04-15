@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from cloudflare_executive_report.executive.phrase_catalog import RULE_CATALOG, get_phrase_meta
+from cloudflare_executive_report.executive.phrase_catalog import get_phrase
 
 GRADE_ORDER: tuple[str, ...] = ("A+", "A", "B", "C+", "C", "D+", "D", "F")
 
@@ -127,9 +127,9 @@ def build_portfolio_summary(
         risk_zone_counts.items(),
         key=lambda item: (-item[1], item[0]),
     ):
-        phrase_entry = RULE_CATALOG.get(phrase_key)
-        phrase_text = str((phrase_entry or {}).get("text") or phrase_key)
-        check_id = get_phrase_meta(phrase_key).check_id
+        phrase_data = get_phrase(phrase_key, "risk")
+        phrase_text = str(phrase_data["text"])
+        check_id = str(phrase_data["id"])
         common_risks.append(
             PortfolioRiskRow(
                 phrase_key=phrase_key,

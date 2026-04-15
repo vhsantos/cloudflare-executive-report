@@ -425,6 +425,6 @@ def test_build_executive_summary_disabled_rules_drops_matching_actions() -> None
         audit={"total_events": 0},
         certificates={"total_certificate_packs": 1, "expiring_in_30_days": 0},
         warnings=[],
-        disabled_rules=["review_dnssec"],
+        disabled_rules=["dnssec"],
     )
     assert not any("Enable DNSSEC" in a for a in out["actions"])

@@ -12,7 +12,7 @@ from cloudflare_executive_report.common.constants import (
     HTTPS_ENCRYPTED_GAP_ACTION_MAX_PCT,
     RELIABILITY_5XX_HEALTHY_MAX,
 )
-from cloudflare_executive_report.executive.phrase_catalog import get_phrase_meta, render_phrase
+from cloudflare_executive_report.executive.phrase_catalog import get_phrase
 from cloudflare_executive_report.zone_health import SKIPPED, UNAVAILABLE
 
 _VALID_SEVERITIES = frozenset({"positive", "warning", "critical", "info"})
@@ -30,7 +30,7 @@ _TOKEN_KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 # unproxied, cert expiry). Comparison gate messages live in SECT_DELTAS so they do not affect
 # security posture score (risks-only).
 #
-# SECT_SIGNALS ("signals"): Multiple signals combined in one narrative (origin errors + latency,
+# SECT_SIGNALS ("signals"): Multiple observations combined in one narrative (origin errors+latency,
 # cache + bandwidth, security level notes, threat rate spikes). Not the same as period deltas.
 #
 # SECT_DELTAS ("deltas"): Period-over-period metric deltas (traffic/threats/latency/cache vs last
@@ -153,6 +153,7 @@ class ExecutiveLine:
     """One executive line: ids, NIST tags, severity, rendered body, and report section."""
 
     phrase_key: str
+    state: str
     check_id: str
     service: str
     nist: tuple[str, ...]
@@ -183,6 +184,7 @@ def exec_msg(
     severity: str,
     phrase_key: str,
     *,
+    state: str,
     section: str,
     filt: ExecutiveMessageFilter | None = None,
     **kwargs: object,
@@ -193,14 +195,21 @@ def exec_msg(
         raise ValueError(f"Invalid severity {severity!r}; expected one of: {allowed}")
     if filt is not None and filt.is_ignored(phrase_key):
         return None
-    meta = get_phrase_meta(phrase_key)
+    phrase_data = get_phrase(phrase_key, state)
+    text = phrase_data["text"]
+    if not isinstance(text, str):
+        raise ValueError(f"Phrase text for {phrase_key!r} state {state!r} must be a string")
+    nist_raw = phrase_data["nist"]
+    if not isinstance(nist_raw, list):
+        raise TypeError(f"Phrase nist for {phrase_key!r} state {state!r} must be a list")
     return ExecutiveLine(
         phrase_key=phrase_key,
-        check_id=meta.check_id,
-        service=meta.service,
-        nist=meta.nist,
+        state=state,
+        check_id=str(phrase_data["id"]),
+        service=str(phrase_data["service"]),
+        nist=tuple(str(x) for x in nist_raw),
         severity=severity,
-        body=render_phrase(phrase_key, **kwargs),
+        body=text.format(**kwargs),
         section=section,
     )
 
@@ -211,7 +220,9 @@ def _comparison_gate_blocked(
     **phrase_kwargs: object,
 ) -> ComparisonGate:
     """Return disallowed comparison with one deltas-section takeaway (warning)."""
-    line = exec_msg("warning", phrase_key, section=SECT_DELTAS, filt=filt, **phrase_kwargs)
+    line = exec_msg(
+        "warning", phrase_key, state="comparison", section=SECT_DELTAS, filt=filt, **phrase_kwargs
+    )
     return ComparisonGate(allowed=False, blocked_takeaway=line)
 
 
@@ -225,7 +236,7 @@ def evaluate_comparison_gate(
     """Whether prior-period comparison is allowed; otherwise one posture takeaway explaining why."""
     filt = message_filter
     if not previous_report:
-        return _comparison_gate_blocked("no_comparison_first_report", filt)
+        return _comparison_gate_blocked("comparison_first_report", filt)
 
     previous_period = _as_dict(previous_report.get("report_period"))
     current_days = _period_days(current_period)
@@ -238,7 +249,7 @@ def evaluate_comparison_gate(
     days_bad = current_days <= 0 or previous_days <= 0 or current_days != previous_days
     if bounds_bad or days_bad:
         return _comparison_gate_blocked(
-            "no_comparison_period_mismatch",
+            "comparison_period_mismatch",
             filt,
             previous_days=previous_days,
             current_days=current_days,
@@ -246,11 +257,11 @@ def evaluate_comparison_gate(
 
     prev_zone = _find_zone(previous_report, current_zone_id)
     if not prev_zone:
-        return _comparison_gate_blocked("no_comparison_first_report", filt)
+        return _comparison_gate_blocked("comparison_first_report", filt)
 
     needed = ("http", "security", "dns")
     if any(_as_dict(prev_zone).get(k) in (None, {}) for k in needed):
-        return _comparison_gate_blocked("no_comparison_missing_streams", filt)
+        return _comparison_gate_blocked("comparison_missing_streams", filt)
 
     return ComparisonGate(allowed=True, blocked_takeaway=None)
 
@@ -280,14 +291,18 @@ def build_executive_rule_output(
         section: TakeawaySection,
         severity: str,
         phrase_key: str,
+        *,
+        state: str,
         **kwargs: object,
     ) -> None:
-        line = exec_msg(severity, phrase_key, section=section, filt=filt, **kwargs)
+        line = exec_msg(severity, phrase_key, state=state, section=section, filt=filt, **kwargs)
         if line:
             sections[section].append(line)
 
-    def add_action(severity: str, phrase_key: str, **kwargs: object) -> None:
-        line = exec_msg(severity, phrase_key, section=SECT_ACTIONS, filt=filt, **kwargs)
+    def add_action(severity: str, phrase_key: str, *, state: str, **kwargs: object) -> None:
+        line = exec_msg(
+            severity, phrase_key, state=state, section=SECT_ACTIONS, filt=filt, **kwargs
+        )
         if line:
             actions.append(line)
 
@@ -310,24 +325,24 @@ def build_executive_rule_output(
     cert_packs = _as_int(ce.get("total_certificate_packs"))
 
     if apex_unproxied:
-        add_takeaway(SECT_RISKS, "warning", "apex_unproxied")
+        add_takeaway(SECT_RISKS, "warning", "apex_proxy", state="risk")
     if ssl_mode == "off":
-        add_takeaway(SECT_RISKS, "critical", "ssl_off")
+        add_takeaway(SECT_RISKS, "critical", "ssl_mode_off", state="risk")
     elif ssl_mode == "flexible":
-        add_takeaway(SECT_RISKS, "critical", "ssl_flexible")
+        add_takeaway(SECT_RISKS, "critical", "ssl_mode_flexible", state="risk")
     elif ssl_mode == "full":
-        add_takeaway(SECT_RISKS, "warning", "ssl_full")
+        add_takeaway(SECT_RISKS, "warning", "ssl_mode_full", state="risk")
 
     min_tls = _zone_health_str(zh, "min_tls_version")
     if _zone_health_config_known(min_tls):
         if min_tls in ("1.0", "1.1"):
-            add_takeaway(SECT_RISKS, "critical", "min_tls_version_weak", version=min_tls)
+            add_takeaway(SECT_RISKS, "critical", "min_tls_version", state="risk", version=min_tls)
         elif min_tls == "1.2":
-            add_takeaway(SECT_RISKS, "info", "min_tls_version_acceptable")
+            add_takeaway(SECT_SIGNALS, "info", "min_tls_version", state="observation")
 
     tls13 = _zone_health_str(zh, "tls_1_3")
     if _zone_health_config_known(tls13) and tls13 not in ("on", "zrt"):
-        add_takeaway(SECT_RISKS, "warning", "tls_1_3_disabled")
+        add_takeaway(SECT_RISKS, "warning", "tls_1_3", state="risk")
 
     hsts = zh.get("hsts")
     hsts_d = hsts if isinstance(hsts, dict) else {}
@@ -336,7 +351,7 @@ def build_executive_rule_output(
         edge_uses_tls = ssl_mode not in ("", "off")
         hsts_enabled = hsts_d.get("enabled")
         if hsts_enabled is False and always_https_on and edge_uses_tls:
-            add_takeaway(SECT_RISKS, "warning", "hsts_disabled")
+            add_takeaway(SECT_RISKS, "warning", "hsts", state="risk")
         elif hsts_enabled is True:
             hsts_issues: list[str] = []
             max_age = hsts_d.get("max_age")
@@ -349,45 +364,46 @@ def build_executive_rule_output(
                 hsts_issues.append("Include Subdomains is off")
             if hsts_issues:
                 add_takeaway(
-                    SECT_RISKS,
+                    SECT_SIGNALS,
                     "info",
-                    "hsts_suboptimal",
+                    "hsts",
+                    state="observation",
                     issues="; ".join(hsts_issues),
                 )
 
     browser_chk = _zone_health_str(zh, "browser_check")
     if _zone_health_config_known(browser_chk) and browser_chk != "on":
-        add_takeaway(SECT_RISKS, "warning", "browser_integrity_disabled")
+        add_takeaway(SECT_RISKS, "warning", "browser_integrity", state="risk")
 
     email_obs = _zone_health_str(zh, "email_obfuscation")
     if _zone_health_config_known(email_obs) and email_obs != "on":
-        add_takeaway(SECT_RISKS, "info", "email_obfuscation_disabled")
+        add_takeaway(SECT_SIGNALS, "info", "email_obfuscation", state="observation")
 
     opp_enc = _zone_health_str(zh, "opportunistic_encryption")
     if _zone_health_config_known(opp_enc) and opp_enc != "on":
-        add_takeaway(SECT_RISKS, "info", "opportunistic_encryption_disabled")
+        add_takeaway(SECT_SIGNALS, "info", "opportunistic_encryption", state="observation")
 
     if dnssec in {"off", "disabled"}:
-        add_takeaway(SECT_RISKS, "warning", "dnssec_off")
+        add_takeaway(SECT_RISKS, "warning", "dnssec", state="risk")
     if security_level in {"off", "essentially_off"}:
-        add_takeaway(SECT_RISKS, "critical", "security_level_off_or_minimal")
-        add_action("info", "enable_cloudflare_security_level_auto")
+        add_takeaway(SECT_RISKS, "critical", "security_level_off", state="risk")
+        add_action("info", "security_level_off", state="action")
     elif security_level == "under_attack":
-        add_takeaway(SECT_SIGNALS, "info", "security_under_attack_mode")
+        add_takeaway(SECT_SIGNALS, "info", "security_level_under_attack", state="observation")
     elif security_level == "low":
-        add_takeaway(SECT_SIGNALS, "info", "security_level_low")
+        add_takeaway(SECT_SIGNALS, "info", "security_level_low", state="observation")
     elif security_level == "high":
-        add_takeaway(SECT_SIGNALS, "info", "security_level_high")
+        add_takeaway(SECT_SIGNALS, "info", "security_level_high", state="observation")
     if not waf_on:
-        add_takeaway(SECT_RISKS, "warning", "waf_off")
+        add_takeaway(SECT_RISKS, "warning", "waf", state="risk")
     if ddos in {"off", "disabled"}:
-        add_takeaway(SECT_RISKS, "warning", "ddos_off")
+        add_takeaway(SECT_RISKS, "warning", "ddos_protection", state="risk")
     if cert_packs == 0:
-        add_takeaway(SECT_RISKS, "warning", "no_cert_packs")
+        add_takeaway(SECT_RISKS, "warning", "cert_presence", state="risk")
     if 0 < exp_days <= 14:
-        add_takeaway(SECT_RISKS, "critical", "cert_14", days=exp_days)
+        add_takeaway(SECT_RISKS, "critical", "cert_expire_14", state="risk", days=exp_days)
     elif 14 < exp_days <= 30:
-        add_takeaway(SECT_RISKS, "warning", "cert_30", days=exp_days)
+        add_takeaway(SECT_RISKS, "warning", "cert_expire_30", state="risk", days=exp_days)
 
     err_5xx = _as_float(ha.get("status_5xx_rate_pct"))
     latency = _as_float(ha.get("origin_response_duration_avg_ms"))
@@ -397,18 +413,38 @@ def build_executive_rule_output(
     audits = _as_int(au.get("total_events"))
     if err_5xx > RELIABILITY_5XX_HEALTHY_MAX and latency > 500:
         e5, lms = round(err_5xx, 2), int(round(latency))
-        add_takeaway(SECT_SIGNALS, "critical", "origin_overloaded", err_pct=e5, latency_ms=lms)
+        add_takeaway(
+            SECT_SIGNALS,
+            "critical",
+            "origin_health",
+            state="observation",
+            err_pct=e5,
+            latency_ms=lms,
+        )
     if cache_hit < 10 and bandwidth_gb > 10:
         ch, gbw = round(cache_hit, 1), int(round(bandwidth_gb))
-        add_takeaway(SECT_SIGNALS, "warning", "cache_inefficient", cache_hit=ch, bandwidth_gb=gbw)
+        add_takeaway(
+            SECT_SIGNALS,
+            "warning",
+            "cache_efficiency",
+            state="observation",
+            cache_hit=ch,
+            bandwidth_gb=gbw,
+        )
     if apex_unproxied and ddos == "on":
-        add_takeaway(SECT_SIGNALS, "warning", "apex_ddos_mismatch")
+        add_takeaway(SECT_SIGNALS, "warning", "apex_ddos_alignment", state="observation")
     if ssl_mode == "flexible" and cert_packs > 0:
-        add_takeaway(SECT_SIGNALS, "warning", "ssl_flexible_with_cert")
+        add_takeaway(SECT_SIGNALS, "warning", "ssl_mode_flexible", state="observation")
     if mitigation > 5.0:
-        add_takeaway(SECT_SIGNALS, "warning", "threats_high", mitigation_pct=round(mitigation, 1))
+        add_takeaway(
+            SECT_SIGNALS,
+            "warning",
+            "threat_activity",
+            state="observation",
+            mitigation_pct=round(mitigation, 1),
+        )
     if audits > 50:
-        add_takeaway(SECT_SIGNALS, "warning", "audit_high", events=audits)
+        add_takeaway(SECT_SIGNALS, "warning", "audit_activity", state="observation", events=audits)
 
     always_https = str(zh.get("always_https") or "").strip().lower()
     total_requests = _as_int(http.get("total_requests"))
@@ -416,27 +452,31 @@ def build_executive_rule_output(
     enc_gap = max(0, total_requests - encrypted_requests)
     enc_gap_pct = (100.0 * enc_gap / total_requests) if total_requests > 0 else 0.0
     if always_https != "on":
-        add_action("info", "enable_always_https")
+        add_action("info", "https_enforcement", state="action")
     elif total_requests > 0 and enc_gap_pct > HTTPS_ENCRYPTED_GAP_ACTION_MAX_PCT:
         add_action(
             "info",
-            "review_https_encryption_gap",
+            "https_encryption_gap",
+            state="action",
             gap_pct=round(enc_gap_pct, 1),
         )
     if dnssec in {"disabled", "off", "unavailable"}:
-        add_action("info", "review_dnssec")
+        add_action("info", "dnssec", state="action")
     if ssl_mode == "full":
-        add_action("info", "ssl_upgrade_full_to_strict")
+        add_action("info", "ssl_mode_full", state="action")
     elif ssl_mode not in {"strict", "full_strict"}:
-        add_action("info", "review_ssl_mode")
+        if ssl_mode == "off":
+            add_action("info", "ssl_mode_off", state="action")
+        else:
+            add_action("info", "ssl_mode_flexible", state="action")
     if not waf_on:
-        add_action("info", "review_waf_posture")
+        add_action("info", "waf", state="action")
     if apex_unproxied:
-        add_action("info", "enable_apex_proxy")
+        add_action("info", "apex_proxy", state="action")
     if len(ce) and ce.get("unavailable") is not True and exp_days > 0:
-        add_action("info", "plan_tls_renewal")
+        add_action("info", "cert_expire_30", state="action")
     if len(au) and au.get("unavailable") is not True and audits > 50:
-        add_action("info", "review_audit_activity")
+        add_action("info", "audit_activity", state="action")
 
     if previous_zone and comparison_allowed:
         p_http = _as_dict(previous_zone.get("http"))
@@ -455,50 +495,66 @@ def build_executive_rule_output(
         if abs(pct_traffic) > 20:
             if pct_traffic > 0:
                 pct_i = int(round(pct_traffic))
-                add_takeaway(SECT_DELTAS, "info", "traffic_up_comparison", pct=pct_i)
-                add_takeaway(SECT_WINS, "positive", "traffic_up_positive", pct=pct_i)
+                add_takeaway(SECT_DELTAS, "info", "traffic_up", state="comparison", pct=pct_i)
+                add_takeaway(SECT_WINS, "positive", "traffic_up", state="win", pct=pct_i)
             else:
                 pct_dn = abs(int(round(pct_traffic)))
-                add_takeaway(SECT_DELTAS, "warning", "traffic_down_comparison", pct=pct_dn)
+                add_takeaway(SECT_DELTAS, "warning", "traffic_down", state="comparison", pct=pct_dn)
         if pct_threats > 100:
             pt = int(round(pct_threats))
             if abs(pct_traffic) < 10:
-                add_takeaway(SECT_DELTAS, "critical", "threats_up_traffic_flat", pct=pt)
+                add_takeaway(
+                    SECT_DELTAS, "critical", "threats_vs_traffic_flat", state="comparison", pct=pt
+                )
             else:
-                add_takeaway(SECT_DELTAS, "warning", "threats_up_traffic_up", pct=pt)
+                add_takeaway(
+                    SECT_DELTAS, "warning", "threats_vs_traffic_up", state="comparison", pct=pt
+                )
         latency_delta = _as_float(ha.get("origin_response_duration_avg_ms")) - _as_float(
             p_ha.get("origin_response_duration_avg_ms")
         )
         if latency_delta > 100:
             ms_up = int(round(latency_delta))
-            add_takeaway(SECT_DELTAS, "warning", "latency_up_comparison", ms=ms_up)
+            add_takeaway(SECT_DELTAS, "warning", "latency_delta", state="comparison", ms=ms_up)
         elif latency_delta < -10:
             ms_dn = abs(int(round(latency_delta)))
-            add_takeaway(SECT_WINS, "positive", "latency_down", ms=ms_dn)
+            add_takeaway(SECT_WINS, "positive", "latency_delta", state="win", ms=ms_dn)
         cache_delta = _pp_delta(
             _as_float(cache.get("cache_hit_ratio") or http.get("cache_hit_ratio")),
             _as_float(p_http.get("cache_hit_ratio")),
         )
         if cache_delta < -15:
             pp_dn = abs(int(round(cache_delta)))
-            add_takeaway(SECT_DELTAS, "warning", "cache_hit_down", pp=pp_dn)
+            add_takeaway(SECT_DELTAS, "warning", "cache_efficiency", state="comparison", pp=pp_dn)
         p_apex = _as_int(p_dr.get("apex_unproxied_a_aaaa"))
         c_apex = _as_int(dr.get("apex_unproxied_a_aaaa"))
         if p_apex == 0 and c_apex > 0:
             add_takeaway(
-                SECT_DELTAS, "critical", "apex_regression", previous="proxied", current="dns-only"
+                SECT_DELTAS,
+                "critical",
+                "apex_proxy",
+                state="comparison",
+                previous="proxied",
+                current="dns-only",
             )
         if p_apex > 0 and c_apex == 0:
-            add_takeaway(SECT_WINS, "positive", "apex_proxied")
+            add_takeaway(SECT_WINS, "positive", "apex_proxy", state="win")
         p_ssl = str(p_zh.get("ssl_mode") or "").strip().lower()
         c_ssl = str(zh.get("ssl_mode") or "").strip().lower()
         if p_ssl in {"strict", "full_strict"} and c_ssl == "flexible":
-            add_takeaway(SECT_DELTAS, "critical", "ssl_regression", previous=p_ssl, current=c_ssl)
+            add_takeaway(
+                SECT_DELTAS,
+                "critical",
+                "ssl_mode_transition_regression",
+                state="comparison",
+                previous=p_ssl,
+                current=c_ssl,
+            )
         if p_ssl == "flexible" and c_ssl in {"strict", "full", "full_strict"}:
-            add_takeaway(SECT_WINS, "positive", "ssl_upgraded")
+            add_takeaway(SECT_WINS, "positive", "ssl_mode_full", state="win")
         p_dnssec = str(p_zh.get("dnssec_status") or "").strip().lower()
         if p_dnssec in {"off", "disabled"} and dnssec not in {"off", "disabled"}:
-            add_takeaway(SECT_WINS, "positive", "dnssec_enabled")
+            add_takeaway(SECT_WINS, "positive", "dnssec", state="win")
 
     if gate_warning is not None:
         sections[SECT_DELTAS].insert(0, gate_warning)
