@@ -11,7 +11,14 @@ This note is for stakeholders who see **4xx rate**, **5xx rate**, **Edge p50/p95
 
 ## Narrative and bands
 
-The one-line **reliability** text on the report uses **5xx** first: low 5xx is described as healthy; elevated 5xx as needing attention; very high 5xx as poor. If **4xx** is high even when 5xx looks fine, the text calls that out separately. Exact cutoffs are defined in `executive/constants.py` (`RELIABILITY_5XX_*`, `RELIABILITY_4XX_HIGH_PCT`).
+The one-line reliability text on the report uses 5xx first:
+
+- 5xx <= `RELIABILITY_5XX_HEALTHY_MAX` (currently `0.5%`) -> healthy
+- 5xx > `RELIABILITY_5XX_HEALTHY_MAX` and latency > 500ms -> attention
+- 5xx > `RELIABILITY_5XX_WARNING_MAX` (currently `5.0%`) -> critical
+
+If 4xx is high while 5xx remains low, it is treated as context, not a critical reliability alert.
+Threshold constants are defined in `common/constants.py`.
 
 ## When numbers or percentiles are missing
 

@@ -248,6 +248,9 @@ def cmd_report(
         raise typer.Exit(exits.INVALID_PARAMS)
 
     type_set = _parse_sync_types(types)
+    if "http_adaptive" not in type_set:
+        # Executive summary reliability KPIs require adaptive HTTP metrics.
+        type_set = frozenset(set(type_set) | {"http_adaptive"})
     pdf_streams = _pdf_streams_from_types(type_set)
     if not pdf_streams:
         typer.echo(

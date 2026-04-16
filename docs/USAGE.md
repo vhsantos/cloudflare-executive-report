@@ -26,9 +26,11 @@ You now have a local cache plus your first PDF report.
 | ------------------ | -------------------------------------------------------- |
 | `cf-report init`   | Create a template config file (interactive token prompt) |
 | `cf-report sync`   | Fetch Cloudflare data and write cache only               |
-| `cf-report report` | Generate PDF from cache (and sync first if needed)       |
+| `cf-report report` | Generate PDF from cache (syncs first if needed).         |
 | `cf-report clean`  | Clean cache/history files                                |
 | `cf-report zones`  | Add/remove/list zones in config                          |
+
+> Note: `cf-report report` auto-includes `http_adaptive` metrics for executive reliability KPIs.
 
 ## Common command patterns
 

@@ -11,6 +11,7 @@ from cloudflare_executive_report.common.constants import (
     HSTS_RECOMMENDED_MAX_AGE_SECONDS,
     HTTPS_ENCRYPTED_GAP_ACTION_MAX_PCT,
     RELIABILITY_5XX_HEALTHY_MAX,
+    RELIABILITY_5XX_WARNING_MAX,
 )
 from cloudflare_executive_report.executive.phrase_catalog import get_phrase
 from cloudflare_executive_report.zone_health import SKIPPED, UNAVAILABLE
@@ -411,11 +412,20 @@ def build_executive_rule_output(
     bandwidth_gb = _as_int(http.get("total_bandwidth_bytes")) / (1024.0**3)
     mitigation = _as_float(sec.get("mitigation_rate_pct"))
     audits = _as_int(au.get("total_events"))
-    if err_5xx > RELIABILITY_5XX_HEALTHY_MAX and latency > 500:
-        e5, lms = round(err_5xx, 2), int(round(latency))
+    if err_5xx > RELIABILITY_5XX_WARNING_MAX:
+        e5 = round(err_5xx, 2)
         add_takeaway(
             SECT_SIGNALS,
             "critical",
+            "origin_errors_high",
+            state="observation",
+            err_pct=e5,
+        )
+    elif err_5xx > RELIABILITY_5XX_HEALTHY_MAX and latency > 500:
+        e5, lms = round(err_5xx, 2), int(round(latency))
+        add_takeaway(
+            SECT_SIGNALS,
+            "warning",
             "origin_health",
             state="observation",
             err_pct=e5,

@@ -3,19 +3,6 @@
 ## Documentation
 
 - [ ] Add clear instructions how/which/why each token Permission policies are need.
-- [ ] Add instructions how to ran in CI/CD.
-
-## Executive summary narrative quality
-
-- [ ] Replace hardcoded phrase "reliability stayed healthy" with rule-based wording driven by `status_5xx_rate_pct` (and optionally `status_4xx_rate_pct`).
-- [ ] Define explicit thresholds for reliability labels (healthy / attention / critical) and keep them in shared constants.
-- [ ] Ensure takeaway wording remains truthful for extreme values (e.g., very high 5xx).
-- [ ] Add unit tests for narrative wording across threshold boundaries.
-
-## Adaptive HTTP integration follow-up
-
-- [ ] Confirm `http_adaptive` metrics are always included in report runs used for executive summaries (`--types` usage/documentation).
-- [ ] Decide whether `origin_response_duration_avg_ms` should be shown directly in executive PDF KPI rows.
 
 ## Product/content consistency
 
