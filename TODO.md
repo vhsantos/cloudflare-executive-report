@@ -4,18 +4,24 @@
 
 - [ ] Add clear instructions how/which/why each token Permission policies are need.
 
+## Token
+
+- [ ] check if token exists
+- [ ] validate if token has access to the corrects polices (maybe put the token requirements on each stream)
+
+## Configuration
+
+- [ ] Option to add all zones to the config.
+- [ ] log_level:
+  - [ ] should contain critical, warning, info, debug
+  - [ ] command line should allow -v -vv -vvv
+  - [ ] code actaully only shows warnings and info and a crazy debug mode (with a lot of http info)
+  - [ ] we should have the none option (--quit mode ?? )
+  - [ ] redirect output to a log file
+
 ## Product/content consistency
 
 - [ ] Align executive takeaways with verdict logic to avoid contradictory messaging.
-- [ ] Add a short "How to read reliability metrics" section in docs for non-technical stakeholders.
-- [ ] Refactor PDF executive summary to reuse `executive_summary` from already-built report JSON (single source of truth), instead of recomputing summary in PDF path.
-  - Context: `cf-report report` currently runs sync/write JSON, then PDF recomputes executive summary from cache + extra context.
-  - Issue: this duplicated logic can drift between JSON and PDF (observed bug: PDF showing "First report..." while current JSON did not).
-  - Goal: eliminate duplicated summary derivation and ensure PDF takeaways always match JSON takeaways exactly.
-  - Acceptance criteria:
-    - `cf-report report` PDF takeaways/actions match `cf_report.json` `executive_summary.takeaways` and `actions` for each zone.
-    - No separate comparison gate decision in PDF-only path.
-    - Add regression test covering a two-run period comparison where JSON and PDF outputs stay consistent.
 
 ## Performance and Cloudflare API limits
 
@@ -100,8 +106,3 @@ cf-report  report  -o output.pdf --start 2026-04-09 --end 2026-04-10
 cf-report  report  -o output.pdf --start 2026-04-06 --end 2026-04-08 --cache-only
 Error: No matching report snapshot for this request. Run `cf-report report` without --cache-only first, then retry.
 ```
-
-## Release automation
-
-- [ ] Automate version bump in `src/cloudflare_executive_report/__init__.py` during GitHub releases (no manual edit).
-  - Suggested flow: derive version from release/tag, update `__version__`, create release artifact, publish to PyPI.

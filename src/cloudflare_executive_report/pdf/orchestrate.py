@@ -22,7 +22,6 @@ from cloudflare_executive_report.common.dates import parse_ymd
 from cloudflare_executive_report.common.period_resolver import report_type_for_options
 from cloudflare_executive_report.config import AppConfig
 from cloudflare_executive_report.executive.portfolio import build_portfolio_summary
-from cloudflare_executive_report.executive.summary import build_executive_summary
 from cloudflare_executive_report.pdf.cover import append_cover_page
 from cloudflare_executive_report.pdf.document import build_simple_doc, footer_canvas_factory
 from cloudflare_executive_report.pdf.figure_quality import (
@@ -312,37 +311,46 @@ def write_report_pdf(
                 )
                 zone_warnings.extend(loaded_certificates.warnings)
 
-                zone_health: dict[str, Any]
-                health_warnings: list[str] = []
-                if snapshot_zone and isinstance(snapshot_zone.get("zone_health"), dict):
-                    zone_health = dict(snapshot_zone.get("zone_health") or {})
-                else:
-                    if allow_live_health_fetch:
-                        with CloudflareClient(cfg.api_token) as client:
-                            zone_health, health_warnings = fetch_zone_health(
-                                client, zone_id, zone_name, skip=False
-                            )
-                        zone_warnings.extend(health_warnings)
-                    else:
-                        raise ValueError(
-                            "Zone health is not in the report snapshot and live fetch is disabled "
-                            f"(zone {zone_name}). Use a matching cf_report.json or run without "
-                            "--cache-only."
-                        )
-
-                if sync_opts is None:
-                    previous_report = _load_previous_report(cfg)
-                else:
-                    previous_report = select_previous_report_for_period(
-                        cfg,
-                        current_start=spec.start,
-                        current_end=spec.end,
-                        zone_id=zone_id,
-                        opts=sync_opts,
-                    )
                 if snapshot_zone and isinstance(snapshot_zone.get("executive_summary"), dict):
                     executive_summary = dict(snapshot_zone.get("executive_summary") or {})
+                elif report_snapshot is not None:
+                    raise ValueError(
+                        "Executive summary is not in the report snapshot "
+                        f"(zone {zone_name}). Rebuild report JSON first."
+                    )
                 else:
+                    from cloudflare_executive_report.executive.summary import (
+                        build_executive_summary,
+                    )
+
+                    zone_health: dict[str, Any]
+                    health_warnings: list[str] = []
+                    if snapshot_zone and isinstance(snapshot_zone.get("zone_health"), dict):
+                        zone_health = dict(snapshot_zone.get("zone_health") or {})
+                    else:
+                        if allow_live_health_fetch:
+                            with CloudflareClient(cfg.api_token) as client:
+                                zone_health, health_warnings = fetch_zone_health(
+                                    client, zone_id, zone_name, skip=False
+                                )
+                            zone_warnings.extend(health_warnings)
+                        else:
+                            raise ValueError(
+                                "Zone health is not in report snapshot and live fetch is disabled "
+                                f"(zone {zone_name}). Use a matching cf_report.json or run without "
+                                "--cache-only."
+                            )
+
+                    if sync_opts is None:
+                        previous_report = _load_previous_report(cfg)
+                    else:
+                        previous_report = select_previous_report_for_period(
+                            cfg,
+                            current_start=spec.start,
+                            current_end=spec.end,
+                            zone_id=zone_id,
+                            opts=sync_opts,
+                        )
                     executive_summary = build_executive_summary(
                         zone_id=zone_id,
                         zone_name=zone_name,
