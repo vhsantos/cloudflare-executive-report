@@ -429,7 +429,7 @@ def save_config_template(cfg: AppConfig, path: Path | None = None) -> None:
     lines = [
         "# Core settings",
         "# default_zone is used when CLI --zone is omitted",
-        "# default_period is reserved for future period presets",
+        "# default_period is used when no CLI period flags are provided",
         "#",
         "# Sections:",
         "# - pdf: PDF generation options (profile: minimal | executive | detailed)",
