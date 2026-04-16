@@ -1,24 +1,52 @@
 # Usage Guide
 
-This guide is the practical reference for running `cf-report` and configuring `config.yaml`.
+Practical reference for running `cf-report` and configuring `config.yaml`.
 
-## Quick Start
+## Why this exists
+
+This page answers two questions quickly:
+
+- Which commands should I run for common workflows?
+- Which config fields control behavior in production and CI?
+
+## Quick start (30 seconds)
 
 ```bash
+pip install cloudflare-executive-report
 cf-report init
 cf-report sync --last 30
 cf-report report -o security-report.pdf
 ```
 
-## Command Cheatsheet
+You now have a local cache plus your first PDF report.
 
-- `cf-report init` - create a template config file
-- `cf-report sync` - fetch Cloudflare data and write cache only
-- `cf-report report` - generate PDF from cache (and sync first if needed)
-- `cf-report clean` - clean cache/history files
-- `cf-report zones` - add/remove/list zones in config
+## Command cheatsheet
 
-## Complete Config Example
+| Command | What it does |
+| --- | --- |
+| `cf-report init` | Create a template config file (interactive token prompt) |
+| `cf-report sync` | Fetch Cloudflare data and write cache only |
+| `cf-report report` | Generate PDF from cache (and sync first if needed) |
+| `cf-report clean` | Clean cache/history files |
+| `cf-report zones` | Add/remove/list zones in config |
+
+## Common command patterns
+
+```bash
+# Executive profile for last 30 complete days
+cf-report report -o exec.pdf --last 30
+
+# Detailed profile and SVG charts
+cf-report report -o detailed.pdf --last 14 --types dns,http,security,cache,http_adaptive,dns_records,audit,certificates
+
+# Cache-only reproducible report
+cf-report report -o offline.pdf --cache-only --start 2026-04-01 --end 2026-04-14
+
+# One zone only
+cf-report report -o zone.pdf --zone example.com --last 30
+```
+
+## Complete config example
 
 ```yaml
 api_token: "cfat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
@@ -91,14 +119,28 @@ cover:
   date_format: "%d/%b/%Y"
 ```
 
-## Config Field Reference
+## Config field reference
+
+### Secrets and precedence
+
+For both `api_token` and `email.smtp_password`:
+
+```txt
+config value > environment variable > empty string
+```
+
+`api_token` environment variables (used only if config is empty):
+
+- `CF_REPORT_API_TOKEN` (preferred)
+- `CLOUDFLARE_API_TOKEN` (fallback)
+
+`smtp_password` environment variable (used only if config is empty):
+
+- `CF_REPORT_SMTP_PASSWORD`
 
 ### Root fields
 
 - `api_token` (`str`) - Cloudflare API token.
-- `api_token` can also be provided via environment variables when not set in the config:
-  - `CF_REPORT_API_TOKEN` (preferred)
-  - `CLOUDFLARE_API_TOKEN` (fallback)
 - `cache_dir` (`str`) - local cache root.
 - `output_dir` (`str`) - output root (`outputs/cf_report.json`, history, and default PDFs).
 - `default_zone` (`str`) - used when `--zone` is omitted.
@@ -131,21 +173,13 @@ cover:
 - `smtp_ssl` (`bool`) - implicit TLS mode.
 - `smtp_starttls` (`bool`) - STARTTLS mode.
 - `smtp_user` (`str`) - SMTP username.
-- `smtp_password` (`str`) - SMTP password (can also be provided via `CF_REPORT_SMTP_PASSWORD` when not set in config).
+- `smtp_password` (`str`) - SMTP password.
 - `smtp_from` (`str`) - sender email address.
 - `recipients` (`list[str]`) - recipient list.
 - `subject` (`str`) - supports placeholders like `{date}`.
 - `body` (`str`) - supports placeholders like `{period}` and `{zone_count}`.
 
 Important: `smtp_ssl` and `smtp_starttls` cannot both be `true`.
-
-### Precedence rules (secrets)
-
-For both `api_token` and `email.smtp_password`:
-
-```txt
-config value > environment variable > empty string
-```
 
 ### `portfolio`
 
@@ -163,23 +197,8 @@ config value > environment variable > empty string
 - `classification` (`str`) - sensitivity marker (example: Internal).
 - `date_format` (`str`) - Python `strftime` format string.
 
-## Common Report Examples
+## Where to find more
 
-```bash
-# Executive profile for last 30 complete days
-cf-report report -o exec.pdf --last 30
-
-# Detailed profile and SVG charts
-cf-report report -o detailed.pdf --last 14 --types dns,http,security,cache,http_adaptive,dns_records,audit,certificates
-
-# Cache-only reproducible report
-cf-report report -o offline.pdf --cache-only --start 2026-04-01 --end 2026-04-14
-
-# One zone only
-cf-report report -o zone.pdf --zone example.com --last 30
-```
-
-## Where To Find More
-
+- CI/CD patterns and headless examples: `docs/ci-cd.md`
 - Developer internals: `docs/developers/`
 - Demo assets and examples: `docs/examples/`, `docs/sample-data/`
