@@ -22,13 +22,13 @@ You now have a local cache plus your first PDF report.
 
 ## Command cheatsheet
 
-| Command | What it does |
-| --- | --- |
-| `cf-report init` | Create a template config file (interactive token prompt) |
-| `cf-report sync` | Fetch Cloudflare data and write cache only |
-| `cf-report report` | Generate PDF from cache (and sync first if needed) |
-| `cf-report clean` | Clean cache/history files |
-| `cf-report zones` | Add/remove/list zones in config |
+| Command            | What it does                                             |
+| ------------------ | -------------------------------------------------------- |
+| `cf-report init`   | Create a template config file (interactive token prompt) |
+| `cf-report sync`   | Fetch Cloudflare data and write cache only               |
+| `cf-report report` | Generate PDF from cache (and sync first if needed)       |
+| `cf-report clean`  | Clean cache/history files                                |
+| `cf-report zones`  | Add/remove/list zones in config                          |
 
 ## Common command patterns
 
