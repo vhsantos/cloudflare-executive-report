@@ -27,6 +27,48 @@ def test_from_yaml_dict_disabled_rules() -> None:
     assert cfg.executive.disabled_rules == ["dnssec", r"^ssl_"]
 
 
+def test_api_token_from_env_when_missing(monkeypatch) -> None:
+    monkeypatch.setenv("CF_REPORT_API_TOKEN", "cfat_env_token")
+    cfg = AppConfig.from_yaml_dict({"zones": []})
+    assert cfg.api_token == "cfat_env_token"
+
+
+def test_api_token_empty_string_uses_env(monkeypatch) -> None:
+    monkeypatch.setenv("CF_REPORT_API_TOKEN", "cfat_env_token")
+    cfg = AppConfig.from_yaml_dict({"api_token": "", "zones": []})
+    assert cfg.api_token == "cfat_env_token"
+
+
+def test_api_token_env_precedence_cf_report_over_cloudflare(monkeypatch) -> None:
+    monkeypatch.setenv("CF_REPORT_API_TOKEN", "cfat_primary")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "cfat_fallback")
+    cfg = AppConfig.from_yaml_dict({"zones": []})
+    assert cfg.api_token == "cfat_primary"
+
+
+def test_config_api_token_overrides_env(monkeypatch) -> None:
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "cfat_env_token")
+    cfg = AppConfig.from_yaml_dict({"api_token": "cfat_config_token", "zones": []})
+    assert cfg.api_token == "cfat_config_token"
+
+
+def test_smtp_password_from_env_when_missing(monkeypatch) -> None:
+    monkeypatch.setenv("CF_REPORT_SMTP_PASSWORD", "smtp_env_password")
+    cfg = AppConfig.from_yaml_dict({"zones": [], "email": {"enabled": True, "smtp_host": "x"}})
+    assert cfg.email.smtp_password == "smtp_env_password"
+
+
+def test_config_smtp_password_overrides_env(monkeypatch) -> None:
+    monkeypatch.setenv("CF_REPORT_SMTP_PASSWORD", "smtp_env_password")
+    cfg = AppConfig.from_yaml_dict(
+        {
+            "zones": [],
+            "email": {"enabled": True, "smtp_host": "x", "smtp_password": "smtp_cfg_password"},
+        }
+    )
+    assert cfg.email.smtp_password == "smtp_cfg_password"
+
+
 def test_to_yaml_dict_round_trip_disabled_rules() -> None:
     cfg = AppConfig(executive=ExecutiveConfig(disabled_rules=["cert_expire_30"]))
     back = AppConfig.from_yaml_dict(cfg.to_yaml_dict())

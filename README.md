@@ -193,7 +193,7 @@ cf-report clean --older-than 90
 Trend-oriented approximations. Use for executive posture guidance, not packet-level forensics.
 
 **Can I run this in CI/CD?**
-Yes - works headless. Set `CLOUDFLARE_API_TOKEN` and pass `--config` to a non-secret config file.
+Yes - works headless. Set `CF_REPORT_API_TOKEN` (preferred) and pass `--config` to a non-secret config file.
 
 **What if I have 100+ zones?**
 Works fine. Sync may take a while initially, but caching helps.

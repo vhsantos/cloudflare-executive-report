@@ -248,6 +248,11 @@ class AppConfig:
     def from_yaml_dict(cls, data: dict[str, Any]) -> AppConfig:
         if not isinstance(data, dict):
             raise ValueError("Config root must be a mapping")
+        env_api_token = (os.environ.get("CF_REPORT_API_TOKEN") or "").strip() or (
+            os.environ.get("CLOUDFLARE_API_TOKEN") or ""
+        ).strip()
+        raw_api_token = str(data.get("api_token") or "").strip()
+        api_token = raw_api_token or env_api_token
         zones_raw = data.get("zones") or []
         zones = [ZoneEntry(id=str(z["id"]), name=str(z["name"])) for z in zones_raw]
 
@@ -305,6 +310,7 @@ class AppConfig:
         if not isinstance(email_raw, dict):
             raise ValueError("email must be a mapping")
         email_enabled = bool(email_raw.get("enabled", False))
+        env_smtp_password = (os.environ.get("CF_REPORT_SMTP_PASSWORD") or "").strip()
         smtp_ssl = bool(email_raw.get("smtp_ssl", False))
         raw_starttls = email_raw.get("smtp_starttls")
         if smtp_ssl:
@@ -317,6 +323,8 @@ class AppConfig:
         recipients = [str(x) for x in raw_recipients] if isinstance(raw_recipients, list) else []
         smtp_port_raw = email_raw.get("smtp_port")
         smtp_port = int(smtp_port_raw) if smtp_port_raw is not None else 587
+        raw_smtp_password = str(email_raw.get("smtp_password") or "").strip()
+        smtp_password = raw_smtp_password or env_smtp_password
         raw_subject = email_raw.get("subject")
         email_subject = DEFAULT_EMAIL_SUBJECT_TEMPLATE if raw_subject is None else str(raw_subject)
         raw_body = email_raw.get("body")
@@ -351,7 +359,7 @@ class AppConfig:
             types = []
 
         return cls(
-            api_token=str(data.get("api_token") or ""),
+            api_token=api_token,
             cache_dir=str(data.get("cache_dir") or "~/.cache/cf-report"),
             output_dir=str(data.get("output_dir") or "~/.cf-report"),
             default_zone=str(data.get("default_zone") or ""),
@@ -380,7 +388,7 @@ class AppConfig:
                 smtp_ssl=smtp_ssl,
                 smtp_starttls=smtp_starttls,
                 smtp_user=str(email_raw.get("smtp_user") or ""),
-                smtp_password=str(email_raw.get("smtp_password") or ""),
+                smtp_password=smtp_password,
                 smtp_from=str(email_raw.get("smtp_from") or ""),
                 recipients=recipients,
                 subject=email_subject,

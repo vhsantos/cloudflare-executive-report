@@ -96,6 +96,9 @@ cover:
 ### Root fields
 
 - `api_token` (`str`) - Cloudflare API token.
+- `api_token` can also be provided via environment variables when not set in the config:
+  - `CF_REPORT_API_TOKEN` (preferred)
+  - `CLOUDFLARE_API_TOKEN` (fallback)
 - `cache_dir` (`str`) - local cache root.
 - `output_dir` (`str`) - output root (`outputs/cf_report.json`, history, and default PDFs).
 - `default_zone` (`str`) - used when `--zone` is omitted.
@@ -128,13 +131,21 @@ cover:
 - `smtp_ssl` (`bool`) - implicit TLS mode.
 - `smtp_starttls` (`bool`) - STARTTLS mode.
 - `smtp_user` (`str`) - SMTP username.
-- `smtp_password` (`str`) - SMTP password.
+- `smtp_password` (`str`) - SMTP password (can also be provided via `CF_REPORT_SMTP_PASSWORD` when not set in config).
 - `smtp_from` (`str`) - sender email address.
 - `recipients` (`list[str]`) - recipient list.
 - `subject` (`str`) - supports placeholders like `{date}`.
 - `body` (`str`) - supports placeholders like `{period}` and `{zone_count}`.
 
 Important: `smtp_ssl` and `smtp_starttls` cannot both be `true`.
+
+### Precedence rules (secrets)
+
+For both `api_token` and `email.smtp_password`:
+
+```txt
+config value > environment variable > empty string
+```
 
 ### `portfolio`
 
