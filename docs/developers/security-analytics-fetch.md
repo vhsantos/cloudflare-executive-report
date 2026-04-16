@@ -1,4 +1,3 @@
-
 # Security stream: GraphQL and cache shape
 
 Daily **`security.json`** uses **`httpRequestsAdaptiveGroups`** only (eyeball matrix + mitigating filtered groups). No **`firewallEventsAdaptive`** pagination.

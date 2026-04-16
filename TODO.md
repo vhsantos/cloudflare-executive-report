@@ -1,5 +1,10 @@
 # TODO
 
+## Documentation
+
+- [ ] Add clear instructions how/which/why each token Permission policies are need.
+- [ ] Add instructions how to ran in CI/CD.
+
 ## Executive summary narrative quality
 
 - [ ] Replace hardcoded phrase "reliability stayed healthy" with rule-based wording driven by `status_5xx_rate_pct` (and optionally `status_4xx_rate_pct`).
