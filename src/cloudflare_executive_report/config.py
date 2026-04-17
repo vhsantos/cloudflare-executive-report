@@ -310,7 +310,13 @@ class AppConfig:
         if not isinstance(email_raw, dict):
             raise ValueError("email must be a mapping")
         email_enabled = bool(email_raw.get("enabled", False))
+
+        env_smtp_host = (os.environ.get("CF_REPORT_SMTP_HOST") or "").strip()
+        env_smtp_port = os.environ.get("CF_REPORT_SMTP_PORT")
+        env_smtp_user = (os.environ.get("CF_REPORT_SMTP_USER") or "").strip()
         env_smtp_password = (os.environ.get("CF_REPORT_SMTP_PASSWORD") or "").strip()
+        env_smtp_from = (os.environ.get("CF_REPORT_SMTP_FROM") or "").strip()
+
         smtp_ssl = bool(email_raw.get("smtp_ssl", False))
         raw_starttls = email_raw.get("smtp_starttls")
         if smtp_ssl:
@@ -321,10 +327,14 @@ class AppConfig:
             raise ValueError("email.smtp_ssl and email.smtp_starttls cannot both be true")
         raw_recipients = email_raw.get("recipients")
         recipients = [str(x) for x in raw_recipients] if isinstance(raw_recipients, list) else []
-        smtp_port_raw = email_raw.get("smtp_port")
+
+        smtp_host = str(email_raw.get("smtp_host") or "").strip() or env_smtp_host
+        smtp_port_raw = email_raw.get("smtp_port") or env_smtp_port
         smtp_port = int(smtp_port_raw) if smtp_port_raw is not None else 587
-        raw_smtp_password = str(email_raw.get("smtp_password") or "").strip()
-        smtp_password = raw_smtp_password or env_smtp_password
+        smtp_user = str(email_raw.get("smtp_user") or "").strip() or env_smtp_user
+        smtp_password = str(email_raw.get("smtp_password") or "").strip() or env_smtp_password
+        smtp_from = str(email_raw.get("smtp_from") or "").strip() or env_smtp_from
+
         raw_subject = email_raw.get("subject")
         email_subject = DEFAULT_EMAIL_SUBJECT_TEMPLATE if raw_subject is None else str(raw_subject)
         raw_body = email_raw.get("body")
@@ -383,13 +393,13 @@ class AppConfig:
             ),
             email=EmailConfig(
                 enabled=email_enabled,
-                smtp_host=str(email_raw.get("smtp_host") or ""),
+                smtp_host=smtp_host,
                 smtp_port=smtp_port,
                 smtp_ssl=smtp_ssl,
                 smtp_starttls=smtp_starttls,
-                smtp_user=str(email_raw.get("smtp_user") or ""),
+                smtp_user=smtp_user,
                 smtp_password=smtp_password,
-                smtp_from=str(email_raw.get("smtp_from") or ""),
+                smtp_from=smtp_from,
                 recipients=recipients,
                 subject=email_subject,
                 body=email_body,

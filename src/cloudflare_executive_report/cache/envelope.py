@@ -5,17 +5,14 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from cloudflare_executive_report.common.dates import utc_now_z
 
 log = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
-
-
-def utc_now_z() -> str:
-    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def read_json_file(path: Path) -> dict[str, Any] | None:

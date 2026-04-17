@@ -9,6 +9,7 @@ from cloudflare_executive_report.cf_client import (
     CloudflareAPIError,
     CloudflareAuthError,
     CloudflareClient,
+    CloudflareRateLimitError,
 )
 from cloudflare_executive_report.common.dates import day_bounds_utc, format_ymd, utc_today
 
@@ -125,8 +126,11 @@ class AuditFetcher:
     ) -> tuple[list[dict[str, Any]], list[str], bool]:
         _ = (zone_name, plan_legacy_id)
         t = utc_today()
-        return (
-            [self.fetch(client, zone_id, t, zone_meta=zone_meta)],
-            [],
-            False,
-        )
+        try:
+            return (
+                [self.fetch(client, zone_id, t, zone_meta=zone_meta)],
+                [],
+                False,
+            )
+        except CloudflareRateLimitError:
+            return [], [], True

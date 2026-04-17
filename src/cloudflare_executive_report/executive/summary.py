@@ -17,6 +17,7 @@ from cloudflare_executive_report.common.formatting import (
     format_count_human,
     trim_decimal,
 )
+from cloudflare_executive_report.common.safe_types import as_dict, as_float, as_int
 from cloudflare_executive_report.executive.nist_catalog import build_nist_reference_rows
 from cloudflare_executive_report.executive.phrase_catalog import (
     format_line_with_severity_prefix,
@@ -91,27 +92,9 @@ def build_security_posture_score(rule_out: ExecutiveRuleOutput) -> dict[str, Any
 _DEFENSIVE_ACTIONS = MITIGATING_SECURITY_ACTIONS
 
 
-def _as_dict(v: Any) -> dict[str, Any]:
-    return v if isinstance(v, dict) else {}
-
-
 def _as_str(v: Any, *, default: str = "unavailable") -> str:
     s = str(v).strip() if v is not None else ""
     return s if s else default
-
-
-def _as_int(v: Any) -> int:
-    try:
-        return int(v or 0)
-    except (TypeError, ValueError):
-        return 0
-
-
-def _as_float(v: Any) -> float:
-    try:
-        return float(v or 0.0)
-    except (TypeError, ValueError):
-        return 0.0
 
 
 def _kpi_indicator(
@@ -221,14 +204,14 @@ def _actions_mitigated_from_top_actions(security: dict[str, Any]) -> int:
             continue
         action = str(row.get("action") or "").strip().lower()
         if action in _DEFENSIVE_ACTIONS:
-            total += _as_int(row.get("count"))
+            total += as_int(row.get("count"))
     return total
 
 
 def _threats_mitigated(security: dict[str, Any]) -> int:
     explicit = security.get("mitigated_count")
     if explicit is not None:
-        return _as_int(explicit)
+        return as_int(explicit)
     return _actions_mitigated_from_top_actions(security)
 
 
@@ -247,8 +230,8 @@ def _verdict(
         reasons.append(f"zone_status={zone_status}")
         critical = True
 
-    has_proxied = _as_int(dns_records.get("proxied_records")) > 0
-    has_http_traffic = _as_int(http.get("total_requests")) > 0
+    has_proxied = as_int(dns_records.get("proxied_records")) > 0
+    has_http_traffic = as_int(http.get("total_requests")) > 0
     if has_proxied and not has_http_traffic:
         reasons.append("no_http_traffic")
 
@@ -287,28 +270,28 @@ def build_executive_summary(
     ``disabled_rules`` entries are either bare phrase keys (letters, digits, underscore) for
     exact match, or any other string treated as a regular expression (``re.search`` on key).
     """
-    zh = _as_dict(zone_health)
-    d = _as_dict(dns)
-    h = _as_dict(http)
-    s = _as_dict(security)
-    c = _as_dict(cache)
-    ha = _as_dict(http_adaptive)
-    dr = _as_dict(dns_records)
-    au = _as_dict(audit)
-    ce = _as_dict(certificates)
+    zh = as_dict(zone_health)
+    d = as_dict(dns)
+    h = as_dict(http)
+    s = as_dict(security)
+    c = as_dict(cache)
+    ha = as_dict(http_adaptive)
+    dr = as_dict(dns_records)
+    au = as_dict(audit)
+    ce = as_dict(certificates)
     warn = list(warnings or [])
     as_of = as_of_date if as_of_date is not None else utc_today()
 
     mitigated = _threats_mitigated(s)
-    sampled_requests = _as_int(s.get("http_requests_sampled"))
-    not_mitigated = _as_int(s.get("not_mitigated_sampled"))
+    sampled_requests = as_int(s.get("http_requests_sampled"))
+    not_mitigated = as_int(s.get("not_mitigated_sampled"))
     verdict, reasons = _verdict(zh, warn, h, dr)
 
     ssl_mode = _as_str(zh.get("ssl_mode"))
     always_https = _as_str(zh.get("always_https"))
     dnssec_status = _as_str(zh.get("dnssec_status"))
-    total_requests = _as_int(h.get("total_requests"))
-    encrypted_requests = _as_int(h.get("encrypted_requests"))
+    total_requests = as_int(h.get("total_requests"))
+    encrypted_requests = as_int(h.get("encrypted_requests"))
     enc_gap = max(0, total_requests - encrypted_requests)
     enc_gap_pct = (100.0 * enc_gap / total_requests) if total_requests > 0 else 0.0
 
@@ -320,7 +303,7 @@ def build_executive_summary(
     gate = evaluate_comparison_gate(
         current_zone_id=zone_id,
         previous_report=previous_report,
-        current_period=_as_dict(current_period),
+        current_period=as_dict(current_period),
         message_filter=msg_filt,
     )
     current_zone_payload = {
@@ -336,7 +319,7 @@ def build_executive_summary(
     }
     comparison_baseline = None
     if gate.allowed:
-        prev_period = _as_dict((previous_report or {}).get("report_period"))
+        prev_period = as_dict((previous_report or {}).get("report_period"))
         ps = str(prev_period.get("start") or "").strip()
         pe = str(prev_period.get("end") or "").strip()
         if ps and pe:
@@ -393,107 +376,107 @@ def build_executive_summary(
     takeaways = [item["display"] for bucket in categorized_takeaways.values() for item in bucket]
     actions = [f"[{line.check_id}] {line.body}" for line in rule_out.actions]
     nist_reference = build_nist_reference_rows(augmented_takeaways + list(rule_out.actions))
-    prev_http = _as_dict(previous_zone.get("http")) if previous_zone else {}
-    prev_dns = _as_dict(previous_zone.get("dns")) if previous_zone else {}
-    prev_ha = _as_dict(previous_zone.get("http_adaptive")) if previous_zone else {}
-    prev_sec = _as_dict(previous_zone.get("security")) if previous_zone else {}
-    prev_dr = _as_dict(previous_zone.get("dns_records")) if previous_zone else {}
+    prev_http = as_dict(previous_zone.get("http")) if previous_zone else {}
+    prev_dns = as_dict(previous_zone.get("dns")) if previous_zone else {}
+    prev_ha = as_dict(previous_zone.get("http_adaptive")) if previous_zone else {}
+    prev_sec = as_dict(previous_zone.get("security")) if previous_zone else {}
+    prev_dr = as_dict(previous_zone.get("dns_records")) if previous_zone else {}
     prev_requests = (
-        _as_float(prev_http.get("total_requests")) if previous_zone and gate.allowed else None
+        as_float(prev_http.get("total_requests")) if previous_zone and gate.allowed else None
     )
     prev_cache_hit = (
-        _as_float(prev_http.get("cache_hit_ratio")) if previous_zone and gate.allowed else None
+        as_float(prev_http.get("cache_hit_ratio")) if previous_zone and gate.allowed else None
     )
     prev_4xx = (
-        _as_float(prev_ha.get("status_4xx_rate_pct")) if previous_zone and gate.allowed else None
+        as_float(prev_ha.get("status_4xx_rate_pct")) if previous_zone and gate.allowed else None
     )
     prev_origin_ms = (
-        _as_float(prev_ha.get("origin_response_duration_avg_ms"))
+        as_float(prev_ha.get("origin_response_duration_avg_ms"))
         if previous_zone and gate.allowed
         else None
     )
-    prev_qps = _as_float(prev_dns.get("average_qps")) if previous_zone and gate.allowed else None
+    prev_qps = as_float(prev_dns.get("average_qps")) if previous_zone and gate.allowed else None
     prev_encrypted_requests = (
-        _as_float(prev_http.get("encrypted_requests")) if previous_zone and gate.allowed else None
+        as_float(prev_http.get("encrypted_requests")) if previous_zone and gate.allowed else None
     )
     prev_mitigated = (
-        _as_float(prev_sec.get("mitigated_count")) if previous_zone and gate.allowed else None
+        as_float(prev_sec.get("mitigated_count")) if previous_zone and gate.allowed else None
     )
     prev_mitigation_rate = (
-        _as_float(prev_sec.get("mitigation_rate_pct")) if previous_zone and gate.allowed else None
+        as_float(prev_sec.get("mitigation_rate_pct")) if previous_zone and gate.allowed else None
     )
     prev_5xx = (
-        _as_float(prev_ha.get("status_5xx_rate_pct")) if previous_zone and gate.allowed else None
+        as_float(prev_ha.get("status_5xx_rate_pct")) if previous_zone and gate.allowed else None
     )
     prev_dns_queries = (
-        _as_float(prev_dns.get("total_queries")) if previous_zone and gate.allowed else None
+        as_float(prev_dns.get("total_queries")) if previous_zone and gate.allowed else None
     )
     prev_proxied = (
-        _as_float(prev_dr.get("proxied_records")) if previous_zone and gate.allowed else None
+        as_float(prev_dr.get("proxied_records")) if previous_zone and gate.allowed else None
     )
     prev_dns_only = (
-        _as_float(prev_dr.get("dns_only_records")) if previous_zone and gate.allowed else None
+        as_float(prev_dr.get("dns_only_records")) if previous_zone and gate.allowed else None
     )
-    prev_p95 = _as_float(prev_ha.get("latency_p95_ms")) if previous_zone and gate.allowed else None
+    prev_p95 = as_float(prev_ha.get("latency_p95_ms")) if previous_zone and gate.allowed else None
     kpi_indicators = {
         "traffic.total_requests": _kpi_indicator_pct_with_baseline(
-            current=_as_float(total_requests), previous=prev_requests
+            current=as_float(total_requests), previous=prev_requests
         ),
         "traffic.encrypted_requests": _kpi_indicator_pct_with_baseline(
-            current=_as_float(encrypted_requests), previous=prev_encrypted_requests
+            current=as_float(encrypted_requests), previous=prev_encrypted_requests
         ),
         "traffic.cache_hit_ratio": _kpi_indicator(
-            current=_as_float(h.get("cache_hit_ratio")), previous=prev_cache_hit, mode="pp"
+            current=as_float(h.get("cache_hit_ratio")), previous=prev_cache_hit, mode="pp"
         ),
         "security.mitigated_events": _kpi_indicator_count_delta(
-            current=_as_float(mitigated),
+            current=as_float(mitigated),
             previous=prev_mitigated,
             neutral=True,
         ),
         "security.mitigation_rate_pct": _kpi_indicator_neutral(
-            current=_as_float(mitigation_rate),
+            current=as_float(mitigation_rate),
             previous=prev_mitigation_rate,
             mode="pp",
         ),
         "traffic.status_4xx_rate_pct": _kpi_indicator(
-            current=_as_float(ha.get("status_4xx_rate_pct")),
+            current=as_float(ha.get("status_4xx_rate_pct")),
             previous=prev_4xx,
             mode="pp",
             better_when_lower=True,
         ),
         "traffic.status_5xx_rate_pct": _kpi_indicator(
-            current=_as_float(ha.get("status_5xx_rate_pct")),
+            current=as_float(ha.get("status_5xx_rate_pct")),
             previous=prev_5xx,
             mode="pp",
             better_when_lower=True,
         ),
         "traffic.origin_response_duration_avg_ms": _kpi_indicator(
-            current=_as_float(ha.get("origin_response_duration_avg_ms")),
+            current=as_float(ha.get("origin_response_duration_avg_ms")),
             previous=prev_origin_ms,
             mode="ms",
             better_when_lower=True,
         ),
         "traffic.latency_p95_ms": _kpi_indicator(
-            current=_as_float(ha.get("latency_p95_ms")),
+            current=as_float(ha.get("latency_p95_ms")),
             previous=prev_p95,
             mode="ms",
             better_when_lower=True,
         ),
         "dns.total_queries": _kpi_indicator_neutral(
-            current=_as_float(d.get("total_queries")),
+            current=as_float(d.get("total_queries")),
             previous=prev_dns_queries,
             mode="pct",
         ),
         "dns.average_qps": _kpi_indicator_neutral(
-            current=_as_float(d.get("average_qps")), previous=prev_qps, mode="num"
+            current=as_float(d.get("average_qps")), previous=prev_qps, mode="num"
         ),
         "dns_records.proxied_records": _kpi_indicator_count_delta(
-            current=_as_float(dr.get("proxied_records")),
+            current=as_float(dr.get("proxied_records")),
             previous=prev_proxied,
             min_baseline=3.0,
         ),
         "dns_records.dns_only_records": _kpi_indicator_count_delta(
-            current=_as_float(dr.get("dns_only_records")),
+            current=as_float(dr.get("dns_only_records")),
             previous=prev_dns_only,
             better_when_lower=True,
             min_baseline=3.0,
@@ -553,37 +536,37 @@ def build_executive_summary(
                 "mitigation_rate_pct": mitigation_rate,
             },
             "dns": {
-                "total_queries": _as_int(d.get("total_queries")),
-                "total_queries_human": format_count_human(_as_int(d.get("total_queries"))),
+                "total_queries": as_int(d.get("total_queries")),
+                "total_queries_human": format_count_human(as_int(d.get("total_queries"))),
                 "average_qps": float(d.get("average_qps") or 0.0),
             },
             "cache": {
                 "cache_hit_ratio": float(
                     c.get("cache_hit_ratio") or h.get("cache_hit_ratio") or 0.0
                 ),
-                "served_cf_count": _as_int(c.get("served_cf_count")),
-                "served_origin_count": _as_int(c.get("served_origin_count")),
+                "served_cf_count": as_int(c.get("served_cf_count")),
+                "served_origin_count": as_int(c.get("served_origin_count")),
             },
             "dns_records": {
                 "unavailable": bool(dr.get("unavailable") is True),
-                "total_records": _as_int(dr.get("total_records")),
-                "proxied_records": _as_int(dr.get("proxied_records")),
-                "dns_only_records": _as_int(dr.get("dns_only_records")),
-                "apex_unproxied_a_aaaa": _as_int(dr.get("apex_unproxied_a_aaaa")),
+                "total_records": as_int(dr.get("total_records")),
+                "proxied_records": as_int(dr.get("proxied_records")),
+                "dns_only_records": as_int(dr.get("dns_only_records")),
+                "apex_unproxied_a_aaaa": as_int(dr.get("apex_unproxied_a_aaaa")),
                 "apex_protection_status": (
                     "unavailable"
                     if dr.get("unavailable") is True
-                    else ("exposed" if _as_int(dr.get("apex_unproxied_a_aaaa")) > 0 else "proxied")
+                    else ("exposed" if as_int(dr.get("apex_unproxied_a_aaaa")) > 0 else "proxied")
                 ),
             },
             "audit": {
                 "unavailable": bool(au.get("unavailable") is True),
-                "total_events": _as_int(au.get("total_events")),
+                "total_events": as_int(au.get("total_events")),
             },
             "certificates": {
                 "unavailable": bool(ce.get("unavailable") is True),
-                "total_certificate_packs": _as_int(ce.get("total_certificate_packs")),
-                "expiring_in_30_days": _as_int(ce.get("expiring_in_30_days")),
+                "total_certificate_packs": as_int(ce.get("total_certificate_packs")),
+                "expiring_in_30_days": as_int(ce.get("expiring_in_30_days")),
                 "soonest_expiry": ce.get("soonest_expiry"),
                 "cert_expires_human": _format_cert_expiry_human(
                     ce.get("soonest_expiry"), as_of=as_of

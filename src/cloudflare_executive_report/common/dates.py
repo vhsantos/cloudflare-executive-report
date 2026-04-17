@@ -43,7 +43,7 @@ def day_start_iso_z(d: date) -> str:
     return f"{format_ymd(d)}T00:00:00Z"
 
 
-def utc_now_iso_z() -> str:
+def utc_now_z() -> str:
     """Return current UTC timestamp formatted as ISO 8601 with Z suffix."""
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 

@@ -13,7 +13,7 @@ from cloudflare_executive_report.cf_client import (
 from cloudflare_executive_report.common.dates import (
     day_bounds_utc,
     format_ymd,
-    utc_now_iso_z,
+    utc_now_z,
     utc_today,
 )
 from cloudflare_executive_report.common.retention import date_outside_http_retention
@@ -293,7 +293,7 @@ class HttpAdaptiveFetcher:
             return [], [], False
         try:
             payload = fetch_http_adaptive_for_bounds(
-                client, zone_id, day_bounds_utc(t)[0], utc_now_iso_z()
+                client, zone_id, day_bounds_utc(t)[0], utc_now_z()
             )
             payload["date"] = format_ymd(t)
             return (

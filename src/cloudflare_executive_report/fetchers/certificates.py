@@ -9,6 +9,7 @@ from cloudflare_executive_report.cf_client import (
     CloudflareAPIError,
     CloudflareAuthError,
     CloudflareClient,
+    CloudflareRateLimitError,
 )
 from cloudflare_executive_report.common.dates import format_ymd, utc_today
 
@@ -97,4 +98,7 @@ class CertificatesFetcher:
     ) -> tuple[list[dict[str, Any]], list[str], bool]:
         _ = (zone_name, plan_legacy_id, zone_meta)
         t = utc_today()
-        return [fetch_certificates_snapshot(client, zone_id, t)], [], False
+        try:
+            return [fetch_certificates_snapshot(client, zone_id, t)], [], False
+        except CloudflareRateLimitError:
+            return [], [], True

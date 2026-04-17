@@ -37,6 +37,7 @@ from cloudflare_executive_report.common.dates import (
     utc_today,
     utc_yesterday,
 )
+from cloudflare_executive_report.common.formatting import progress_message
 from cloudflare_executive_report.common.logging_config import effective_debug_enabled
 from cloudflare_executive_report.common.period_resolver import (
     build_data_fingerprint,
@@ -60,11 +61,6 @@ from cloudflare_executive_report.sync.day_processor import process_day
 from cloudflare_executive_report.sync.options import SyncMode, SyncOptions
 
 log = logging.getLogger(__name__)
-
-
-def _progress(msg: str, *, quiet: bool) -> None:
-    if not quiet:
-        print(msg, flush=True)
 
 
 def _dates_incremental(idx_latest: str | None, y: date) -> list[date]:
@@ -193,7 +189,7 @@ def _run_sync_locked(
                 return exits.GENERAL_ERROR
 
         for z in zones:
-            _progress(f"Zone {z.name} ({z.id})", quiet=opts.quiet)
+            progress_message(f"Zone {z.name} ({z.id})", quiet=opts.quiet)
             zmeta = zmeta_by_zone_id[z.id]
 
             plan = (zmeta.get("plan") or {}).get("legacy_id")

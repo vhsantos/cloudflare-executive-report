@@ -14,7 +14,7 @@ from cloudflare_executive_report.common.dates import (
     day_bounds_utc,
     day_start_iso_z,
     format_ymd,
-    utc_now_iso_z,
+    utc_now_z,
     utc_today,
 )
 from cloudflare_executive_report.common.retention import date_outside_http_retention
@@ -170,7 +170,7 @@ class CacheFetcher:
                 client,
                 zone_id,
                 day_start_iso_z(t),
-                utc_now_iso_z(),
+                utc_now_z(),
             )
             payload["date"] = format_ymd(t)
             return (

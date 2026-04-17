@@ -13,6 +13,7 @@ from cloudflare_executive_report.common.constants import (
     RELIABILITY_5XX_HEALTHY_MAX,
     RELIABILITY_5XX_WARNING_MAX,
 )
+from cloudflare_executive_report.common.safe_types import as_dict, as_float, as_int
 from cloudflare_executive_report.executive.phrase_catalog import get_phrase
 from cloudflare_executive_report.zone_health import SKIPPED, UNAVAILABLE
 
@@ -49,24 +50,6 @@ SECT_ACTIONS = "actions"
 TX_ORDER: tuple[str, ...] = (SECT_WINS, SECT_RISKS, SECT_SIGNALS, SECT_DELTAS)
 
 TakeawaySection = Literal["wins", "risks", "signals", "deltas"]
-
-
-def _as_dict(v: Any) -> dict[str, Any]:
-    return v if isinstance(v, dict) else {}
-
-
-def _as_int(v: Any) -> int:
-    try:
-        return int(v or 0)
-    except (TypeError, ValueError):
-        return 0
-
-
-def _as_float(v: Any) -> float:
-    try:
-        return float(v or 0.0)
-    except (TypeError, ValueError):
-        return 0.0
 
 
 def _period_days(period: dict[str, Any]) -> int:
@@ -239,7 +222,7 @@ def evaluate_comparison_gate(
     if not previous_report:
         return _comparison_gate_blocked("comparison_first_report", filt)
 
-    previous_period = _as_dict(previous_report.get("report_period"))
+    previous_period = as_dict(previous_report.get("report_period"))
     current_days = _period_days(current_period)
     previous_days = _period_days(previous_period)
     previous_bounds = _period_bounds(previous_period)
@@ -261,7 +244,7 @@ def evaluate_comparison_gate(
         return _comparison_gate_blocked("comparison_first_report", filt)
 
     needed = ("http", "security", "dns")
-    if any(_as_dict(prev_zone).get(k) in (None, {}) for k in needed):
+    if any(as_dict(prev_zone).get(k) in (None, {}) for k in needed):
         return _comparison_gate_blocked("comparison_missing_streams", filt)
 
     return ComparisonGate(allowed=True, blocked_takeaway=None)
@@ -307,23 +290,23 @@ def build_executive_rule_output(
         if line:
             actions.append(line)
 
-    zh = _as_dict(current_zone.get("zone_health"))
-    http = _as_dict(current_zone.get("http"))
-    sec = _as_dict(current_zone.get("security"))
-    cache = _as_dict(current_zone.get("cache"))
-    ha = _as_dict(current_zone.get("http_adaptive"))
-    dr = _as_dict(current_zone.get("dns_records"))
-    au = _as_dict(current_zone.get("audit"))
-    ce = _as_dict(current_zone.get("certificates"))
+    zh = as_dict(current_zone.get("zone_health"))
+    http = as_dict(current_zone.get("http"))
+    sec = as_dict(current_zone.get("security"))
+    cache = as_dict(current_zone.get("cache"))
+    ha = as_dict(current_zone.get("http_adaptive"))
+    dr = as_dict(current_zone.get("dns_records"))
+    au = as_dict(current_zone.get("audit"))
+    ce = as_dict(current_zone.get("certificates"))
 
-    apex_unproxied = _as_int(dr.get("apex_unproxied_a_aaaa")) > 0
+    apex_unproxied = as_int(dr.get("apex_unproxied_a_aaaa")) > 0
     ssl_mode = str(zh.get("ssl_mode") or "").strip().lower()
     security_level = str(zh.get("security_level") or "").strip().lower()
     dnssec = str(zh.get("dnssec_status") or "").strip().lower()
     ddos = str(zh.get("ddos_protection") or "").strip().lower()
-    waf_on = _as_int(zh.get("security_rules_active")) > 0
-    exp_days = _as_int(ce.get("expiring_in_30_days"))
-    cert_packs = _as_int(ce.get("total_certificate_packs"))
+    waf_on = as_int(zh.get("security_rules_active")) > 0
+    exp_days = as_int(ce.get("expiring_in_30_days"))
+    cert_packs = as_int(ce.get("total_certificate_packs"))
 
     if apex_unproxied:
         add_takeaway(SECT_RISKS, "warning", "apex_proxy", state="risk")
@@ -406,12 +389,12 @@ def build_executive_rule_output(
     elif 14 < exp_days <= 30:
         add_takeaway(SECT_RISKS, "warning", "cert_expire_30", state="risk", days=exp_days)
 
-    err_5xx = _as_float(ha.get("status_5xx_rate_pct"))
-    latency = _as_float(ha.get("origin_response_duration_avg_ms"))
-    cache_hit = _as_float(cache.get("cache_hit_ratio") or http.get("cache_hit_ratio"))
-    bandwidth_gb = _as_int(http.get("total_bandwidth_bytes")) / (1024.0**3)
-    mitigation = _as_float(sec.get("mitigation_rate_pct"))
-    audits = _as_int(au.get("total_events"))
+    err_5xx = as_float(ha.get("status_5xx_rate_pct"))
+    latency = as_float(ha.get("origin_response_duration_avg_ms"))
+    cache_hit = as_float(cache.get("cache_hit_ratio") or http.get("cache_hit_ratio"))
+    bandwidth_gb = as_int(http.get("total_bandwidth_bytes")) / (1024.0**3)
+    mitigation = as_float(sec.get("mitigation_rate_pct"))
+    audits = as_int(au.get("total_events"))
     if err_5xx > RELIABILITY_5XX_WARNING_MAX:
         e5 = round(err_5xx, 2)
         add_takeaway(
@@ -457,8 +440,8 @@ def build_executive_rule_output(
         add_takeaway(SECT_SIGNALS, "warning", "audit_activity", state="observation", events=audits)
 
     always_https = str(zh.get("always_https") or "").strip().lower()
-    total_requests = _as_int(http.get("total_requests"))
-    encrypted_requests = _as_int(http.get("encrypted_requests"))
+    total_requests = as_int(http.get("total_requests"))
+    encrypted_requests = as_int(http.get("encrypted_requests"))
     enc_gap = max(0, total_requests - encrypted_requests)
     enc_gap_pct = (100.0 * enc_gap / total_requests) if total_requests > 0 else 0.0
     if always_https != "on":
@@ -489,18 +472,18 @@ def build_executive_rule_output(
         add_action("info", "audit_activity", state="action")
 
     if previous_zone and comparison_allowed:
-        p_http = _as_dict(previous_zone.get("http"))
-        p_sec = _as_dict(previous_zone.get("security"))
-        p_ha = _as_dict(previous_zone.get("http_adaptive"))
-        p_dr = _as_dict(previous_zone.get("dns_records"))
-        p_zh = _as_dict(previous_zone.get("zone_health"))
+        p_http = as_dict(previous_zone.get("http"))
+        p_sec = as_dict(previous_zone.get("security"))
+        p_ha = as_dict(previous_zone.get("http_adaptive"))
+        p_dr = as_dict(previous_zone.get("dns_records"))
+        p_zh = as_dict(previous_zone.get("zone_health"))
         pct_traffic = _percent_delta(
-            float(_as_int(http.get("total_requests"))),
-            float(_as_int(p_http.get("total_requests"))),
+            float(as_int(http.get("total_requests"))),
+            float(as_int(p_http.get("total_requests"))),
         )
         pct_threats = _percent_delta(
-            float(_as_int(sec.get("mitigated_count"))),
-            float(_as_int(p_sec.get("mitigated_count"))),
+            float(as_int(sec.get("mitigated_count"))),
+            float(as_int(p_sec.get("mitigated_count"))),
         )
         if abs(pct_traffic) > 20:
             if pct_traffic > 0:
@@ -520,7 +503,7 @@ def build_executive_rule_output(
                 add_takeaway(
                     SECT_DELTAS, "warning", "threats_vs_traffic_up", state="comparison", pct=pt
                 )
-        latency_delta = _as_float(ha.get("origin_response_duration_avg_ms")) - _as_float(
+        latency_delta = as_float(ha.get("origin_response_duration_avg_ms")) - as_float(
             p_ha.get("origin_response_duration_avg_ms")
         )
         if latency_delta > 100:
@@ -530,14 +513,14 @@ def build_executive_rule_output(
             ms_dn = abs(int(round(latency_delta)))
             add_takeaway(SECT_WINS, "positive", "latency_delta", state="win", ms=ms_dn)
         cache_delta = _pp_delta(
-            _as_float(cache.get("cache_hit_ratio") or http.get("cache_hit_ratio")),
-            _as_float(p_http.get("cache_hit_ratio")),
+            as_float(cache.get("cache_hit_ratio") or http.get("cache_hit_ratio")),
+            as_float(p_http.get("cache_hit_ratio")),
         )
         if cache_delta < -15:
             pp_dn = abs(int(round(cache_delta)))
             add_takeaway(SECT_DELTAS, "warning", "cache_efficiency", state="comparison", pp=pp_dn)
-        p_apex = _as_int(p_dr.get("apex_unproxied_a_aaaa"))
-        c_apex = _as_int(dr.get("apex_unproxied_a_aaaa"))
+        p_apex = as_int(p_dr.get("apex_unproxied_a_aaaa"))
+        c_apex = as_int(dr.get("apex_unproxied_a_aaaa"))
         if p_apex == 0 and c_apex > 0:
             add_takeaway(
                 SECT_DELTAS,
