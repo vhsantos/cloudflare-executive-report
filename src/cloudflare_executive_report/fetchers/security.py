@@ -10,6 +10,7 @@ from cloudflare_executive_report.cf_client import (
     CloudflareClient,
     CloudflareRateLimitError,
 )
+from cloudflare_executive_report.common.constants import MITIGATING_SECURITY_ACTIONS
 from cloudflare_executive_report.common.dates import (
     day_bounds_utc,
     day_start_iso_z,
@@ -29,9 +30,7 @@ from cloudflare_executive_report.fetchers.graphql_common import (
 
 # Matrix fold: only these ``securityAction`` values count as mitigated
 # (match ``securityAction_in`` below).
-EYEBALL_MITIGATING_SECURITY_ACTIONS = frozenset(
-    {"block", "challenge", "js_challenge", "managed_challenge"}
-)
+EYEBALL_MITIGATING_SECURITY_ACTIONS = MITIGATING_SECURITY_ACTIONS
 # Pass traffic: ``cacheStatus`` values treated like Security Analytics "Served by origin"
 # (dynamic / cache miss / cache bypass path). All other pass rows count as "Served by Cloudflare"
 # (edge-handled: cached, none, redirects-as-edge, etc.). See Cloudflare Traffic analysis docs.

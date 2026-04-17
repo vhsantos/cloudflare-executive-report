@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -21,8 +22,14 @@ def load_report_json(path: Path) -> dict[str, Any] | None:
 
 
 def save_report_json(path: Path, data: dict[str, Any], *, quiet: bool = False) -> None:
-    """Write report dict to path as UTF-8 JSON with trailing newline."""
+    """Write report dict to path atomically (temp file + fsync + rename)."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    with tmp.open("w", encoding="utf-8") as f:
+        f.write(text)
+        f.flush()
+        os.fsync(f.fileno())
+    tmp.replace(path)
     if not quiet:
         print(f"Wrote {path}", flush=True)

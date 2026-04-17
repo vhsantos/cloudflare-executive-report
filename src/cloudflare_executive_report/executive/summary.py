@@ -7,6 +7,7 @@ from datetime import date
 from typing import Any
 
 from cloudflare_executive_report.common.constants import (
+    MITIGATING_SECURITY_ACTIONS,
     SECURITY_POSTURE_REFERENCE_RISK_WEIGHT,
     VERDICT_WARN_THRESHOLD,
 )
@@ -87,15 +88,7 @@ def build_security_posture_score(rule_out: ExecutiveRuleOutput) -> dict[str, Any
     }
 
 
-_DEFENSIVE_ACTIONS = frozenset(
-    {
-        "block",
-        "managed_challenge",
-        "jschallenge",
-        "interactive_challenge",
-        "challenge",
-    }
-)
+_DEFENSIVE_ACTIONS = MITIGATING_SECURITY_ACTIONS
 
 
 def _as_dict(v: Any) -> dict[str, Any]:

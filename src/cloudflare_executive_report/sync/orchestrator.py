@@ -355,6 +355,11 @@ def run_clean(
     scope_history: bool,
     quiet: bool,
 ) -> int:
+    """Remove cached data and/or report history files."""
+    if not scope_cache and not scope_history:
+        log.error("Specify cleanup scope: --cache, --history, or --all")
+        return exits.INVALID_PARAMS
+
     cache_root = cfg.cache_path()
     history_root = cfg.report_history_dir()
     try:
@@ -376,58 +381,55 @@ def run_clean(
                         print(f"Cleared history under {history_root}", flush=True)
                 return exits.SUCCESS
 
-            if older_than is not None:
-                cutoff = utc_today() - timedelta(days=older_than)
-                removed_cache = 0
-                removed_history = 0
-                if scope_cache:
-                    for zone_dir in cache_root.iterdir():
-                        if not zone_dir.is_dir() or zone_dir.name.startswith("."):
+            assert older_than is not None
+            cutoff = utc_today() - timedelta(days=older_than)
+            removed_cache = 0
+            removed_history = 0
+            if scope_cache:
+                for zone_dir in cache_root.iterdir():
+                    if not zone_dir.is_dir() or zone_dir.name.startswith("."):
+                        continue
+                    for day_dir in zone_dir.iterdir():
+                        if not day_dir.is_dir():
                             continue
-                        for day_dir in zone_dir.iterdir():
-                            if not day_dir.is_dir():
-                                continue
-                            if day_dir.name.startswith("_"):
-                                continue
-                            try:
-                                d = parse_ymd(day_dir.name)
-                            except ValueError:
-                                continue
-                            if d < cutoff:
-                                shutil.rmtree(day_dir)
-                                removed_cache += 1
-                if scope_history and history_root.exists():
-                    for report_file in history_root.glob("cf_report_*.json"):
-                        stem = report_file.stem
-                        ds = stem.replace("cf_report_", "", 1)
-                        if "_" in ds:
-                            ds = ds.split("_", 1)[0]
+                        if day_dir.name.startswith("_"):
+                            continue
                         try:
-                            d = parse_ymd(ds)
+                            d = parse_ymd(day_dir.name)
                         except ValueError:
                             continue
                         if d < cutoff:
-                            report_file.unlink(missing_ok=True)
-                            removed_history += 1
-                if not quiet:
-                    if scope_cache:
-                        print(
-                            "Removed "
-                            f"{removed_cache} cache day directories "
-                            f"older than {older_than} days",
-                            flush=True,
-                        )
-                    if scope_history:
-                        print(
-                            "Removed "
-                            f"{removed_history} history report files "
-                            f"older than {older_than} days",
-                            flush=True,
-                        )
-                return exits.SUCCESS
+                            shutil.rmtree(day_dir)
+                            removed_cache += 1
+            if scope_history and history_root.exists():
+                for report_file in history_root.glob("cf_report_*.json"):
+                    stem = report_file.stem
+                    ds = stem.replace("cf_report_", "", 1)
+                    if "_" in ds:
+                        ds = ds.split("_", 1)[0]
+                    try:
+                        d = parse_ymd(ds)
+                    except ValueError:
+                        continue
+                    if d < cutoff:
+                        report_file.unlink(missing_ok=True)
+                        removed_history += 1
+            if not quiet:
+                if scope_cache:
+                    print(
+                        "Removed "
+                        f"{removed_cache} cache day directories "
+                        f"older than {older_than} days",
+                        flush=True,
+                    )
+                if scope_history:
+                    print(
+                        "Removed "
+                        f"{removed_history} history report files "
+                        f"older than {older_than} days",
+                        flush=True,
+                    )
+            return exits.SUCCESS
     except CacheLockTimeout as e:
         log.error("%s", e)
         return exits.CACHE_LOCK_TIMEOUT
-
-    log.error("Specify cleanup scope: --cache, --history, or --all")
-    return exits.INVALID_PARAMS

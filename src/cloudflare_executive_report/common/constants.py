@@ -85,3 +85,22 @@ HSTS_RECOMMENDED_MAX_AGE_SECONDS: int = 31536000
 
 RELIABILITY_5XX_HEALTHY_MAX: float = 0.5
 RELIABILITY_5XX_WARNING_MAX: float = 5.0
+
+
+# ============================================================================
+# SECURITY ACTIONS (shared between fetcher and executive summary)
+# ============================================================================
+
+# Canonical set of Cloudflare security actions that count as "mitigated" traffic.
+# Used by the security fetcher (eyeball matrix) and executive summary (threat count).
+# ``js_challenge`` is the GraphQL API name; ``jschallenge`` is the legacy alias.
+MITIGATING_SECURITY_ACTIONS: frozenset[str] = frozenset(
+    {
+        "block",
+        "challenge",
+        "js_challenge",
+        "jschallenge",
+        "managed_challenge",
+        "interactive_challenge",
+    }
+)
