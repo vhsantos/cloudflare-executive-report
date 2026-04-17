@@ -348,6 +348,12 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         },
         "action": {"text": "Review audit log - check for unauthorized changes."},
     },
+    "origin_errors_high": {
+        "id": "COR-006",
+        "service": "Reliability",
+        "nist": ["SI-4"],
+        "observation": {"text": "5xx error rate is {err_pct}% - investigate immediately."},
+    },
 }
 
 PREFIXES: dict[str, str] = {

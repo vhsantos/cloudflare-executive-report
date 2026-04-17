@@ -11,13 +11,13 @@ The executive summary generates security posture takeaways using a state-based p
 
 ## Phrase States (5 Types)
 
-| State         | Purpose                         | Affects Score? | Section in Report |
-| ------------- | ------------------------------- | -------------- | ----------------- |
-| `risk`        | Something bad that needs fixing | ✅ Yes         | `risks`           |
-| `win`         | Something that improved         | ❌ No          | `wins`            |
-| `action`      | Recommended next step           | ❌ No          | `actions`         |
-| `comparison`  | Change vs previous period       | ❌ No          | `deltas`          |
-| `observation` | Neutral fact, not good or bad   | ❌ No          | `signals`         |
+| State         | Meaning                               | Affects Score? | Section in Report |
+| ------------- | ------------------------------------- | -------------- | ----------------- |
+| `risk`        | Negative finding that should be fixed | ✅ Yes         | `risks`           |
+| `win`         | Positive improvement                  | ❌ No          | `wins`            |
+| `action`      | Recommended next step                 | ❌ No          | `actions`         |
+| `comparison`  | Period-over-period delta              | ❌ No          | `deltas`          |
+| `observation` | Neutral context line, not good or bad | ❌ No          | `signals`         |
 
 ---
 
@@ -59,7 +59,7 @@ The executive summary generates security posture takeaways using a state-based p
 
 ### Formula
 
-```math
+```text
 score = max(0, 100 - (total_risk_weight / REFERENCE_WEIGHT) × 100)
 ```
 
@@ -94,7 +94,7 @@ Where:
 ### Important Rules
 
 1. **Only `risk` lines in `SECT_RISKS` affect the score** - `win` lines are always ignored for scoring
-2. **`action`, `comparison`, `observation` lines never affect score** - Their weight is always 0
+2. **`win`, `action`, `comparison`, `observation` lines never affect score** - Their weight is always 0
 3. **Weight must be between 1 and 10** for `risk` state only
 4. **Reference weight 60** means 60 total risk points = score 0
 

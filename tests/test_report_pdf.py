@@ -273,3 +273,172 @@ def test_write_report_pdf_detailed_profile_renders_security_stream(
     out = tmp_path / "detailed_profile.pdf"
     write_report_pdf(out, cfg, spec)
     assert touched == ["security"]
+
+
+@pytest.mark.skipif(not FIXTURE_CACHE.is_dir(), reason="sample cache fixtures missing")
+def test_write_report_pdf_uses_snapshot_executive_summary_without_recompute(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = AppConfig(
+        api_token="x",
+        cache_dir=str(FIXTURE_CACHE.resolve()),
+        zones=[ZoneEntry(id=ZONE_ID, name="example.com")],
+        pdf=PdfConfig(profile="executive"),
+    )
+    spec = ReportSpec(
+        zone_ids=[ZONE_ID],
+        start="2026-04-01",
+        end="2026-04-01",
+        streams=("dns",),
+        top=5,
+    )
+
+    def _boom(*args: Any, **kwargs: Any) -> None:  # pragma: no cover
+        raise AssertionError("build_executive_summary should not run with snapshot data")
+
+    monkeypatch.setattr(
+        "cloudflare_executive_report.executive.summary.build_executive_summary",
+        _boom,
+    )
+
+    report_snapshot: dict[str, Any] = {
+        "zones": [
+            {
+                "zone_id": ZONE_ID,
+                "zone_name": "example.com",
+                "zone_health": {},
+                "executive_summary": {
+                    "score": 95,
+                    "verdict": "Healthy",
+                    "status": "healthy",
+                    "takeaways": ["Snapshot takeaway"],
+                    "actions": ["Snapshot action"],
+                    "metrics": {},
+                },
+            }
+        ]
+    }
+
+    out = tmp_path / "snapshot_exec.pdf"
+    write_report_pdf(
+        out,
+        cfg,
+        spec,
+        report_snapshot=report_snapshot,
+        allow_live_health_fetch=False,
+    )
+    assert out.is_file()
+    assert out.stat().st_size > 1000
+
+
+@pytest.mark.skipif(not FIXTURE_CACHE.is_dir(), reason="sample cache fixtures missing")
+def test_write_report_pdf_uses_snapshot_summary_without_zone_health_fetch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = AppConfig(
+        api_token="x",
+        cache_dir=str(FIXTURE_CACHE.resolve()),
+        zones=[ZoneEntry(id=ZONE_ID, name="example.com")],
+        pdf=PdfConfig(profile="executive"),
+    )
+    spec = ReportSpec(
+        zone_ids=[ZONE_ID],
+        start="2026-04-01",
+        end="2026-04-01",
+        streams=("dns",),
+        top=5,
+    )
+
+    def _boom_health(*args: Any, **kwargs: Any) -> None:  # pragma: no cover
+        raise AssertionError("fetch_zone_health should not run with snapshot executive summary")
+
+    monkeypatch.setattr(
+        "cloudflare_executive_report.pdf.orchestrate.fetch_zone_health", _boom_health
+    )
+
+    report_snapshot: dict[str, Any] = {
+        "zones": [
+            {
+                "zone_id": ZONE_ID,
+                "zone_name": "example.com",
+                "executive_summary": {
+                    "score": 95,
+                    "verdict": "Healthy",
+                    "status": "healthy",
+                    "takeaways": ["Snapshot takeaway"],
+                    "actions": ["Snapshot action"],
+                    "metrics": {},
+                },
+            }
+        ]
+    }
+
+    out = tmp_path / "snapshot_no_health.pdf"
+    write_report_pdf(
+        out,
+        cfg,
+        spec,
+        report_snapshot=report_snapshot,
+        allow_live_health_fetch=False,
+    )
+    assert out.is_file()
+    assert out.stat().st_size > 1000
+
+
+@pytest.mark.skipif(not FIXTURE_CACHE.is_dir(), reason="sample cache fixtures missing")
+def test_write_report_pdf_fails_when_snapshot_missing_executive_summary(tmp_path: Path) -> None:
+    cfg = AppConfig(
+        api_token="x",
+        cache_dir=str(FIXTURE_CACHE.resolve()),
+        zones=[ZoneEntry(id=ZONE_ID, name="example.com")],
+    )
+    spec = ReportSpec(
+        zone_ids=[ZONE_ID],
+        start="2026-04-01",
+        end="2026-04-01",
+        streams=("dns",),
+        top=5,
+    )
+    report_snapshot: dict[str, Any] = {
+        "zones": [
+            {
+                "zone_id": ZONE_ID,
+                "zone_name": "example.com",
+                "zone_health": {},
+            }
+        ]
+    }
+
+    with pytest.raises(ValueError, match="Executive summary is not in the report snapshot"):
+        write_report_pdf(
+            out_path=tmp_path / "missing_exec.pdf",
+            cfg=cfg,
+            spec=spec,
+            report_snapshot=report_snapshot,
+        )
+
+
+@pytest.mark.skipif(not FIXTURE_CACHE.is_dir(), reason="sample cache fixtures missing")
+def test_write_report_pdf_fails_when_zone_missing_from_snapshot(tmp_path: Path) -> None:
+    cfg = AppConfig(
+        api_token="x",
+        cache_dir=str(FIXTURE_CACHE.resolve()),
+        zones=[ZoneEntry(id=ZONE_ID, name="example.com")],
+    )
+    spec = ReportSpec(
+        zone_ids=[ZONE_ID],
+        start="2026-04-01",
+        end="2026-04-01",
+        streams=("dns",),
+        top=5,
+    )
+    report_snapshot: dict[str, Any] = {"zones": []}
+
+    with pytest.raises(ValueError, match="Executive summary is not in the report snapshot"):
+        write_report_pdf(
+            out_path=tmp_path / "missing_zone.pdf",
+            cfg=cfg,
+            spec=spec,
+            report_snapshot=report_snapshot,
+            allow_live_health_fetch=False,
+        )

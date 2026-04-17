@@ -1,3 +1,7 @@
+from cloudflare_executive_report.common.constants import (
+    RELIABILITY_5XX_HEALTHY_MAX,
+    RELIABILITY_5XX_WARNING_MAX,
+)
 from cloudflare_executive_report.executive.phrase_catalog import (
     format_line_with_severity_prefix,
     get_phrase,
@@ -122,6 +126,89 @@ def test_correlation_origin_overloaded_uses_exact_phrase():
     assert any(
         "Origin overloaded: high error rate (0.8%) with slow response (600ms)" == t for t in texts
     )
+
+
+def test_reliability_boundary_at_healthy_max_no_origin_signal() -> None:
+    current_zone = {
+        "zone_health": {},
+        "http": {},
+        "security": {"mitigation_rate_pct": 0.0},
+        "cache": {"cache_hit_ratio": 30.0},
+        "http_adaptive": {
+            "status_5xx_rate_pct": RELIABILITY_5XX_HEALTHY_MAX,
+            "origin_response_duration_avg_ms": 800,
+        },
+        "dns_records": {},
+        "audit": {"total_events": 0},
+        "certificates": {},
+    }
+    out = build_executive_rule_output(
+        current_zone=current_zone, previous_zone=None, comparison_allowed=False
+    )
+    signal_keys = {m.phrase_key for m in out.lines_for_section(SECT_SIGNALS)}
+    assert "origin_health" not in signal_keys
+    assert "origin_errors_high" not in signal_keys
+
+
+def test_reliability_boundary_above_healthy_max_with_latency_uses_origin_health() -> None:
+    current_zone = {
+        "zone_health": {},
+        "http": {},
+        "security": {"mitigation_rate_pct": 0.0},
+        "cache": {"cache_hit_ratio": 30.0},
+        "http_adaptive": {
+            "status_5xx_rate_pct": RELIABILITY_5XX_HEALTHY_MAX + 0.01,
+            "origin_response_duration_avg_ms": 600,
+        },
+        "dns_records": {},
+        "audit": {"total_events": 0},
+        "certificates": {},
+    }
+    out = build_executive_rule_output(
+        current_zone=current_zone, previous_zone=None, comparison_allowed=False
+    )
+    signals = {m.phrase_key: m.severity for m in out.lines_for_section(SECT_SIGNALS)}
+    assert signals.get("origin_health") == "warning"
+
+
+def test_reliability_boundary_above_warning_max_uses_origin_errors_high() -> None:
+    current_zone = {
+        "zone_health": {},
+        "http": {},
+        "security": {"mitigation_rate_pct": 0.0},
+        "cache": {"cache_hit_ratio": 30.0},
+        "http_adaptive": {
+            "status_5xx_rate_pct": RELIABILITY_5XX_WARNING_MAX + 0.01,
+            "origin_response_duration_avg_ms": 120,
+        },
+        "dns_records": {},
+        "audit": {"total_events": 0},
+        "certificates": {},
+    }
+    out = build_executive_rule_output(
+        current_zone=current_zone, previous_zone=None, comparison_allowed=False
+    )
+    signals = {m.phrase_key: m.severity for m in out.lines_for_section(SECT_SIGNALS)}
+    assert signals.get("origin_errors_high") == "critical"
+
+
+def test_reliability_missing_http_adaptive_data_emits_no_origin_signals() -> None:
+    current_zone = {
+        "zone_health": {},
+        "http": {},
+        "security": {"mitigation_rate_pct": 0.0},
+        "cache": {"cache_hit_ratio": 30.0},
+        "http_adaptive": {},
+        "dns_records": {},
+        "audit": {"total_events": 0},
+        "certificates": {},
+    }
+    out = build_executive_rule_output(
+        current_zone=current_zone, previous_zone=None, comparison_allowed=False
+    )
+    signal_keys = {m.phrase_key for m in out.lines_for_section(SECT_SIGNALS)}
+    assert "origin_health" not in signal_keys
+    assert "origin_errors_high" not in signal_keys
 
 
 def test_action_rules_migrated_from_summary_logic():

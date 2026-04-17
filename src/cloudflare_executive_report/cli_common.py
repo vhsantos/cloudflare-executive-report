@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from cloudflare_executive_report.common.dates import parse_ymd
+from cloudflare_executive_report.common.period_resolver import normalize_report_type
 from cloudflare_executive_report.config import AppConfig, ZoneEntry, load_config
 from cloudflare_executive_report.sync.options import SyncMode, SyncOptions
 
@@ -66,6 +67,7 @@ CLI_TOP_MAX = 100
 
 def validate_and_build_sync_options(
     *,
+    default_period: str | None = None,
     end: str | None,
     include_today: bool,
     last_month: bool,
@@ -84,6 +86,51 @@ def validate_and_build_sync_options(
     yesterday: bool,
 ) -> SyncOptions:
     """Validate shared date flags and build ``SyncOptions`` (used by ``sync`` and ``report``)."""
+    has_explicit_period = bool(
+        (last is not None)
+        or (start is not None)
+        or (end is not None)
+        or last_month
+        or last_week
+        or last_year
+        or this_month
+        or this_week
+        or this_year
+        or yesterday
+    )
+    if not has_explicit_period and default_period:
+        normalized = normalize_report_type(default_period)
+        if normalized is None:
+            raise CliValidationError(
+                f"Invalid config default_period: {default_period!r}. "
+                "Use incremental, yesterday, last_week, this_week, last_month, this_month, "
+                "last_year, this_year, or last_N (example: last_30)."
+            )
+        if normalized == "incremental":
+            pass
+        elif normalized.startswith("last_") and normalized[5:].isdigit():
+            last = int(normalized[5:])
+        elif normalized == "yesterday":
+            yesterday = True
+        elif normalized == "last_week":
+            last_week = True
+        elif normalized == "this_week":
+            this_week = True
+        elif normalized == "last_month":
+            last_month = True
+        elif normalized == "this_month":
+            this_month = True
+        elif normalized == "last_year":
+            last_year = True
+        elif normalized == "this_year":
+            this_year = True
+        else:
+            raise CliValidationError(
+                f"Unsupported config default_period: {default_period!r}. "
+                "Custom date ranges are not supported via default_period; "
+                "use CLI --start/--end instead."
+            )
+
     if top < 1:
         raise CliValidationError("Error: --top must be at least 1.")
     if top > CLI_TOP_MAX:

@@ -21,6 +21,7 @@ def _types(*ids: str) -> frozenset[str]:
 def test_validate_start_without_end():
     with pytest.raises(CliValidationError, match="together"):
         validate_and_build_sync_options(
+            default_period=None,
             last=None,
             start="2026-01-01",
             end=None,
@@ -43,6 +44,7 @@ def test_validate_start_without_end():
 def test_validate_last_with_range():
     with pytest.raises(CliValidationError, match="not both"):
         validate_and_build_sync_options(
+            default_period=None,
             last=3,
             start="2026-01-01",
             end="2026-01-02",
@@ -65,6 +67,7 @@ def test_validate_last_with_range():
 def test_validate_bad_date():
     with pytest.raises(CliValidationError, match="Invalid"):
         validate_and_build_sync_options(
+            default_period=None,
             last=None,
             start="not-a-date",
             end="2026-01-02",
@@ -86,6 +89,7 @@ def test_validate_bad_date():
 
 def test_build_incremental():
     o = validate_and_build_sync_options(
+        default_period=None,
         last=None,
         start=None,
         end=None,
@@ -111,6 +115,7 @@ def test_build_incremental():
 
 def test_build_last_n():
     o = validate_and_build_sync_options(
+        default_period=None,
         last=7,
         start=None,
         end=None,
@@ -136,6 +141,7 @@ def test_build_last_n():
 def test_top_must_be_positive():
     with pytest.raises(CliValidationError, match="--top"):
         validate_and_build_sync_options(
+            default_period=None,
             last=None,
             start=None,
             end=None,
@@ -158,6 +164,7 @@ def test_top_must_be_positive():
 def test_top_cannot_exceed_max():
     with pytest.raises(CliValidationError, match="cannot exceed"):
         validate_and_build_sync_options(
+            default_period=None,
             last=None,
             start=None,
             end=None,
@@ -179,6 +186,7 @@ def test_top_cannot_exceed_max():
 
 def test_build_semantic_this_week():
     o = validate_and_build_sync_options(
+        default_period=None,
         last=None,
         start=None,
         end=None,
@@ -202,6 +210,7 @@ def test_build_semantic_this_week():
 def test_reject_semantic_combination():
     with pytest.raises(CliValidationError, match="only one semantic"):
         validate_and_build_sync_options(
+            default_period=None,
             last=None,
             start=None,
             end=None,
@@ -235,3 +244,73 @@ def test_cache_has_any_zone_data_empty_dir(tmp_path):
     (tmp_path / zid).mkdir(parents=True)
     zones = [ZoneEntry(id=zid, name="x.example")]
     assert cache_has_any_zone_data(tmp_path, zones) is False
+
+
+def test_build_default_period_semantic_last_month():
+    o = validate_and_build_sync_options(
+        default_period="last_month",
+        last=None,
+        start=None,
+        end=None,
+        yesterday=False,
+        this_week=False,
+        last_week=False,
+        this_month=False,
+        last_month=False,
+        this_year=False,
+        last_year=False,
+        refresh=False,
+        include_today=False,
+        quiet=True,
+        type_set=_types("dns"),
+        top=10,
+        skip_zone_health=False,
+    )
+    assert o.mode == SyncMode.last_month
+
+
+def test_build_default_period_last_n():
+    o = validate_and_build_sync_options(
+        default_period="last_14",
+        last=None,
+        start=None,
+        end=None,
+        yesterday=False,
+        this_week=False,
+        last_week=False,
+        this_month=False,
+        last_month=False,
+        this_year=False,
+        last_year=False,
+        refresh=False,
+        include_today=False,
+        quiet=True,
+        type_set=_types("dns"),
+        top=10,
+        skip_zone_health=False,
+    )
+    assert o.mode == SyncMode.last_n
+    assert o.last_n == 14
+
+
+def test_reject_invalid_default_period():
+    with pytest.raises(CliValidationError, match="default_period"):
+        validate_and_build_sync_options(
+            default_period="not-a-real-mode",
+            last=None,
+            start=None,
+            end=None,
+            yesterday=False,
+            this_week=False,
+            last_week=False,
+            this_month=False,
+            last_month=False,
+            this_year=False,
+            last_year=False,
+            refresh=False,
+            include_today=False,
+            quiet=True,
+            type_set=_types("dns"),
+            top=10,
+            skip_zone_health=False,
+        )

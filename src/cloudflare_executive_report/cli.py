@@ -248,6 +248,9 @@ def cmd_report(
         raise typer.Exit(exits.INVALID_PARAMS)
 
     type_set = _parse_sync_types(types)
+    if "http_adaptive" not in type_set:
+        # Executive summary reliability KPIs require adaptive HTTP metrics.
+        type_set = frozenset(set(type_set) | {"http_adaptive"})
     pdf_streams = _pdf_streams_from_types(type_set)
     if not pdf_streams:
         typer.echo(
@@ -258,7 +261,14 @@ def cmd_report(
         raise typer.Exit(exits.INVALID_PARAMS)
 
     try:
+        cfg = load_app_config(config)
+    except CliConfigError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(exits.GENERAL_ERROR) from None
+
+    try:
         sync_opts = validate_and_build_sync_options(
+            default_period=cfg.default_period,
             last=last,
             start=start,
             end=end,
@@ -279,12 +289,6 @@ def cmd_report(
     except CliValidationError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.INVALID_PARAMS) from None
-
-    try:
-        cfg = load_app_config(config)
-    except CliConfigError as e:
-        typer.echo(str(e), err=True)
-        raise typer.Exit(exits.GENERAL_ERROR) from None
 
     if output_dir is not None:
         cfg.output_dir = str(output_dir)
@@ -484,9 +488,16 @@ def cmd_sync(
     verbose = ctx.obj.get("verbose", False)
     quiet = ctx.obj.get("quiet", False)
 
+    try:
+        cfg = load_app_config(config)
+    except CliConfigError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(exits.GENERAL_ERROR) from None
+
     type_set = _parse_sync_types(types)
     try:
         opts = validate_and_build_sync_options(
+            default_period=cfg.default_period,
             last=last,
             start=start,
             end=end,
@@ -507,12 +518,6 @@ def cmd_sync(
     except CliValidationError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.INVALID_PARAMS) from None
-
-    try:
-        cfg = load_app_config(config)
-    except CliConfigError as e:
-        typer.echo(str(e), err=True)
-        raise typer.Exit(exits.GENERAL_ERROR) from None
 
     if output_dir is not None:
         cfg.output_dir = str(output_dir)
