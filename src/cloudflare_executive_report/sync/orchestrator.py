@@ -8,6 +8,7 @@ import shutil
 import sys
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from cloudflare_executive_report import exits
 from cloudflare_executive_report.aggregate import (
@@ -113,6 +114,11 @@ def _rotate_report_outputs(cfg: AppConfig, *, history_date: date) -> None:
     shutil.copy2(current, hist)
 
 
+def _normalize_report_for_comparison(data: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of the report data without volatile timestamps for comparison."""
+    return {k: v for k, v in data.items() if k not in ("generated_at", "zone_health_fetched_at")}
+
+
 def run_sync(
     cfg: AppConfig,
     opts: SyncOptions,
@@ -174,8 +180,6 @@ def _run_sync_locked(
     verbose_http = effective_debug_enabled()
     streams = streams_for_sync_types(opts.types)
     default_output_mode = (not write_stdout) and (output_path is None)
-    if write_report_json and default_output_mode:
-        _rotate_report_outputs(cfg, history_date=utc_today())
 
     with CloudflareClient(cfg.api_token, verbose=verbose_http) as client:
         if opts.mode == SyncMode.range and opts.start and opts.end:
@@ -340,10 +344,24 @@ def _run_sync_locked(
             sys.stdout.write(text)
         else:
             out = output_path or cfg.report_current_path()
-            out.parent.mkdir(parents=True, exist_ok=True)
-            out.write_text(text, encoding="utf-8")
-            if not opts.quiet:
-                print(f"Wrote {out}", flush=True)
+
+            if default_output_mode:
+                # Only rotate if data changed compared to existing file
+                from cloudflare_executive_report.report.snapshot import load_report_json
+
+                existing = load_report_json(out)
+                if existing:
+                    if _normalize_report_for_comparison(
+                        existing
+                    ) != _normalize_report_for_comparison(rep):
+                        _rotate_report_outputs(cfg, history_date=utc_today())
+                elif out.is_file():
+                    # If it's a file but not a valid report JSON, rotate it anyway
+                    _rotate_report_outputs(cfg, history_date=utc_today())
+
+            from cloudflare_executive_report.report.snapshot import save_report_json
+
+            save_report_json(out, rep, quiet=opts.quiet)
 
         if rate_fail:
             return exits.RATE_LIMIT_EXCEEDED

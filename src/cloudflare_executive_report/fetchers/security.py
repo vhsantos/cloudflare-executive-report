@@ -54,6 +54,9 @@ _LIMIT_ACTION_SOURCE = 50
 def _gql_mitigating_groups(
     operation_name: str, alias: str, limit: int, dimension_fields: str
 ) -> str:
+    # WARNING: Uses string interpolation for GraphQL.
+    # Only use for trusted internal constants (aliases, field names, limits).
+    # Do NOT pass unsanitized user input into these fields.
     actions = MITIGATING_SECURITY_ACTIONS_GQL
     return f"""
 query {operation_name}($zoneTag: String!, $datetime_geq: Time!, $datetime_lt: Time!) {{

@@ -107,7 +107,7 @@ query HttpAdaptiveOriginTimingAvg($zoneTag: String!, $datetime_geq: Time!, $date
 """
 
 
-def _status_code_bucket(status: str) -> str:
+def _error_status_bucket(status: str) -> str:
     s = status.strip()
     if not s:
         return ""
@@ -139,7 +139,7 @@ def _status_rows_rollup(
         c = int(row.get("count") or 0)
         total += c
         merged[code] = merged.get(code, 0) + c
-        bucket = _status_code_bucket(code)
+        bucket = _error_status_bucket(code)
         if bucket == "4xx":
             n4 += c
         elif bucket == "5xx":
