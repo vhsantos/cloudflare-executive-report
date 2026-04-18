@@ -9,7 +9,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from cloudflare_executive_report.aggregate import (
+from cloudflare_executive_report.aggregators import (
     build_audit_section,
     build_cache_section,
     build_certificates_section,

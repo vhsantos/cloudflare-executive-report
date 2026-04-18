@@ -6,17 +6,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 from cloudflare_executive_report import __version__
-from cloudflare_executive_report.aggregators import (
-    build_audit_section,
-    build_cache_section,
-    build_certificates_section,
-    build_dns_records_section,
-    build_dns_section,
-    build_http_adaptive_section,
-    build_http_section,
-    build_security_section,
-)
-from cloudflare_executive_report.aggregators.registry import SECTION_BUILDERS
 from cloudflare_executive_report.common.constants import REPORT_JSON_SCHEMA_VERSION
 from cloudflare_executive_report.common.dates import (
     format_ymd,
@@ -25,15 +14,6 @@ from cloudflare_executive_report.common.dates import (
 )
 
 __all__ = [
-    "SECTION_BUILDERS",
-    "build_audit_section",
-    "build_cache_section",
-    "build_certificates_section",
-    "build_dns_records_section",
-    "build_dns_section",
-    "build_http_adaptive_section",
-    "build_http_section",
-    "build_security_section",
     "build_report",
     "collect_days_payloads",
 ]

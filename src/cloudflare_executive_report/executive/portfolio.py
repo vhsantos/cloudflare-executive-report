@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from cloudflare_executive_report.common.safe_types import as_dict
 from cloudflare_executive_report.executive.phrase_catalog import get_phrase
 
 GRADE_ORDER: tuple[str, ...] = ("A+", "A", "B", "C+", "C", "D+", "D", "F")
@@ -53,10 +54,6 @@ class PortfolioSummary:
     zones_sort_caption: str
 
 
-def _as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
 def _as_list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
@@ -80,19 +77,19 @@ def build_portfolio_summary(
 
     for zone in zone_blocks:
         zone_name = str(zone.get("zone_name") or zone.get("zone_id") or "").strip()
-        summary = _as_dict(zone.get("executive_summary"))
+        summary = as_dict(zone.get("executive_summary"))
         score = _safe_score(summary.get("security_score"))
         grade = str(summary.get("security_grade") or "").strip() or "F"
         if grade not in grade_distribution:
             grade_distribution[grade] = 0
         grade_distribution[grade] += 1
 
-        risks = _as_list(_as_dict(summary.get("takeaways_categorized")).get("risks"))
+        risks = _as_list(as_dict(summary.get("takeaways_categorized")).get("risks"))
         critical_count = 0
         warning_count = 0
         unique_phrase_keys: set[str] = set()
         for entry in risks:
-            row = _as_dict(entry)
+            row = as_dict(entry)
             severity = str(row.get("severity") or "").strip().lower()
             if severity == "critical":
                 critical_count += 1

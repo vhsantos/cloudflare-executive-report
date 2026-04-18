@@ -1,4 +1,7 @@
 from cloudflare_executive_report.aggregate import (
+    build_report,
+)
+from cloudflare_executive_report.aggregators import (
     build_audit_section,
     build_cache_section,
     build_certificates_section,
@@ -6,7 +9,6 @@ from cloudflare_executive_report.aggregate import (
     build_dns_section,
     build_http_adaptive_section,
     build_http_section,
-    build_report,
     build_security_section,
 )
 from cloudflare_executive_report.common.formatting import format_bytes_human, format_count_human
@@ -423,7 +425,7 @@ def test_build_security_section_merges_attack_buckets_across_days():
 
 
 def test_fetcher_registry_matches_section_builders():
-    from cloudflare_executive_report.aggregate import SECTION_BUILDERS
+    from cloudflare_executive_report.aggregators import SECTION_BUILDERS
     from cloudflare_executive_report.fetchers.registry import FETCHER_REGISTRY
 
     assert set(FETCHER_REGISTRY.keys()) == set(SECTION_BUILDERS.keys())

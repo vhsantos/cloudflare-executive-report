@@ -8,12 +8,15 @@ import shutil
 import sys
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from cloudflare_executive_report import exits
 from cloudflare_executive_report.aggregate import (
-    SECTION_BUILDERS,
     build_report,
     collect_days_payloads,
+)
+from cloudflare_executive_report.aggregators import (
+    SECTION_BUILDERS,
 )
 from cloudflare_executive_report.cache import (
     CacheLockTimeout,
@@ -37,6 +40,7 @@ from cloudflare_executive_report.common.dates import (
     utc_today,
     utc_yesterday,
 )
+from cloudflare_executive_report.common.formatting import progress_message
 from cloudflare_executive_report.common.logging_config import effective_debug_enabled
 from cloudflare_executive_report.common.period_resolver import (
     build_data_fingerprint,
@@ -60,11 +64,6 @@ from cloudflare_executive_report.sync.day_processor import process_day
 from cloudflare_executive_report.sync.options import SyncMode, SyncOptions
 
 log = logging.getLogger(__name__)
-
-
-def _progress(msg: str, *, quiet: bool) -> None:
-    if not quiet:
-        print(msg, flush=True)
 
 
 def _dates_incremental(idx_latest: str | None, y: date) -> list[date]:
@@ -115,6 +114,11 @@ def _rotate_report_outputs(cfg: AppConfig, *, history_date: date) -> None:
     shutil.copy2(current, hist)
 
 
+def _normalize_report_for_comparison(data: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of the report data without volatile timestamps for comparison."""
+    return {k: v for k, v in data.items() if k not in ("generated_at", "zone_health_fetched_at")}
+
+
 def run_sync(
     cfg: AppConfig,
     opts: SyncOptions,
@@ -124,6 +128,11 @@ def run_sync(
     write_stdout: bool = False,
     write_report_json: bool = True,
 ) -> int:
+    """
+    Synchronize the local cache with Cloudflare API data and optionally generate a JSON report.
+
+    Returns an exit code (0 for success).
+    """
     cache_root = cfg.cache_path()
     zones = list(cfg.zones)
     if zone_filter:
@@ -171,8 +180,6 @@ def _run_sync_locked(
     verbose_http = effective_debug_enabled()
     streams = streams_for_sync_types(opts.types)
     default_output_mode = (not write_stdout) and (output_path is None)
-    if write_report_json and default_output_mode:
-        _rotate_report_outputs(cfg, history_date=utc_today())
 
     with CloudflareClient(cfg.api_token, verbose=verbose_http) as client:
         if opts.mode == SyncMode.range and opts.start and opts.end:
@@ -193,7 +200,7 @@ def _run_sync_locked(
                 return exits.GENERAL_ERROR
 
         for z in zones:
-            _progress(f"Zone {z.name} ({z.id})", quiet=opts.quiet)
+            progress_message(f"Zone {z.name} ({z.id})", quiet=opts.quiet)
             zmeta = zmeta_by_zone_id[z.id]
 
             plan = (zmeta.get("plan") or {}).get("legacy_id")
@@ -337,10 +344,24 @@ def _run_sync_locked(
             sys.stdout.write(text)
         else:
             out = output_path or cfg.report_current_path()
-            out.parent.mkdir(parents=True, exist_ok=True)
-            out.write_text(text, encoding="utf-8")
-            if not opts.quiet:
-                print(f"Wrote {out}", flush=True)
+
+            if default_output_mode:
+                # Only rotate if data changed compared to existing file
+                from cloudflare_executive_report.report.snapshot import load_report_json
+
+                existing = load_report_json(out)
+                if existing:
+                    if _normalize_report_for_comparison(
+                        existing
+                    ) != _normalize_report_for_comparison(rep):
+                        _rotate_report_outputs(cfg, history_date=utc_today())
+                elif out.is_file():
+                    # If it's a file but not a valid report JSON, rotate it anyway
+                    _rotate_report_outputs(cfg, history_date=utc_today())
+
+            from cloudflare_executive_report.report.snapshot import save_report_json
+
+            save_report_json(out, rep, quiet=opts.quiet)
 
         if rate_fail:
             return exits.RATE_LIMIT_EXCEEDED
@@ -355,6 +376,11 @@ def run_clean(
     scope_history: bool,
     quiet: bool,
 ) -> int:
+    """Remove cached data and/or report history files."""
+    if not scope_cache and not scope_history:
+        log.error("Specify cleanup scope: --cache, --history, or --all")
+        return exits.INVALID_PARAMS
+
     cache_root = cfg.cache_path()
     history_root = cfg.report_history_dir()
     try:
@@ -376,58 +402,55 @@ def run_clean(
                         print(f"Cleared history under {history_root}", flush=True)
                 return exits.SUCCESS
 
-            if older_than is not None:
-                cutoff = utc_today() - timedelta(days=older_than)
-                removed_cache = 0
-                removed_history = 0
-                if scope_cache:
-                    for zone_dir in cache_root.iterdir():
-                        if not zone_dir.is_dir() or zone_dir.name.startswith("."):
+            assert older_than is not None
+            cutoff = utc_today() - timedelta(days=older_than)
+            removed_cache = 0
+            removed_history = 0
+            if scope_cache:
+                for zone_dir in cache_root.iterdir():
+                    if not zone_dir.is_dir() or zone_dir.name.startswith("."):
+                        continue
+                    for day_dir in zone_dir.iterdir():
+                        if not day_dir.is_dir():
                             continue
-                        for day_dir in zone_dir.iterdir():
-                            if not day_dir.is_dir():
-                                continue
-                            if day_dir.name.startswith("_"):
-                                continue
-                            try:
-                                d = parse_ymd(day_dir.name)
-                            except ValueError:
-                                continue
-                            if d < cutoff:
-                                shutil.rmtree(day_dir)
-                                removed_cache += 1
-                if scope_history and history_root.exists():
-                    for report_file in history_root.glob("cf_report_*.json"):
-                        stem = report_file.stem
-                        ds = stem.replace("cf_report_", "", 1)
-                        if "_" in ds:
-                            ds = ds.split("_", 1)[0]
+                        if day_dir.name.startswith("_"):
+                            continue
                         try:
-                            d = parse_ymd(ds)
+                            d = parse_ymd(day_dir.name)
                         except ValueError:
                             continue
                         if d < cutoff:
-                            report_file.unlink(missing_ok=True)
-                            removed_history += 1
-                if not quiet:
-                    if scope_cache:
-                        print(
-                            "Removed "
-                            f"{removed_cache} cache day directories "
-                            f"older than {older_than} days",
-                            flush=True,
-                        )
-                    if scope_history:
-                        print(
-                            "Removed "
-                            f"{removed_history} history report files "
-                            f"older than {older_than} days",
-                            flush=True,
-                        )
-                return exits.SUCCESS
+                            shutil.rmtree(day_dir)
+                            removed_cache += 1
+            if scope_history and history_root.exists():
+                for report_file in history_root.glob("cf_report_*.json"):
+                    stem = report_file.stem
+                    ds = stem.replace("cf_report_", "", 1)
+                    if "_" in ds:
+                        ds = ds.split("_", 1)[0]
+                    try:
+                        d = parse_ymd(ds)
+                    except ValueError:
+                        continue
+                    if d < cutoff:
+                        report_file.unlink(missing_ok=True)
+                        removed_history += 1
+            if not quiet:
+                if scope_cache:
+                    print(
+                        "Removed "
+                        f"{removed_cache} cache day directories "
+                        f"older than {older_than} days",
+                        flush=True,
+                    )
+                if scope_history:
+                    print(
+                        "Removed "
+                        f"{removed_history} history report files "
+                        f"older than {older_than} days",
+                        flush=True,
+                    )
+            return exits.SUCCESS
     except CacheLockTimeout as e:
         log.error("%s", e)
         return exits.CACHE_LOCK_TIMEOUT
-
-    log.error("Specify cleanup scope: --cache, --history, or --all")
-    return exits.INVALID_PARAMS

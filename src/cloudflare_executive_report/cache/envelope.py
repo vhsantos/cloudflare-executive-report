@@ -5,20 +5,28 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
+
+from cloudflare_executive_report.common.dates import utc_now_z
 
 log = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
 
 
-def utc_now_z() -> str:
-    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+class CacheEnvelope(TypedDict, total=False):
+    """Schema for a single per-day cache file."""
+
+    _schema_version: int
+    _source: str  # "api", "error", or "null" (outside retention)
+    _source_timestamp: str  # ISO8601 UTC
+    data: Any  # The actual API payload
+    _error: str | None
+    _retry_after: str | None
 
 
-def read_json_file(path: Path) -> dict[str, Any] | None:
+def read_json_file(path: Path) -> CacheEnvelope | None:
     if not path.is_file():
         return None
     try:
@@ -33,7 +41,7 @@ def read_json_file(path: Path) -> dict[str, Any] | None:
         return None
 
 
-def write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+def write_json_atomic(path: Path, payload: CacheEnvelope) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     data = json.dumps(payload, indent=2, ensure_ascii=False)
@@ -44,7 +52,7 @@ def write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
-def read_day_file(path: Path) -> dict[str, Any] | None:
+def read_day_file(path: Path) -> CacheEnvelope | None:
     """Return full on-disk envelope dict, or None if missing/corrupt."""
     return read_json_file(path)
 
@@ -57,7 +65,7 @@ def write_day_file(
     error: str | None = None,
     retry_after: str | None = None,
 ) -> None:
-    payload: dict[str, Any] = {
+    payload: CacheEnvelope = {
         "_schema_version": SCHEMA_VERSION,
         "_source": source,
         "_source_timestamp": utc_now_z(),

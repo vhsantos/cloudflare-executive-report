@@ -16,16 +16,6 @@ from cloudflare_executive_report.common.retention import (
     dns_retention_days,
 )
 
-
-def _groups(data: dict[str, Any] | None) -> list[dict[str, Any]]:
-    if not data:
-        return []
-    zones = ((data.get("viewer") or {}).get("zones")) or []
-    if not zones:
-        return []
-    return zones[0].get("dnsAnalyticsAdaptiveGroups") or []
-
-
 Q_TOTAL = """
 query DnsTotal($zoneTag: String!, $since: String!, $until: String!) {
   viewer {
@@ -41,19 +31,58 @@ query DnsTotal($zoneTag: String!, $since: String!, $until: String!) {
 }
 """
 
-Q_DIM = """
-query DnsDim%(suffix)s($zoneTag: String!, $since: String!, $until: String!, $limit: Int!) {
+
+Q_BATCH_DIM = """
+query DnsBatch($zoneTag: String!, $since: String!, $until: String!, $limit: Int!) {
   viewer {
     zones(filter: {zoneTag_in: [$zoneTag]}) {
-      dnsAnalyticsAdaptiveGroups(
+      by_query_name: dnsAnalyticsAdaptiveGroups(
         limit: $limit
         filter: {datetime_geq: $since, datetime_lt: $until}
         orderBy: [count_DESC]
       ) {
         count
-        dimensions {
-          %(field)s
-        }
+        dimensions { queryName }
+      }
+      by_query_type: dnsAnalyticsAdaptiveGroups(
+        limit: $limit
+        filter: {datetime_geq: $since, datetime_lt: $until}
+        orderBy: [count_DESC]
+      ) {
+        count
+        dimensions { queryType }
+      }
+      by_response: dnsAnalyticsAdaptiveGroups(
+        limit: $limit
+        filter: {datetime_geq: $since, datetime_lt: $until}
+        orderBy: [count_DESC]
+      ) {
+        count
+        dimensions { responseCode }
+      }
+      by_colo: dnsAnalyticsAdaptiveGroups(
+        limit: $limit
+        filter: {datetime_geq: $since, datetime_lt: $until}
+        orderBy: [count_DESC]
+      ) {
+        count
+        dimensions { coloName }
+      }
+      by_protocol: dnsAnalyticsAdaptiveGroups(
+        limit: $limit
+        filter: {datetime_geq: $since, datetime_lt: $until}
+        orderBy: [count_DESC]
+      ) {
+        count
+        dimensions { protocol }
+      }
+      by_ip_version: dnsAnalyticsAdaptiveGroups(
+        limit: $limit
+        filter: {datetime_geq: $since, datetime_lt: $until}
+        orderBy: [count_DESC]
+      ) {
+        count
+        dimensions { ipVersion }
       }
     }
   }
@@ -61,42 +90,20 @@ query DnsDim%(suffix)s($zoneTag: String!, $since: String!, $until: String!, $lim
 """
 
 
-def _dim_queries() -> dict[str, str]:
-    fields = [
-        ("queryName", "QueryName"),
-        ("queryType", "QueryType"),
-        ("responseCode", "ResponseCode"),
-        ("coloName", "ColoName"),
-        ("sourceIP", "SourceIP"),
-        ("destinationIP", "DestinationIP"),
-        ("protocol", "Protocol"),
-        ("ipVersion", "IpVersion"),
-    ]
-    return {f: Q_DIM % {"suffix": suf, "field": f} for f, suf in fields}
+def _groups_base(data: dict[str, Any] | None) -> dict[str, Any]:
+    if not data:
+        return {}
+    zones = ((data.get("viewer") or {}).get("zones")) or []
+    if not zones:
+        return {}
+    return zones[0]
 
 
-_DIM_QUERIES = _dim_queries()
+def _groups(data: dict[str, Any] | None) -> list[dict[str, Any]]:
+    return _groups_base(data).get("dnsAnalyticsAdaptiveGroups") or []
 
 
-def _fetch_dim(
-    client: CloudflareClient,
-    zone_id: str,
-    since: str,
-    until: str,
-    field: str,
-    limit: int = 500,
-) -> list[dict[str, Any]]:
-    q = _DIM_QUERIES[field]
-    data = client.graphql(
-        q,
-        {
-            "zoneTag": zone_id,
-            "since": since,
-            "until": until,
-            "limit": limit,
-        },
-    )
-    rows = _groups(data)
+def _rows_to_value_count(rows: list[dict[str, Any]], field: str) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for row in rows:
         dims = row.get("dimensions") or {}
@@ -122,12 +129,23 @@ def fetch_dns_for_bounds(
     total_queries = sum(int(g.get("count") or 0) for g in groups)
     avg_pt_us: float | None = None
 
-    by_query_name = _fetch_dim(client, zone_id, since, until, "queryName")
-    by_query_type = _fetch_dim(client, zone_id, since, until, "queryType")
-    by_response = _fetch_dim(client, zone_id, since, until, "responseCode")
-    by_colo = _fetch_dim(client, zone_id, since, until, "coloName")
-    by_protocol = _fetch_dim(client, zone_id, since, until, "protocol")
-    by_ip_version = _fetch_dim(client, zone_id, since, until, "ipVersion")
+    batch_data = client.graphql(
+        Q_BATCH_DIM,
+        {
+            "zoneTag": zone_id,
+            "since": since,
+            "until": until,
+            "limit": 500,
+        },
+    )
+    base = _groups_base(batch_data)
+
+    by_query_name = _rows_to_value_count(base.get("by_query_name") or [], "queryName")
+    by_query_type = _rows_to_value_count(base.get("by_query_type") or [], "queryType")
+    by_response = _rows_to_value_count(base.get("by_response") or [], "responseCode")
+    by_colo = _rows_to_value_count(base.get("by_colo") or [], "coloName")
+    by_protocol = _rows_to_value_count(base.get("by_protocol") or [], "protocol")
+    by_ip_version = _rows_to_value_count(base.get("by_ip_version") or [], "ipVersion")
 
     return {
         "total_queries": total_queries,

@@ -9,6 +9,7 @@ from cloudflare_executive_report.cf_client import (
     CloudflareAPIError,
     CloudflareAuthError,
     CloudflareClient,
+    CloudflareRateLimitError,
 )
 from cloudflare_executive_report.common.dates import format_ymd, utc_today
 
@@ -123,4 +124,11 @@ class DnsRecordsFetcher:
         zone_meta: dict[str, Any] | None,
     ) -> tuple[list[dict[str, Any]], list[str], bool]:
         _ = (zone_name, plan_legacy_id)
-        return [self.fetch(client, zone_id, utc_today(), zone_meta=zone_meta)], [], False
+        try:
+            return (
+                [self.fetch(client, zone_id, utc_today(), zone_meta=zone_meta)],
+                [],
+                False,
+            )
+        except CloudflareRateLimitError:
+            return [], [], True

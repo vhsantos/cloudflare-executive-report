@@ -5,6 +5,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/cloudflare-executive-report)](https://pypi.org/project/cloudflare-executive-report/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+![Coverage](https://img.shields.io/badge/coverage-75%25-yellowgreen)
 
 ---
 

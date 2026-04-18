@@ -13,7 +13,7 @@ from cloudflare_executive_report.cf_client import (
 from cloudflare_executive_report.common.dates import (
     day_bounds_utc,
     format_ymd,
-    utc_now_iso_z,
+    utc_now_z,
     utc_today,
 )
 from cloudflare_executive_report.common.retention import date_outside_http_retention
@@ -107,7 +107,7 @@ query HttpAdaptiveOriginTimingAvg($zoneTag: String!, $datetime_geq: Time!, $date
 """
 
 
-def _status_code_bucket(status: str) -> str:
+def _error_status_bucket(status: str) -> str:
     s = status.strip()
     if not s:
         return ""
@@ -139,7 +139,7 @@ def _status_rows_rollup(
         c = int(row.get("count") or 0)
         total += c
         merged[code] = merged.get(code, 0) + c
-        bucket = _status_code_bucket(code)
+        bucket = _error_status_bucket(code)
         if bucket == "4xx":
             n4 += c
         elif bucket == "5xx":
@@ -293,7 +293,7 @@ class HttpAdaptiveFetcher:
             return [], [], False
         try:
             payload = fetch_http_adaptive_for_bounds(
-                client, zone_id, day_bounds_utc(t)[0], utc_now_iso_z()
+                client, zone_id, day_bounds_utc(t)[0], utc_now_z()
             )
             payload["date"] = format_ymd(t)
             return (

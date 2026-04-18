@@ -10,11 +10,12 @@ from cloudflare_executive_report.cf_client import (
     CloudflareClient,
     CloudflareRateLimitError,
 )
+from cloudflare_executive_report.common.constants import MITIGATING_SECURITY_ACTIONS
 from cloudflare_executive_report.common.dates import (
     day_bounds_utc,
     day_start_iso_z,
     format_ymd,
-    utc_now_iso_z,
+    utc_now_z,
     utc_today,
 )
 from cloudflare_executive_report.common.retention import date_outside_security_retention
@@ -29,9 +30,7 @@ from cloudflare_executive_report.fetchers.graphql_common import (
 
 # Matrix fold: only these ``securityAction`` values count as mitigated
 # (match ``securityAction_in`` below).
-EYEBALL_MITIGATING_SECURITY_ACTIONS = frozenset(
-    {"block", "challenge", "js_challenge", "managed_challenge"}
-)
+EYEBALL_MITIGATING_SECURITY_ACTIONS = MITIGATING_SECURITY_ACTIONS
 # Pass traffic: ``cacheStatus`` values treated like Security Analytics "Served by origin"
 # (dynamic / cache miss / cache bypass path). All other pass rows count as "Served by Cloudflare"
 # (edge-handled: cached, none, redirects-as-edge, etc.). See Cloudflare Traffic analysis docs.
@@ -55,6 +54,9 @@ _LIMIT_ACTION_SOURCE = 50
 def _gql_mitigating_groups(
     operation_name: str, alias: str, limit: int, dimension_fields: str
 ) -> str:
+    # WARNING: Uses string interpolation for GraphQL.
+    # Only use for trusted internal constants (aliases, field names, limits).
+    # Do NOT pass unsanitized user input into these fields.
     actions = MITIGATING_SECURITY_ACTIONS_GQL
     return f"""
 query {operation_name}($zoneTag: String!, $datetime_geq: Time!, $datetime_lt: Time!) {{
@@ -300,7 +302,7 @@ class SecurityFetcher:
                 client,
                 zone_id,
                 day_start_iso_z(t),
-                utc_now_iso_z(),
+                utc_now_z(),
             )
             payload["date"] = format_ymd(t)
             return (

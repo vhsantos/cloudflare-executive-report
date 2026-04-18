@@ -411,9 +411,9 @@ def test_write_report_pdf_fails_when_snapshot_missing_executive_summary(tmp_path
 
     with pytest.raises(ValueError, match="Executive summary is not in the report snapshot"):
         write_report_pdf(
-            out_path=tmp_path / "missing_exec.pdf",
-            cfg=cfg,
-            spec=spec,
+            tmp_path / "missing_exec.pdf",
+            cfg,
+            spec,
             report_snapshot=report_snapshot,
         )
 
@@ -436,9 +436,9 @@ def test_write_report_pdf_fails_when_zone_missing_from_snapshot(tmp_path: Path) 
 
     with pytest.raises(ValueError, match="Executive summary is not in the report snapshot"):
         write_report_pdf(
-            out_path=tmp_path / "missing_zone.pdf",
-            cfg=cfg,
-            spec=spec,
+            tmp_path / "missing_zone.pdf",
+            cfg,
+            spec,
             report_snapshot=report_snapshot,
             allow_live_health_fetch=False,
         )
