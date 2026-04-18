@@ -58,12 +58,14 @@ def build_nist_reference_rows(lines: Sequence[_NistSourceLine]) -> list[dict[str
                 }
             row = by_nist[nid]
             ids = row["check_ids"]
-            assert isinstance(ids, list)
+            if not isinstance(ids, list):
+                raise TypeError(f"Expected list for NIST check_ids, got {type(ids)}")
             cid = line.check_id
             if cid not in ids:
                 ids.append(cid)
     for row in by_nist.values():
         ids = row["check_ids"]
-        assert isinstance(ids, list)
+        if not isinstance(ids, list):
+            raise TypeError(f"Expected list for NIST check_ids, got {type(ids)}")
         ids.sort()
     return sorted(by_nist.values(), key=lambda r: str(r["nist_id"]))

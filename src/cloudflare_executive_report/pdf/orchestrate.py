@@ -145,6 +145,11 @@ def write_report_pdf(
     allow_live_health_fetch: bool = True,
     theme: Theme | None = None,
 ) -> None:
+    """
+    Generate a PDF report from a JSON snapshot or by fetching data from the cache/API.
+
+    The resulting PDF is written to output_path.
+    """
     if theme is not None:
         th = theme_with_map_format(
             theme_with_chart_format(theme, cfg.pdf.chart_format),

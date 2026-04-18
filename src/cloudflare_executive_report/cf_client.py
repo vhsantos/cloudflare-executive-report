@@ -199,6 +199,11 @@ class CloudflareClient:
         return self.graphql_query(query, variables)
 
     def graphql_query(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
+        """
+        Execute a GraphQL query against the Cloudflare Analytics API.
+
+        Handles retries for network errors and 429 rate limits.
+        """
         payload = {"query": query, "variables": variables}
         last_network: Exception | None = None
         for net_attempt in range(NETWORK_RETRIES + 1):

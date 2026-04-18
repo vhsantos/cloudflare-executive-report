@@ -214,6 +214,11 @@ def fetch_zone_health(
     skip: bool,
     zone_meta: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
+    """
+    Fetch a snapshot of the current zone configuration (security posture).
+
+    This data is not cached by date as it represents the current 'live' state.
+    """
     warnings: list[str] = []
     if skip:
         warnings.append("Zone health skipped due to --skip-zone-health")

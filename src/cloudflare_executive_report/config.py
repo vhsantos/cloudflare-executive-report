@@ -422,6 +422,7 @@ def load_config(path: Path | None = None) -> AppConfig:
 
 
 def save_config(cfg: AppConfig, path: Path | None = None) -> None:
+    """Save the current AppConfig to a YAML file."""
     p = path or default_config_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("w", encoding="utf-8") as f:

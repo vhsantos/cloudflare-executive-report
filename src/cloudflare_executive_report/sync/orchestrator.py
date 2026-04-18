@@ -120,6 +120,11 @@ def run_sync(
     write_stdout: bool = False,
     write_report_json: bool = True,
 ) -> int:
+    """
+    Synchronize the local cache with Cloudflare API data and optionally generate a JSON report.
+
+    Returns an exit code (0 for success).
+    """
     cache_root = cfg.cache_path()
     zones = list(cfg.zones)
     if zone_filter:

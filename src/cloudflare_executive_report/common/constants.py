@@ -88,6 +88,34 @@ RELIABILITY_5XX_WARNING_MAX: float = 5.0
 
 
 # ============================================================================
+# EXECUTIVE / THRESHOLDS & RULES
+# ============================================================================
+
+# Certificate expiry thresholds (days)
+CERT_EXPIRY_CRITICAL_DAYS: int = 14
+CERT_EXPIRY_WARNING_DAYS: int = 30
+
+# Latency thresholds (ms)
+LATENCY_WARNING_MS: int = 500
+LATENCY_DELTA_WARNING_MS: int = 100
+LATENCY_DELTA_WIN_MS: int = -10
+
+# Cache efficiency thresholds (0-100 percentage or percentage points)
+CACHE_HIT_RATIO_LOW_THRESHOLD: float = 10.0
+CACHE_DELTA_WARNING_PP: float = -15.0
+
+# Traffic / Bandwidth thresholds
+BANDWIDTH_GB_MIN_THRESHOLD: float = 10.0
+TRAFFIC_DELTA_PCT_THRESHOLD: float = 20.0
+THREATS_DELTA_PCT_THRESHOLD: float = 100.0
+TRAFFIC_FLAT_DELTA_PCT: float = 10.0
+
+# Activity thresholds
+MITIGATION_RATE_PCT_THRESHOLD: float = 5.0
+AUDIT_EVENTS_THRESHOLD: int = 50
+
+
+# ============================================================================
 # SECURITY ACTIONS (shared between fetcher and executive summary)
 # ============================================================================
 

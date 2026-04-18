@@ -8,10 +8,23 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from cloudflare_executive_report.common.constants import (
+    AUDIT_EVENTS_THRESHOLD,
+    BANDWIDTH_GB_MIN_THRESHOLD,
+    CACHE_DELTA_WARNING_PP,
+    CACHE_HIT_RATIO_LOW_THRESHOLD,
+    CERT_EXPIRY_CRITICAL_DAYS,
+    CERT_EXPIRY_WARNING_DAYS,
     HSTS_RECOMMENDED_MAX_AGE_SECONDS,
     HTTPS_ENCRYPTED_GAP_ACTION_MAX_PCT,
+    LATENCY_DELTA_WARNING_MS,
+    LATENCY_DELTA_WIN_MS,
+    LATENCY_WARNING_MS,
+    MITIGATION_RATE_PCT_THRESHOLD,
     RELIABILITY_5XX_HEALTHY_MAX,
     RELIABILITY_5XX_WARNING_MAX,
+    THREATS_DELTA_PCT_THRESHOLD,
+    TRAFFIC_DELTA_PCT_THRESHOLD,
+    TRAFFIC_FLAT_DELTA_PCT,
 )
 from cloudflare_executive_report.common.safe_types import as_dict, as_float, as_int
 from cloudflare_executive_report.executive.phrase_catalog import get_phrase
@@ -384,9 +397,9 @@ def build_executive_rule_output(
         add_takeaway(SECT_RISKS, "warning", "ddos_protection", state="risk")
     if cert_packs == 0:
         add_takeaway(SECT_RISKS, "warning", "cert_presence", state="risk")
-    if 0 < exp_days <= 14:
+    if 0 < exp_days <= CERT_EXPIRY_CRITICAL_DAYS:
         add_takeaway(SECT_RISKS, "critical", "cert_expire_14", state="risk", days=exp_days)
-    elif 14 < exp_days <= 30:
+    elif CERT_EXPIRY_CRITICAL_DAYS < exp_days <= CERT_EXPIRY_WARNING_DAYS:
         add_takeaway(SECT_RISKS, "warning", "cert_expire_30", state="risk", days=exp_days)
 
     err_5xx = as_float(ha.get("status_5xx_rate_pct"))
@@ -404,7 +417,7 @@ def build_executive_rule_output(
             state="observation",
             err_pct=e5,
         )
-    elif err_5xx > RELIABILITY_5XX_HEALTHY_MAX and latency > 500:
+    elif err_5xx > RELIABILITY_5XX_HEALTHY_MAX and latency > LATENCY_WARNING_MS:
         e5, lms = round(err_5xx, 2), int(round(latency))
         add_takeaway(
             SECT_SIGNALS,
@@ -414,7 +427,7 @@ def build_executive_rule_output(
             err_pct=e5,
             latency_ms=lms,
         )
-    if cache_hit < 10 and bandwidth_gb > 10:
+    if cache_hit < CACHE_HIT_RATIO_LOW_THRESHOLD and bandwidth_gb > BANDWIDTH_GB_MIN_THRESHOLD:
         ch, gbw = round(cache_hit, 1), int(round(bandwidth_gb))
         add_takeaway(
             SECT_SIGNALS,
@@ -428,7 +441,7 @@ def build_executive_rule_output(
         add_takeaway(SECT_SIGNALS, "warning", "apex_ddos_alignment", state="observation")
     if ssl_mode == "flexible" and cert_packs > 0:
         add_takeaway(SECT_SIGNALS, "warning", "ssl_mode_flexible", state="observation")
-    if mitigation > 5.0:
+    if mitigation > MITIGATION_RATE_PCT_THRESHOLD:
         add_takeaway(
             SECT_SIGNALS,
             "warning",
@@ -436,7 +449,7 @@ def build_executive_rule_output(
             state="observation",
             mitigation_pct=round(mitigation, 1),
         )
-    if audits > 50:
+    if audits > AUDIT_EVENTS_THRESHOLD:
         add_takeaway(SECT_SIGNALS, "warning", "audit_activity", state="observation", events=audits)
 
     always_https = str(zh.get("always_https") or "").strip().lower()
@@ -468,7 +481,7 @@ def build_executive_rule_output(
         add_action("info", "apex_proxy", state="action")
     if len(ce) and ce.get("unavailable") is not True and exp_days > 0:
         add_action("info", "cert_expire_30", state="action")
-    if len(au) and au.get("unavailable") is not True and audits > 50:
+    if len(au) and au.get("unavailable") is not True and audits > AUDIT_EVENTS_THRESHOLD:
         add_action("info", "audit_activity", state="action")
 
     if previous_zone and comparison_allowed:
@@ -485,7 +498,7 @@ def build_executive_rule_output(
             float(as_int(sec.get("mitigated_count"))),
             float(as_int(p_sec.get("mitigated_count"))),
         )
-        if abs(pct_traffic) > 20:
+        if abs(pct_traffic) > TRAFFIC_DELTA_PCT_THRESHOLD:
             if pct_traffic > 0:
                 pct_i = int(round(pct_traffic))
                 add_takeaway(SECT_DELTAS, "info", "traffic_up", state="comparison", pct=pct_i)
@@ -493,9 +506,9 @@ def build_executive_rule_output(
             else:
                 pct_dn = abs(int(round(pct_traffic)))
                 add_takeaway(SECT_DELTAS, "warning", "traffic_down", state="comparison", pct=pct_dn)
-        if pct_threats > 100:
+        if pct_threats > THREATS_DELTA_PCT_THRESHOLD:
             pt = int(round(pct_threats))
-            if abs(pct_traffic) < 10:
+            if abs(pct_traffic) < TRAFFIC_FLAT_DELTA_PCT:
                 add_takeaway(
                     SECT_DELTAS, "critical", "threats_vs_traffic_flat", state="comparison", pct=pt
                 )
@@ -506,17 +519,17 @@ def build_executive_rule_output(
         latency_delta = as_float(ha.get("origin_response_duration_avg_ms")) - as_float(
             p_ha.get("origin_response_duration_avg_ms")
         )
-        if latency_delta > 100:
+        if latency_delta > LATENCY_DELTA_WARNING_MS:
             ms_up = int(round(latency_delta))
             add_takeaway(SECT_DELTAS, "warning", "latency_delta", state="comparison", ms=ms_up)
-        elif latency_delta < -10:
+        elif latency_delta < LATENCY_DELTA_WIN_MS:
             ms_dn = abs(int(round(latency_delta)))
             add_takeaway(SECT_WINS, "positive", "latency_delta", state="win", ms=ms_dn)
         cache_delta = _pp_delta(
             as_float(cache.get("cache_hit_ratio") or http.get("cache_hit_ratio")),
             as_float(p_http.get("cache_hit_ratio")),
         )
-        if cache_delta < -15:
+        if cache_delta < CACHE_DELTA_WARNING_PP:
             pp_dn = abs(int(round(cache_delta)))
             add_takeaway(SECT_DELTAS, "warning", "cache_efficiency", state="comparison", pp=pp_dn)
         p_apex = as_int(p_dr.get("apex_unproxied_a_aaaa"))

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -49,15 +50,14 @@ def _report_has_zone(report: dict[str, Any] | None, zone_id: str) -> bool:
     return find_previous_zone_in_report(report, zone_id) is not None
 
 
-def _iter_baseline_candidates(cfg: AppConfig) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = []
+def _iter_baseline_candidates(cfg: AppConfig) -> Iterator[dict[str, Any]]:
     seen: set[Path] = set()
     p = cfg.report_previous_path()
     if p.is_file():
         seen.add(p.resolve())
         rep = load_report_json(p)
         if rep is not None:
-            out.append(rep)
+            yield rep
     hist = cfg.report_history_dir()
     if hist.is_dir():
         for f in sorted(hist.glob("cf_report_*.json"), reverse=True):
@@ -67,8 +67,7 @@ def _iter_baseline_candidates(cfg: AppConfig) -> list[dict[str, Any]]:
             seen.add(rf)
             rep = load_report_json(f)
             if rep is not None:
-                out.append(rep)
-    return out
+                yield rep
 
 
 def select_previous_report_for_period(
