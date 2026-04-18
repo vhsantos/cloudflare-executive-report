@@ -19,24 +19,31 @@
   - [ ] we should have the none option (--quit mode ?? )
   - [ ] redirect output to a log file
 
-## Product/content consistency
-
-- [ ] Align executive takeaways with verdict logic to avoid contradictory messaging.
-
 ## Performance and Cloudflare API limits
 
-- [ ] Audit total GraphQL calls per `sync`/`report` run and document query budget per stream.
-- [ ] Reduce redundant queries by batching compatible adaptive metrics into fewer requests where possible.
-- [ ] Add smarter short-circuit logic for known non-retryable GraphQL errors to avoid extra calls.
-- [ ] Add configurable throttling/backoff strategy for high-volume multi-zone runs.
-- [ ] Add guardrails for `--types` combinations that can exceed budget on Free plan.
-- [ ] Add observability counters in logs (queries attempted, succeeded, failed, rate-limited) per run.
-- [ ] Evaluate cache-first behavior for PDF/report generation to avoid unnecessary live API requests.
+- [ ] Baseline API cost by command and stream.
+  - Map expected GraphQL calls for `sync` and `report` (including `--refresh-health` paths).
+  - Publish a simple per-stream query budget in docs, with assumptions (zones, days, streams).
+- [ ] Batch compatible adaptive queries to reduce total GraphQL calls.
+  - Identify fetchers that hit similar adaptive endpoints and can share one query payload.
+  - Keep output shape unchanged so report logic and tests do not need behavioral changes.
+- [ ] Add non-retryable GraphQL error classification and early exit rules.
+  - Define which errors should fail fast (for example: bad query shape, invalid field, auth/permission).
+  - Avoid extra retries for those classes and return explicit error messages.
+- [ ] Make throttling and backoff configurable.
+  - Expose retry/backoff knobs in config (with safe defaults) for high-volume multi-zone runs.
+  - Document recommended values for conservative and aggressive profiles.
+- [ ] Add CLI guardrails for high-cost `--types` selections on lower plans.
+  - Warn or fail early when selected stream combinations and date windows are likely to exceed budget.
+  - Include plan-aware guidance in the error/warning text.
+- [ ] Add per-run API observability counters.
+  - Track and log totals: GraphQL attempted, succeeded, failed, and rate-limited.
+  - Print one summary line per run so CI logs show API health at a glance.
 
 ## Validated
 
-- [ ] Executive Summary incoherent.
-  - Security level at Medium - consider High for sensitive data, but KPI SSL mode full/strict.
+- [ ] Executive summary wording can still be incoherent in some scenarios.
+  - PDF labels were clarified (`Operational status` and `Security score`), but we still need rule-level checks so status/takeaways do not conflict.
 
 ## Security and posture checks (backlog)
 
@@ -105,4 +112,52 @@ cf-report  report  -o output.pdf --start 2026-04-09 --end 2026-04-10
 # Everything works... except, if we ran it again
 cf-report  report  -o output.pdf --start 2026-04-06 --end 2026-04-08 --cache-only
 Error: No matching report snapshot for this request. Run `cf-report report` without --cache-only first, then retry.
-```
+
+## 🏗️ Refactoring & Architecture (Technical Debt)
+
+- [ ] **P-01: Async/Concurrency for Zone Processing (High Effort)**
+  - **Context**: Current processing is sequential (zones → days → streams). A setup with 10 zones and 30 days results in ~1,200 sequential API calls, causing slow sync times.
+  - **Goal**: Implement `asyncio` with `httpx.AsyncClient` to process zones and days in parallel.
+  - **Constraints**: Must respect Cloudflare rate limits; implementation should include a semaphore or rate-limiter to prevent 429s.
+
+- [ ] **A-01: Refactor `sync/orchestrator.py` (God Function)**
+  - **Context**: The file is ~450 lines and mixes sync logic, JSON assembly, rotation, and cleanup. `_run_sync_locked` is overly nested and complex.
+  - **Goal**: Split into `sync/orchestrator.py` (sync logic), `report/json_builder.py` (JSON assembly), and `sync/clean.py` (cleanup logic).
+
+- [ ] **A-03: Resolve `report/` and `sync/` Package Overlap**
+  - **Context**: Report JSON assembly is currently scattered between the orchestrator and `report/` modules, making data flow hard to trace.
+  - **Goal**: Move all JSON report assembly logic into the `report/` package. The `sync/` package should strictly manage on-disk cache synchronization.
+
+- [ ] **A-02: Transition Fetcher Registry to Factory/DI Pattern**
+  - **Context**: Fetchers are module-level singletons created at import time, preventing easy dependency injection or per-run configuration.
+  - **Goal**: Replace `FETCHER_REGISTRY` with a factory that supports lazy initialization and injection of mock clients for tests.
+
+- [ ] **A-05: Consolidate `SyncMode` Logic**
+  - **Context**: Mapping `SyncMode` (e.g., `this_week`) to date ranges is duplicated across orchestrator and resolver modules.
+  - **Goal**: Centralize all date range resolution logic into `common/period_resolver.py`.
+
+- [ ] **B-03: Audit Loop Closures (Fragility)**
+  - **Context**: Reviewer noted that `read_stream` closures in `orchestrator.py` rely on default argument capture (`stream_id=sid`), which is correct but fragile to refactoring.
+  - **Goal**: Audit closures and consider converting to `functools.partial` for better stability.
+
+## 🧪 Testing Gaps (Hardening)
+
+- [ ] **T-03: Reliability Tests for `cache/lock.py`**
+  - **Context**: PID-based lock recovery was implemented to handle stale locks, but edge cases like high contention and timeout triggers are untested.
+  - **Goal**: Add tests verifying lock acquisition, release, timeout triggers, and successful recovery from dead process IDs.
+
+- [ ] **T-04: Integration Tests for SMTP Send Path**
+  - **Context**: SMTP configuration is validated at runtime, but the actual `send_pdf_report_email` dispatch flow (attachments, placeholders) is untested.
+  - **Goal**: Add an integration test using a mocked SMTP server (e.g., `aiosmtpd` or `pytest-localserver`) to verify the full email flow.
+
+## 🎯 Coverage Goals (Future)
+
+Current: ~75%
+Target: 85%
+
+Priority files to improve:
+- [ ] `aggregate.py` (86% → 100%) - missing error paths and edge cases
+- [ ] `report/command_flow.py` (59% → 85%) - mock more sync/health failure branches
+- [ ] `sync/orchestrator.py` (75% → 90%) - test more sync modes and CLI edge cases
+- [ ] `fetchers/*.py` - improve unit test coverage for individual stream fetchers
+- [ ] `zone_health.py` (68% → 85%) - test more Cloudflare API error scenarios
