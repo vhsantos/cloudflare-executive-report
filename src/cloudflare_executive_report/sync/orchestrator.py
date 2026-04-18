@@ -11,9 +11,11 @@ from pathlib import Path
 
 from cloudflare_executive_report import exits
 from cloudflare_executive_report.aggregate import (
-    SECTION_BUILDERS,
     build_report,
     collect_days_payloads,
+)
+from cloudflare_executive_report.aggregators import (
+    SECTION_BUILDERS,
 )
 from cloudflare_executive_report.cache import (
     CacheLockTimeout,
