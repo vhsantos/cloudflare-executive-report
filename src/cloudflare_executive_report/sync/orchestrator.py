@@ -98,7 +98,7 @@ def _sync_days_for_mode(opts: SyncOptions, idx, y: date) -> list[date]:
     return list(iter_dates_inclusive(d0, d1))
 
 
-def _rotate_report_outputs(cfg: AppConfig, *, history_date: date) -> None:
+def _rotate_report_outputs(cfg: AppConfig) -> None:
     current = cfg.report_current_path()
     if not current.is_file():
         return
@@ -120,15 +120,11 @@ def _rotate_report_outputs(cfg: AppConfig, *, history_date: date) -> None:
         log.error("Failed to read current report for rotation: %s", e)
         return
 
-    out_dir = cfg.report_outputs_dir()
-    prev = cfg.report_previous_path()
-    hist_dir = cfg.report_history_dir()
+    hist_dir = cfg.history_path()
     ts = datetime.now(UTC).strftime("%Y-%m-%d_%H%M%S")
     hist_name = f"cf_report_{fp_hash}_{ts}.json"
     hist = hist_dir / hist_name
-    out_dir.mkdir(parents=True, exist_ok=True)
     hist_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(current, prev)
     shutil.copy2(current, hist)
 
 
@@ -371,10 +367,10 @@ def _run_sync_locked(
                     if _normalize_report_for_comparison(
                         existing
                     ) != _normalize_report_for_comparison(rep):
-                        _rotate_report_outputs(cfg, history_date=utc_today())
+                        _rotate_report_outputs(cfg)
                 elif out.is_file():
                     # If it's a file but not a valid report JSON, rotate it anyway
-                    _rotate_report_outputs(cfg, history_date=utc_today())
+                    _rotate_report_outputs(cfg)
 
             from cloudflare_executive_report.report.snapshot import save_report_json
 
@@ -399,7 +395,7 @@ def run_clean(
         return exits.INVALID_PARAMS
 
     cache_root = cfg.cache_path()
-    history_root = cfg.report_history_dir()
+    history_root = cfg.history_path()
     try:
         with cache_lock(cache_root):
             if older_than is None:

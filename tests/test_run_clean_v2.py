@@ -8,9 +8,9 @@ def test_run_clean_history_parsing_old_and_new(tmp_path):
     cfg = AppConfig(
         api_token="x",
         cache_dir=str(tmp_path / "cache"),
-        output_dir=str(tmp_path / "out"),
+        history_dir=str(tmp_path / "out"),
     )
-    hist_dir = cfg.report_history_dir()
+    hist_dir = cfg.history_path()
     hist_dir.mkdir(parents=True)
 
     # 1. Old format: cf_report_YYYY-MM-DD_HHMMSS.json

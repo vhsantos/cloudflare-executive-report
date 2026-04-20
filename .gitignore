@@ -207,7 +207,8 @@ marimo/_lsp/
 __marimo__/
 
 plan_idea
-cache
+cache/
+history/
 outputs
 !src/cloudflare_executive_report/cache/
 !docs/sample-data

@@ -130,8 +130,8 @@ Score = max(0, 100 - (total_risk_weight / 60) * 100)
 
 ```yaml
 api_token: "cfat_xxx"
-cache_dir: "~/.cache/cf-report"
-output_dir: "~/.cf-report"
+cache_dir: "~/.cf-report/cache"
+history_dir: "~/.cf-report/history"
 log_level: "info"
 
 zones:

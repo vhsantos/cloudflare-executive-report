@@ -52,16 +52,15 @@ def _report_has_zone(report: dict[str, Any] | None, zone_id: str) -> bool:
 
 def _iter_baseline_candidates(cfg: AppConfig) -> Iterator[dict[str, Any]]:
     seen: set[Path] = set()
-    p = cfg.report_previous_path()
-    if p.is_file():
-        seen.add(p.resolve())
-        rep = load_report_json(p)
-        if rep is not None:
-            yield rep
-    hist = cfg.report_history_dir()
+    hist = cfg.history_path()
     if hist.is_dir():
-        for f in sorted(hist.glob("cf_report_*.json"), reverse=True):
+        current = cfg.report_current_path().resolve()
+        # Sort by mtime descending to ensure most recent reports are prioritized
+        files = sorted(hist.glob("cf_report_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        for f in files:
             rf = f.resolve()
+            if rf == current:
+                continue
             if rf in seen:
                 continue
             seen.add(rf)

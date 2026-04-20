@@ -63,7 +63,7 @@ def find_and_extract_reusable_snapshot(
     if current_path.is_file():
         candidates.append(current_path)
 
-    history_dir = cfg.report_history_dir()
+    history_dir = cfg.history_path()
     if history_dir.is_dir():
         candidates.extend(history_dir.glob(f"cf_report_{fp_hash}_*.json"))
 

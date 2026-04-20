@@ -18,7 +18,7 @@ def mock_cfg(tmp_path: Path) -> AppConfig:
     return AppConfig(
         api_token="x",
         cache_dir=str(tmp_path / "cache"),
-        output_dir=str(tmp_path / "output"),
+        history_dir=str(tmp_path / "output"),
         zones=[ZoneEntry(id="z1", name="n1")],
     )
 

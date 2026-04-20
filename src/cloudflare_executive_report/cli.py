@@ -229,8 +229,8 @@ def cmd_report(
         "--skip-zone-health",
         help="Omit zone health (REST); same as sync.",
     ),
-    output_dir: Path | None = typer.Option(
-        None, "--output-dir", help="Override JSON/history output root directory for this run."
+    history_dir: Path | None = typer.Option(
+        None, "--history-dir", help="Override JSON/history output root directory for this run."
     ),
     config: Path | None = typer.Option(None, "--config", help="Override config path."),
 ) -> None:
@@ -290,8 +290,8 @@ def cmd_report(
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.INVALID_PARAMS) from None
 
-    if output_dir is not None:
-        cfg.output_dir = str(output_dir)
+    if history_dir is not None:
+        cfg.history_dir = str(history_dir)
 
     setup_logging(verbose=verbose, quiet=quiet, log_level=_config_log_level(cfg))
 
@@ -479,8 +479,8 @@ def cmd_sync(
         "--skip-zone-health",
         help="Omit zone health (REST); cache data only.",
     ),
-    output_dir: Path | None = typer.Option(
-        None, "--output-dir", help="Override JSON/history output root directory for this run."
+    history_dir: Path | None = typer.Option(
+        None, "--history-dir", help="Override JSON/history output root directory for this run."
     ),
     config: Path | None = typer.Option(None, "--config", help="Override config path."),
 ) -> None:
@@ -519,8 +519,8 @@ def cmd_sync(
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.INVALID_PARAMS) from None
 
-    if output_dir is not None:
-        cfg.output_dir = str(output_dir)
+    if history_dir is not None:
+        cfg.history_dir = str(history_dir)
 
     setup_logging(verbose=verbose, quiet=quiet, log_level=_config_log_level(cfg))
 
@@ -547,8 +547,8 @@ def cmd_clean(
     scope_history: bool = typer.Option(False, "--history", help="Clean report history scope."),
     delete_all: bool = typer.Option(False, "--all", help="Clean both cache and history."),
     force: bool = typer.Option(False, "--force", help="Confirm destructive cleanup for --all."),
-    output_dir: Path | None = typer.Option(
-        None, "--output-dir", help="Override JSON/history output root directory for this run."
+    history_dir: Path | None = typer.Option(
+        None, "--history-dir", help="Override JSON/history output root directory for this run."
     ),
 ) -> None:
     """Prune or wipe the DNS cache directory."""
@@ -559,8 +559,8 @@ def cmd_clean(
     except (FileNotFoundError, ValueError) as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.GENERAL_ERROR) from None
-    if output_dir is not None:
-        cfg.output_dir = str(output_dir)
+    if history_dir is not None:
+        cfg.history_dir = str(history_dir)
     setup_logging(verbose=verbose, quiet=quiet, log_level=_config_log_level(cfg))
     if delete_all and not force:
         typer.echo("Error: --all requires --force.", err=True)

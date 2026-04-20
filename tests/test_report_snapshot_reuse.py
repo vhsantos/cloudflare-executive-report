@@ -15,16 +15,14 @@ def mock_cfg(tmp_path):
     return AppConfig(
         api_token="x",
         cache_dir=str(tmp_path / "cache"),
-        output_dir=str(tmp_path / "out"),
+        history_dir=str(tmp_path / "out"),
         zones=[ZoneEntry(id="z1", name="n1"), ZoneEntry(id="z2", name="n2")],
     )
 
 
 def test_find_and_extract_reusable_snapshot_scenarios(mock_cfg):
-    out_dir = mock_cfg.report_outputs_dir()
-    hist_dir = mock_cfg.report_history_dir()
-    out_dir.mkdir(parents=True)
-    hist_dir.mkdir(parents=True)
+    hist_dir = mock_cfg.history_path()
+    hist_dir.mkdir(parents=True, exist_ok=True)
 
     fp = build_data_fingerprint(
         start="2026-04-01", end="2026-04-07", top=5, types={"http"}, include_today=False

@@ -42,7 +42,7 @@ config value > environment variable > empty string
 The config file usually contains non-secret settings:
 
 - zones
-- cache_dir and output_dir
+- cache_dir and history_dir
 - PDF profile/colors
 - email recipients and SMTP host/user (non-secret)
 
@@ -60,11 +60,11 @@ In CI, do not store a token in the config file. Prefer environment secrets.
 To reuse data between runs, persist:
 
 - `cache_dir` (API day files)
-- `output_dir/outputs` (snapshots and history)
+- `history_dir` (snapshots and history)
 
 If only `cache_dir` is persisted, sync runs will be faster, but report snapshots/history may be missing.
 
-> Note: `--cache-only` reuse is strict (it must match the last snapshot fingerprint). Persisting `output_dir/outputs` helps baseline and comparison logic.
+> Note: `--cache-only` reuse is strict (it must match the last snapshot fingerprint). Persisting `history_dir` helps baseline and comparison logic.
 
 ## Minimal CI approach
 
@@ -170,7 +170,7 @@ This example:
 
 - uses `CF_REPORT_API_TOKEN` from GitHub Secrets
 - writes config from a repository variable `CF_REPORT_CONFIG_YAML`
-- caches both `cache_dir` and `output_dir/outputs`
+- caches both `cache_dir` and `history_dir`
 - uploads the generated PDF
 
 ```yaml
@@ -237,7 +237,7 @@ The config YAML should point to CI-friendly paths so caching works:
 ```yaml
 api_token: ""
 cache_dir: ".ci-cache/cf-report"
-output_dir: ".ci-output"
+history_dir: ".ci-output/history"
 zones:
   - id: "your-zone-id"
     name: "example.com"
@@ -293,7 +293,7 @@ Example:
 cat > .ci/config.yaml <<'YAML'
 api_token: ""
 cache_dir: ".ci-cache/cf-report"
-output_dir: ".ci-output"
+history_dir: ".ci-output/history"
 zones:
   - id: "your-zone-id"
     name: "example.com"
@@ -335,5 +335,5 @@ cf-report clean --older-than 90
 
 - Use `CF_REPORT_API_TOKEN` as a CI secret.
 - Store config as a file in the repo or as a CI variable that writes to a file.
-- Persist both `cache_dir` and `output_dir/outputs` using CI caches.
+- Persist both `cache_dir` and `history_dir` using CI caches.
 - Upload PDFs as artifacts.

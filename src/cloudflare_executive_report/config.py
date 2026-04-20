@@ -159,7 +159,7 @@ class AppConfig:
 
     api_token: str = ""
     cache_dir: str = "~/.cache/cf-report"
-    output_dir: str = "~/.cf-report"
+    history_dir: str = "~/.cf-report"
     default_zone: str = ""
     log_level: str = "info"
     default_period: str = "last_month"
@@ -174,26 +174,17 @@ class AppConfig:
     def cache_path(self) -> Path:
         return expand_path(self.cache_dir)
 
-    def output_path(self) -> Path:
-        return expand_path(self.output_dir)
-
-    def report_outputs_dir(self) -> Path:
-        return self.output_path() / "outputs"
+    def history_path(self) -> Path:
+        return expand_path(self.history_dir)
 
     def report_current_path(self) -> Path:
-        return self.report_outputs_dir() / "cf_report.json"
-
-    def report_previous_path(self) -> Path:
-        return self.report_outputs_dir() / "cf_report.previous.json"
-
-    def report_history_dir(self) -> Path:
-        return self.report_outputs_dir() / "history"
+        return self.history_path() / "cf_report.json"
 
     def to_yaml_dict(self) -> dict[str, Any]:
         return {
             "api_token": self.api_token,
             "cache_dir": self.cache_dir,
-            "output_dir": self.output_dir,
+            "history_dir": self.history_dir,
             "default_zone": self.default_zone,
             "log_level": self.log_level,
             "default_period": self.default_period,
@@ -370,8 +361,8 @@ class AppConfig:
 
         return cls(
             api_token=api_token,
-            cache_dir=str(data.get("cache_dir") or "~/.cache/cf-report"),
-            output_dir=str(data.get("output_dir") or "~/.cf-report"),
+            cache_dir=str(data.get("cache_dir") or "~/.cf-report/cache"),
+            history_dir=str(data.get("history_dir") or "~/.cf-report/history"),
             default_zone=str(data.get("default_zone") or ""),
             log_level=str(data.get("log_level") or "info"),
             default_period=str(data.get("default_period") or "last_month"),
@@ -467,7 +458,7 @@ def template_config() -> AppConfig:
     return AppConfig(
         api_token="cfat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
         cache_dir="~/.cache/cf-report",
-        output_dir="~/.cf-report",
+        history_dir="~/.cf-report",
         default_zone="",
         log_level="info",
         default_period="last_month",

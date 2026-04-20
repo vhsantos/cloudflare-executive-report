@@ -28,16 +28,20 @@ def _cfg(tmp_path) -> AppConfig:
     return AppConfig(
         api_token="x",
         cache_dir=str(tmp_path / "cache"),
-        output_dir=str(tmp_path / "out"),
+        history_dir=str(tmp_path / "out"),
         zones=[ZoneEntry(id="z1", name="example.com")],
     )
 
 
 def test_select_previous_range_prefers_nearest_valid_prior(tmp_path):
     cfg = _cfg(tmp_path)
-    _write_report(cfg.report_previous_path(), start="2026-04-03", end="2026-04-04")
     _write_report(
-        cfg.report_history_dir() / "cf_report_2026-04-08_100000.json",
+        cfg.history_path() / "cf_report_2026-04-05_000000.json",
+        start="2026-04-03",
+        end="2026-04-04",
+    )
+    _write_report(
+        cfg.history_path() / "cf_report_2026-04-08_100000.json",
         start="2026-04-01",
         end="2026-04-02",
     )
@@ -57,12 +61,12 @@ def test_select_previous_range_prefers_nearest_valid_prior(tmp_path):
 def test_select_previous_last_week_uses_expected_week_window(tmp_path):
     cfg = _cfg(tmp_path)
     _write_report(
-        cfg.report_history_dir() / "cf_report_2026-04-08_100000.json",
+        cfg.history_path() / "cf_report_2026-04-08_100000.json",
         start="2026-03-23",
         end="2026-03-29",
     )
     _write_report(
-        cfg.report_previous_path(),
+        cfg.history_path() / "cf_report_2026-04-01_000000.json",
         start="2026-03-20",
         end="2026-03-26",
     )
@@ -83,13 +87,13 @@ def test_select_previous_last_week_uses_expected_week_window(tmp_path):
 def test_select_previous_semantic_ignores_mismatched_candidate_type(tmp_path):
     cfg = _cfg(tmp_path)
     _write_report(
-        cfg.report_history_dir() / "cf_report_2026-04-08_100000.json",
+        cfg.history_path() / "cf_report_2026-04-08_100000.json",
         start="2026-03-01",
         end="2026-03-31",
         report_type="this_year",
     )
     _write_report(
-        cfg.report_previous_path(),
+        cfg.history_path() / "cf_report_2026-04-01_000000.json",
         start="2026-03-01",
         end="2026-03-31",
         report_type="last_month",

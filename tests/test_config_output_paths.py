@@ -10,11 +10,11 @@ from cloudflare_executive_report.config import (
 )
 
 
-def test_default_output_dir_separate_from_cache():
+def test_default_history_dir_separate_from_cache():
     cfg = AppConfig()
-    assert cfg.output_dir == "~/.cf-report"
+    assert cfg.history_dir == "~/.cf-report"
     assert cfg.cache_dir == "~/.cache/cf-report"
-    assert str(cfg.report_outputs_dir()).endswith("/.cf-report/outputs")
+    assert str(cfg.history_path()).endswith("/.cf-report")
 
 
 def test_from_yaml_dict_disabled_rules() -> None:

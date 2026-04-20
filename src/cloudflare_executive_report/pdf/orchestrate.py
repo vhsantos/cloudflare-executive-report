@@ -101,11 +101,21 @@ def resolve_zone(cfg: AppConfig, key: str) -> tuple[str, str]:
 
 
 def _load_previous_report(cfg: AppConfig) -> dict[str, Any] | None:
-    path = cfg.report_previous_path()
-    if not path.is_file():
+    hist_dir = cfg.history_path()
+    if not hist_dir.is_dir():
+        return None
+    current = cfg.report_current_path().resolve()
+    # Prioritize reports matching cf_report_*.json, newest first
+    all_files = sorted(
+        hist_dir.glob("cf_report_*.json"), key=lambda p: p.stat().st_mtime, reverse=True
+    )
+    # Exclude current report itself
+    candidates = [p for p in all_files if p.resolve() != current]
+    if not candidates:
         return None
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        with open(candidates[0], encoding="utf-8") as f:
+            return json.load(f)
     except (OSError, json.JSONDecodeError):
         return None
 
