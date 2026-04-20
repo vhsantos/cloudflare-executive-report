@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
 from cloudflare_executive_report import exits
 from cloudflare_executive_report.cf_client import (
@@ -24,15 +25,24 @@ from cloudflare_executive_report.sync.options import SyncOptions
 log = logging.getLogger(__name__)
 
 
-def refresh_report_json_zone_health_only(
+def refresh_snapshot_zone_health(
     cfg: AppConfig,
     opts: SyncOptions,
-    *,
     zone_filter: str | None = None,
+    snapshot_data: dict[str, Any] | None = None,
 ) -> int:
-    """Fetch zone health, rebuild executive summaries, and rewrite current report JSON."""
+    """Fetch zone health, rebuild summaries, and rewrite report JSON.
+
+    If `snapshot_data` is provided, it mutates the dictionary in-place and does
+    not write the result back to disk. Otherwise, it loads, updates, and saves
+    the current `cf_report.json`.
+    """
     out = cfg.report_current_path()
-    report_raw = load_report_json(out)
+    if snapshot_data is not None:
+        report_raw = snapshot_data
+    else:
+        report_raw = load_report_json(out)
+
     if report_raw is None or not is_report_snapshot_valid(report_raw):
         log.error("Current report JSON missing or invalid for health-only refresh.")
         return exits.INVALID_PARAMS
@@ -113,5 +123,6 @@ def refresh_report_json_zone_health_only(
 
     report_raw["warnings"] = merged_warnings
     report_raw["zone_health_fetched_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    save_report_json(out, report_raw, quiet=opts.quiet)
+    if snapshot_data is None:
+        save_report_json(out, report_raw, quiet=opts.quiet)
     return exits.SUCCESS

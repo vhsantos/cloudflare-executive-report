@@ -102,11 +102,29 @@ def _rotate_report_outputs(cfg: AppConfig, *, history_date: date) -> None:
     current = cfg.report_current_path()
     if not current.is_file():
         return
+
+    try:
+        with open(current, encoding="utf-8") as f:
+            data = json.load(f)
+            fp = data.get("data_fingerprint")
+            if fp:
+                from cloudflare_executive_report.common.period_resolver import (
+                    compute_fingerprint_hash,
+                )
+
+                fp_hash = compute_fingerprint_hash(fp)
+            else:
+                log.error("Current report missing data_fingerprint; skipping rotation.")
+                return
+    except Exception as e:
+        log.error("Failed to read current report for rotation: %s", e)
+        return
+
     out_dir = cfg.report_outputs_dir()
     prev = cfg.report_previous_path()
     hist_dir = cfg.report_history_dir()
     ts = datetime.now(UTC).strftime("%Y-%m-%d_%H%M%S")
-    hist_name = f"cf_report_{ts}.json"
+    hist_name = f"cf_report_{fp_hash}_{ts}.json"
     hist = hist_dir / hist_name
     out_dir.mkdir(parents=True, exist_ok=True)
     hist_dir.mkdir(parents=True, exist_ok=True)
@@ -329,7 +347,6 @@ def _run_sync_locked(
             data_fingerprint=build_data_fingerprint(
                 start=report_start,
                 end=report_end,
-                zones=[z.id for z in zones],
                 top=opts.top,
                 types=opts.types,
                 include_today=opts.include_today,
@@ -427,7 +444,12 @@ def run_clean(
                     stem = report_file.stem
                     ds = stem.replace("cf_report_", "", 1)
                     if "_" in ds:
-                        ds = ds.split("_", 1)[0]
+                        parts = ds.split("_")
+                        # If first part is exactly 16 chars (our hash), date is the second part
+                        if len(parts) >= 2 and len(parts[0]) == 16:
+                            ds = parts[1]
+                        else:
+                            ds = parts[0]
                     try:
                         d = parse_ymd(ds)
                     except ValueError:

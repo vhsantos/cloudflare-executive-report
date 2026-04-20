@@ -6,6 +6,8 @@ resolution, baseline period derivation, and deterministic fingerprint building.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import date, timedelta
 from typing import Any, Protocol
 
@@ -164,17 +166,25 @@ def build_data_fingerprint(
     *,
     start: str,
     end: str,
-    zones: list[str],
     top: int,
     types: list[str] | tuple[str, ...] | set[str] | frozenset[str],
     include_today: bool,
 ) -> dict[str, Any]:
-    """Build canonical fingerprint payload for report reuse checks."""
+    """Build canonical fingerprint payload for report reuse checks.
+
+    Note: zones are intentionally excluded so subsets can reuse snapshots.
+    """
     return {
         "start": str(start),
         "end": str(end),
-        "zones": sorted({str(z).strip() for z in zones if str(z).strip()}),
         "top": int(top),
         "types": sorted({str(t).strip().lower() for t in types if str(t).strip()}),
         "include_today": bool(include_today),
     }
+
+
+def compute_fingerprint_hash(fingerprint: dict[str, Any]) -> str:
+    """Compute a stable SHA-256 hash (16 chars) of the fingerprint dict."""
+    # sort_keys=True guarantees stable JSON serialization
+    serialized = json.dumps(fingerprint, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]

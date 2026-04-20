@@ -12,14 +12,12 @@ from typing import Any
 from cloudflare_executive_report import exits
 from cloudflare_executive_report.common.period_resolver import build_data_fingerprint
 from cloudflare_executive_report.common.report_cache import report_period_streams_cache_complete
-from cloudflare_executive_report.common.report_snapshot import (
-    data_fingerprint_matches,
-    is_report_snapshot_valid,
-)
 from cloudflare_executive_report.config import AppConfig
-from cloudflare_executive_report.report.health_refresh import refresh_report_json_zone_health_only
+from cloudflare_executive_report.report.health_refresh import (
+    refresh_snapshot_zone_health,
+)
 from cloudflare_executive_report.report.period import pdf_report_period_for_options
-from cloudflare_executive_report.report.snapshot import load_report_json
+from cloudflare_executive_report.report.snapshot import find_and_extract_reusable_snapshot
 from cloudflare_executive_report.sync.options import SyncOptions
 from cloudflare_executive_report.sync.orchestrator import run_sync
 
@@ -116,14 +114,10 @@ def run_report_pdf_command(
     requested_fingerprint = build_data_fingerprint(
         start=period_start,
         end=period_end,
-        zones=scoped_zone_ids,
         top=top,
         types=type_set,
         include_today=include_today,
     )
-    current_report = load_report_json(cfg.report_current_path())
-    snapshot_valid = is_report_snapshot_valid(current_report)
-    fingerprint_ok = data_fingerprint_matches(current_report, requested_fingerprint)
 
     def write_pdf(
         snapshot: dict[str, Any] | None,
@@ -175,7 +169,10 @@ def run_report_pdf_command(
     initial_span = (period_start, period_end)
 
     if cache_only:
-        if not snapshot_valid or not fingerprint_ok:
+        reusable_snapshot = find_and_extract_reusable_snapshot(
+            cfg, requested_fingerprint, scoped_zone_ids
+        )
+        if not reusable_snapshot:
             return ReportPdfOutcome(exit_code=exits.INVALID_PARAMS, stderr=_CACHE_ONLY_SNAPSHOT_MSG)
         if refresh_health:
             if not report_period_streams_cache_complete(
@@ -192,75 +189,26 @@ def run_report_pdf_command(
                         "Run `cf-report sync` to fill the cache."
                     ),
                 )
-            code = refresh_report_json_zone_health_only(
+            code = refresh_snapshot_zone_health(
                 cfg,
                 sync_opts,
                 zone_filter=zone_effective,
+                snapshot_data=reusable_snapshot,
             )
             if code != exits.SUCCESS:
                 return ReportPdfOutcome(exit_code=code)
-            refreshed = load_report_json(cfg.report_current_path())
-            if refreshed is None or not is_report_snapshot_valid(refreshed):
-                return ReportPdfOutcome(
-                    exit_code=exits.GENERAL_ERROR,
-                    stderr="Error: report JSON missing or invalid after health refresh.",
-                )
-            if refreshed.get("partial") is True:
+            if reusable_snapshot.get("partial") is True:
                 log.warning(
                     "Snapshot has missing stream days (partial=true); see missing_days in JSON."
                 )
-            return write_pdf(refreshed, allow_live_health=False, span=initial_span)
-        if current_report is not None and current_report.get("partial") is True:
+            return write_pdf(reusable_snapshot, allow_live_health=False, span=initial_span)
+        if reusable_snapshot.get("partial") is True:
             log.warning(
                 "Snapshot has missing stream days (partial=true); see missing_days in JSON."
             )
-        return write_pdf(current_report, allow_live_health=False, span=initial_span)
+        return write_pdf(reusable_snapshot, allow_live_health=False, span=initial_span)
 
-    if snapshot_valid and fingerprint_ok and not refresh_health:
-        if current_report is not None and current_report.get("partial") is True:
-            log.warning(
-                "Snapshot has missing stream days (partial=true); see missing_days in JSON."
-            )
-        return write_pdf(current_report, allow_live_health=False, span=initial_span)
-
-    if snapshot_valid and fingerprint_ok and refresh_health:
-        if report_period_streams_cache_complete(
-            cfg,
-            sync_opts,
-            zone_filter=zone_effective,
-            streams=pdf_streams,
-        ):
-            code = refresh_report_json_zone_health_only(
-                cfg,
-                sync_opts,
-                zone_filter=zone_effective,
-            )
-            if code != exits.SUCCESS:
-                return ReportPdfOutcome(exit_code=code)
-            refreshed = load_report_json(cfg.report_current_path())
-            if refreshed is None or not is_report_snapshot_valid(refreshed):
-                return ReportPdfOutcome(
-                    exit_code=exits.GENERAL_ERROR,
-                    stderr="Error: report JSON missing or invalid after health refresh.",
-                )
-            return write_pdf(refreshed, allow_live_health=False, span=initial_span)
-        code = run_sync(
-            cfg,
-            sync_opts,
-            zone_filter=zone_effective,
-            output_path=None,
-            write_stdout=False,
-        )
-        if code != exits.SUCCESS:
-            return ReportPdfOutcome(exit_code=code)
-        try:
-            period_start, period_end = pdf_report_period_for_options(
-                cfg, sync_opts, zone_filter=zone_effective
-            )
-        except ValueError as e:
-            return ReportPdfOutcome(exit_code=exits.INVALID_PARAMS, stderr=str(e))
-        return write_pdf(None, allow_live_health=True, span=(period_start, period_end))
-
+    # Normal Mode (Design A): Always run sync to process from raw cache
     code = run_sync(
         cfg,
         sync_opts,
