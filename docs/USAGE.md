@@ -52,8 +52,8 @@ cf-report report -o zone.pdf --zone example.com --last 30
 
 ```yaml
 api_token: "cfat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-cache_dir: "~/.cache/cf-report"
-output_dir: "~/.cf-report"
+cache_dir: "~/.cf-report/cache"
+history_dir: "~/.cf-report/history"
 default_zone: ""
 log_level: "info"
 default_period: "last_month"
@@ -144,7 +144,7 @@ config value > environment variable > empty string
 
 - `api_token` (`str`) - Cloudflare API token.
 - `cache_dir` (`str`) - local cache root.
-- `output_dir` (`str`) - output root (`outputs/cf_report.json`, history, and default PDFs).
+- `history_dir` (`str`) - output root (`history/cf_report.json`, history, and default PDFs).
 - `default_zone` (`str`) - used when `--zone` is omitted.
 - `log_level` (`str`) - typical values: `debug`, `info`, `warning`, `error`.
 - `default_period` (`str`) - default period preset used when no period flags are provided. Supported values: `incremental`, `yesterday`, `last_week`, `this_week`, `last_month`, `this_month`, `last_year`, `this_year`, or `last_N` (example: `last_30`).

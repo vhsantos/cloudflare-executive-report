@@ -40,7 +40,6 @@ from cloudflare_executive_report.common.dates import (
     utc_today,
     utc_yesterday,
 )
-from cloudflare_executive_report.common.formatting import progress_message
 from cloudflare_executive_report.common.logging_config import effective_debug_enabled
 from cloudflare_executive_report.common.period_resolver import (
     build_data_fingerprint,
@@ -98,19 +97,33 @@ def _sync_days_for_mode(opts: SyncOptions, idx, y: date) -> list[date]:
     return list(iter_dates_inclusive(d0, d1))
 
 
-def _rotate_report_outputs(cfg: AppConfig, *, history_date: date) -> None:
+def _rotate_report_outputs(cfg: AppConfig) -> None:
     current = cfg.report_current_path()
     if not current.is_file():
         return
-    out_dir = cfg.report_outputs_dir()
-    prev = cfg.report_previous_path()
-    hist_dir = cfg.report_history_dir()
+
+    try:
+        with open(current, encoding="utf-8") as f:
+            data = json.load(f)
+            fp = data.get("data_fingerprint")
+            if fp:
+                from cloudflare_executive_report.common.period_resolver import (
+                    compute_fingerprint_hash,
+                )
+
+                fp_hash = compute_fingerprint_hash(fp)
+            else:
+                log.error("Current report missing data_fingerprint; skipping rotation.")
+                return
+    except Exception as e:
+        log.error("Failed to read current report for rotation: %s", e)
+        return
+
+    hist_dir = cfg.history_path()
     ts = datetime.now(UTC).strftime("%Y-%m-%d_%H%M%S")
-    hist_name = f"cf_report_{ts}.json"
+    hist_name = f"cf_report_{fp_hash}_{ts}.json"
     hist = hist_dir / hist_name
-    out_dir.mkdir(parents=True, exist_ok=True)
     hist_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(current, prev)
     shutil.copy2(current, hist)
 
 
@@ -200,7 +213,7 @@ def _run_sync_locked(
                 return exits.GENERAL_ERROR
 
         for z in zones:
-            progress_message(f"Zone {z.name} ({z.id})", quiet=opts.quiet)
+            log.info("Zone %s (%s)", z.name, z.id)
             zmeta = zmeta_by_zone_id[z.id]
 
             plan = (zmeta.get("plan") or {}).get("legacy_id")
@@ -226,7 +239,6 @@ def _run_sync_locked(
                         zone_meta=zmeta,
                         force_fetch=force_fetch,
                         refresh=opts.refresh,
-                        quiet=opts.quiet,
                     ):
                         rate_fail = True
 
@@ -329,7 +341,6 @@ def _run_sync_locked(
             data_fingerprint=build_data_fingerprint(
                 start=report_start,
                 end=report_end,
-                zones=[z.id for z in zones],
                 top=opts.top,
                 types=opts.types,
                 include_today=opts.include_today,
@@ -354,14 +365,14 @@ def _run_sync_locked(
                     if _normalize_report_for_comparison(
                         existing
                     ) != _normalize_report_for_comparison(rep):
-                        _rotate_report_outputs(cfg, history_date=utc_today())
+                        _rotate_report_outputs(cfg)
                 elif out.is_file():
                     # If it's a file but not a valid report JSON, rotate it anyway
-                    _rotate_report_outputs(cfg, history_date=utc_today())
+                    _rotate_report_outputs(cfg)
 
             from cloudflare_executive_report.report.snapshot import save_report_json
 
-            save_report_json(out, rep, quiet=opts.quiet)
+            save_report_json(out, rep)
 
         if rate_fail:
             return exits.RATE_LIMIT_EXCEEDED
@@ -382,7 +393,7 @@ def run_clean(
         return exits.INVALID_PARAMS
 
     cache_root = cfg.cache_path()
-    history_root = cfg.report_history_dir()
+    history_root = cfg.history_path()
     try:
         with cache_lock(cache_root):
             if older_than is None:
@@ -395,11 +406,11 @@ def run_clean(
                         else:
                             child.unlink(missing_ok=True)
                     if not quiet:
-                        print(f"Cleared cache under {cache_root}", flush=True)
+                        log.info("Cleared cache under %s", cache_root)
                 if scope_history and history_root.exists():
                     shutil.rmtree(history_root)
                     if not quiet:
-                        print(f"Cleared history under {history_root}", flush=True)
+                        log.info("Cleared history under %s", history_root)
                 return exits.SUCCESS
 
             assert older_than is not None
@@ -427,7 +438,12 @@ def run_clean(
                     stem = report_file.stem
                     ds = stem.replace("cf_report_", "", 1)
                     if "_" in ds:
-                        ds = ds.split("_", 1)[0]
+                        parts = ds.split("_")
+                        # If first part is exactly 16 chars (our hash), date is the second part
+                        if len(parts) >= 2 and len(parts[0]) == 16:
+                            ds = parts[1]
+                        else:
+                            ds = parts[0]
                     try:
                         d = parse_ymd(ds)
                     except ValueError:
@@ -437,18 +453,16 @@ def run_clean(
                         removed_history += 1
             if not quiet:
                 if scope_cache:
-                    print(
-                        "Removed "
-                        f"{removed_cache} cache day directories "
-                        f"older than {older_than} days",
-                        flush=True,
+                    log.info(
+                        "Removed %d cache day directories older than %d days",
+                        removed_cache,
+                        older_than,
                     )
                 if scope_history:
-                    print(
-                        "Removed "
-                        f"{removed_history} history report files "
-                        f"older than {older_than} days",
-                        flush=True,
+                    log.info(
+                        "Removed %d history report files older than %d days",
+                        removed_history,
+                        older_than,
                     )
             return exits.SUCCESS
     except CacheLockTimeout as e:

@@ -54,10 +54,8 @@ def test_data_fingerprint_is_canonical():
     fp = build_data_fingerprint(
         start="2026-04-01",
         end="2026-04-30",
-        zones=["z2", "z1", "z1"],
         top=10,
         types={"HTTP", "dns"},
         include_today=False,
     )
-    assert fp["zones"] == ["z1", "z2"]
     assert fp["types"] == ["dns", "http"]

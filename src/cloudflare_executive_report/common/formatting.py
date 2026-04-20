@@ -122,9 +122,3 @@ def format_pdf_status_line(text: str, *, level: str | None = None) -> str:
     )
     marker, color = status_marker_for_pdf(resolved_level)
     return f"<font color='{color}'><b>{escape(marker)}</b></font> {escape(resolved_text)}"
-
-
-def progress_message(msg: str, *, quiet: bool) -> None:
-    """Print a message to stdout if not in quiet mode."""
-    if not quiet:
-        print(msg, flush=True)

@@ -22,7 +22,7 @@ def mock_cfg(tmp_path: Path) -> AppConfig:
     return AppConfig(
         api_token="x",
         cache_dir=str(tmp_path / "cache"),
-        output_dir=str(tmp_path / "output"),
+        history_dir=str(tmp_path / "output"),
         zones=[ZoneEntry(id="z1", name="n1")],
     )
 
@@ -35,10 +35,8 @@ def test_finalize_pdf_and_optional_email_no_email(mock_cfg: AppConfig) -> None:
         period_end="2026-04-01",
         zone_keys=["z1"],
         send_email=False,
-        pdf_written_line="Wrote test.pdf",
     )
     assert res.exit_code == exits.SUCCESS
-    assert res.pdf_written_line == "Wrote test.pdf"
     assert res.email_sent_line is None
 
 
@@ -53,7 +51,6 @@ def test_finalize_pdf_and_optional_email_success(mock_send: MagicMock, mock_cfg:
         period_end="2026-04-01",
         zone_keys=["z1"],
         send_email=True,
-        pdf_written_line="Wrote test.pdf",
     )
     assert res.exit_code == exits.SUCCESS
     assert "Sent report" in res.email_sent_line
@@ -61,24 +58,18 @@ def test_finalize_pdf_and_optional_email_success(mock_send: MagicMock, mock_cfg:
 
 
 @patch("cloudflare_executive_report.report.command_flow.pdf_report_period_for_options")
-@patch("cloudflare_executive_report.report.command_flow.load_report_json")
-@patch("cloudflare_executive_report.report.command_flow.is_report_snapshot_valid")
-@patch("cloudflare_executive_report.report.command_flow.data_fingerprint_matches")
+@patch("cloudflare_executive_report.report.command_flow.find_and_extract_reusable_snapshot")
 @patch("cloudflare_executive_report.report.command_flow._finalize_pdf_and_optional_email")
 @patch("cloudflare_executive_report.pdf.orchestrate.write_report_pdf")
 def test_run_report_pdf_command_reuse_snapshot(
     mock_write_pdf: MagicMock,
     mock_finalize: MagicMock,
-    mock_fingerprint_matches: MagicMock,
-    mock_snapshot_valid: MagicMock,
-    mock_load_json: MagicMock,
+    mock_find_snapshot: MagicMock,
     mock_period: MagicMock,
     mock_cfg: AppConfig,
 ) -> None:
     mock_period.return_value = ("2026-04-01", "2026-04-01")
-    mock_load_json.return_value = {"partial": False}
-    mock_snapshot_valid.return_value = True
-    mock_fingerprint_matches.return_value = True
+    mock_find_snapshot.return_value = {"partial": False}
     mock_finalize.return_value = ReportPdfOutcome(exit_code=0)
 
     sync_opts = SyncOptions(mode=SyncMode.last_n, last_n=1)
@@ -94,34 +85,32 @@ def test_run_report_pdf_command_reuse_snapshot(
         top=5,
         type_set=frozenset(["http"]),
         include_today=False,
-        cache_only=False,
+        cache_only=True,
         refresh_health=False,
     )
 
     assert res.exit_code == 0
-    # is_report_snapshot_valid is called, and since it matches, we go straight to write_pdf
-    assert mock_snapshot_valid.called
+    # find_and_extract_reusable_snapshot is called, and since it matches,
+    # we go straight to write_pdf
+    assert mock_find_snapshot.called
     assert mock_finalize.called
 
 
 @patch("cloudflare_executive_report.report.command_flow.pdf_report_period_for_options")
-@patch("cloudflare_executive_report.report.command_flow.load_report_json")
-@patch("cloudflare_executive_report.report.command_flow.is_report_snapshot_valid")
+@patch("cloudflare_executive_report.report.command_flow.find_and_extract_reusable_snapshot")
 @patch("cloudflare_executive_report.report.command_flow.run_sync")
 @patch("cloudflare_executive_report.report.command_flow._finalize_pdf_and_optional_email")
 @patch("cloudflare_executive_report.pdf.orchestrate.write_report_pdf")
 def test_run_report_pdf_command_sync_needed(
     mock_write_pdf: MagicMock,
     mock_finalize: MagicMock,
-    mock_snapshot_valid: MagicMock,
     mock_sync: MagicMock,
-    mock_load_json: MagicMock,
+    mock_find_snapshot: MagicMock,
     mock_period: MagicMock,
     mock_cfg: AppConfig,
 ) -> None:
     mock_period.return_value = ("2026-04-01", "2026-04-01")
-    mock_load_json.return_value = None
-    mock_snapshot_valid.return_value = False
+    mock_find_snapshot.return_value = None
     mock_sync.return_value = exits.SUCCESS
     mock_finalize.return_value = ReportPdfOutcome(exit_code=0)
 
@@ -156,7 +145,6 @@ def test_finalize_pdf_and_optional_email_disabled(mock_cfg: AppConfig) -> None:
         period_end="2026-04-01",
         zone_keys=["z1"],
         send_email=True,
-        pdf_written_line="Wrote test.pdf",
     )
     assert res.exit_code == exits.INVALID_PARAMS
     assert "requires email.enabled: true" in res.stderr
@@ -174,26 +162,20 @@ def test_finalize_pdf_and_optional_email_error(mock_send: MagicMock, mock_cfg: A
         period_end="2026-04-01",
         zone_keys=["z1"],
         send_email=True,
-        pdf_written_line="Wrote test.pdf",
     )
     assert res.exit_code == exits.INVALID_PARAMS
     assert "Bad email config" in res.stderr
 
 
 @patch("cloudflare_executive_report.report.command_flow.pdf_report_period_for_options")
-@patch("cloudflare_executive_report.report.command_flow.load_report_json")
-@patch("cloudflare_executive_report.report.command_flow.is_report_snapshot_valid")
-@patch("cloudflare_executive_report.report.command_flow.data_fingerprint_matches")
+@patch("cloudflare_executive_report.report.command_flow.find_and_extract_reusable_snapshot")
 def test_run_report_pdf_command_cache_only_no_snapshot(
-    mock_fingerprint_matches: MagicMock,
-    mock_snapshot_valid: MagicMock,
-    mock_load_json: MagicMock,
+    mock_find_snapshot: MagicMock,
     mock_period: MagicMock,
     mock_cfg: AppConfig,
 ) -> None:
     mock_period.return_value = ("2026-04-01", "2026-04-01")
-    mock_load_json.return_value = None
-    mock_snapshot_valid.return_value = False
+    mock_find_snapshot.return_value = None
 
     sync_opts = SyncOptions(mode=SyncMode.last_n, last_n=1)
 

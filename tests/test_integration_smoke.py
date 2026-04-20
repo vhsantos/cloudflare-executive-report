@@ -63,14 +63,14 @@ def mock_client() -> MagicMock:
 def test_sync_to_report_integration_smoke(tmp_path: Path, mock_client: MagicMock) -> None:
     """Smoke test: sync one day of data and generate a PDF report."""
     cache_dir = tmp_path / "cache"
-    output_dir = tmp_path / "output"
+    history_dir = tmp_path / "output"
     cache_dir.mkdir()
-    output_dir.mkdir()
+    history_dir.mkdir()
 
     cfg = AppConfig(
         api_token="mock-token",
         cache_dir=str(cache_dir),
-        output_dir=str(output_dir),
+        history_dir=str(history_dir),
         zones=[ZoneEntry(id=ZONE_ID, name="test.com")],
         pdf=PdfConfig(profile="minimal"),
     )
@@ -98,7 +98,7 @@ def test_sync_to_report_integration_smoke(tmp_path: Path, mock_client: MagicMock
             assert zone_cache.is_dir()
 
             # 2. Run Report PDF
-            pdf_out = output_dir / "report.pdf"
+            pdf_out = history_dir / "report.pdf"
             spec = ReportSpec(
                 zone_ids=[ZONE_ID],
                 start="2026-04-16",  # Assuming today is 17th

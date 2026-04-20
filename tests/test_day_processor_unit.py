@@ -48,7 +48,6 @@ def test_process_day_success(
         zone_meta={},
         force_fetch=False,
         refresh=False,
-        quiet=True,
     )
 
     assert res is False
@@ -84,7 +83,6 @@ def test_process_day_outside_retention(
         zone_meta={},
         force_fetch=False,
         refresh=False,
-        quiet=True,
     )
 
     assert res is False
