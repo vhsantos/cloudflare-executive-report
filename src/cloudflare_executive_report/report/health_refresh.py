@@ -124,5 +124,5 @@ def refresh_snapshot_zone_health(
     report_raw["warnings"] = merged_warnings
     report_raw["zone_health_fetched_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     if snapshot_data is None:
-        save_report_json(out, report_raw, quiet=opts.quiet)
+        save_report_json(out, report_raw)
     return exits.SUCCESS

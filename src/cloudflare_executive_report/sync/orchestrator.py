@@ -40,7 +40,6 @@ from cloudflare_executive_report.common.dates import (
     utc_today,
     utc_yesterday,
 )
-from cloudflare_executive_report.common.formatting import progress_message
 from cloudflare_executive_report.common.logging_config import effective_debug_enabled
 from cloudflare_executive_report.common.period_resolver import (
     build_data_fingerprint,
@@ -214,7 +213,7 @@ def _run_sync_locked(
                 return exits.GENERAL_ERROR
 
         for z in zones:
-            progress_message(f"Zone {z.name} ({z.id})", quiet=opts.quiet)
+            log.info("Zone %s (%s)", z.name, z.id)
             zmeta = zmeta_by_zone_id[z.id]
 
             plan = (zmeta.get("plan") or {}).get("legacy_id")
@@ -240,7 +239,6 @@ def _run_sync_locked(
                         zone_meta=zmeta,
                         force_fetch=force_fetch,
                         refresh=opts.refresh,
-                        quiet=opts.quiet,
                     ):
                         rate_fail = True
 
@@ -374,7 +372,7 @@ def _run_sync_locked(
 
             from cloudflare_executive_report.report.snapshot import save_report_json
 
-            save_report_json(out, rep, quiet=opts.quiet)
+            save_report_json(out, rep)
 
         if rate_fail:
             return exits.RATE_LIMIT_EXCEEDED
@@ -408,11 +406,11 @@ def run_clean(
                         else:
                             child.unlink(missing_ok=True)
                     if not quiet:
-                        print(f"Cleared cache under {cache_root}", flush=True)
+                        log.info("Cleared cache under %s", cache_root)
                 if scope_history and history_root.exists():
                     shutil.rmtree(history_root)
                     if not quiet:
-                        print(f"Cleared history under {history_root}", flush=True)
+                        log.info("Cleared history under %s", history_root)
                 return exits.SUCCESS
 
             assert older_than is not None
@@ -455,18 +453,16 @@ def run_clean(
                         removed_history += 1
             if not quiet:
                 if scope_cache:
-                    print(
-                        "Removed "
-                        f"{removed_cache} cache day directories "
-                        f"older than {older_than} days",
-                        flush=True,
+                    log.info(
+                        "Removed %d cache day directories older than %d days",
+                        removed_cache,
+                        older_than,
                     )
                 if scope_history:
-                    print(
-                        "Removed "
-                        f"{removed_history} history report files "
-                        f"older than {older_than} days",
-                        flush=True,
+                    log.info(
+                        "Removed %d history report files older than %d days",
+                        removed_history,
+                        older_than,
                     )
             return exits.SUCCESS
     except CacheLockTimeout as e:

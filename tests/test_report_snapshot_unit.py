@@ -20,6 +20,6 @@ def test_load_report_json_invalid(tmp_path: Path) -> None:
 def test_save_load_roundtrip(tmp_path: Path) -> None:
     p = tmp_path / "report.json"
     data = {"hello": "world"}
-    save_report_json(p, data, quiet=True)
+    save_report_json(p, data)
     loaded = load_report_json(p)
     assert loaded == data

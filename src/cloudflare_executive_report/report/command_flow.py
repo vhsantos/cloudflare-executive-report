@@ -35,7 +35,6 @@ class ReportPdfOutcome:
 
     exit_code: int
     stderr: str | None = None
-    pdf_written_line: str | None = None
     email_sent_line: str | None = None
 
 
@@ -47,13 +46,11 @@ def _finalize_pdf_and_optional_email(
     period_end: str,
     zone_keys: list[str],
     send_email: bool,
-    pdf_written_line: str | None,
 ) -> ReportPdfOutcome:
     """Return success outcome, optionally sending the PDF via SMTP."""
     if not send_email:
         return ReportPdfOutcome(
             exit_code=exits.SUCCESS,
-            pdf_written_line=pdf_written_line,
         )
     if not cfg.email.enabled:
         return ReportPdfOutcome(
@@ -82,7 +79,6 @@ def _finalize_pdf_and_optional_email(
         shown = shown[:197] + "..."
     return ReportPdfOutcome(
         exit_code=exits.SUCCESS,
-        pdf_written_line=pdf_written_line,
         email_sent_line=f"Sent report by email to {shown}",
     )
 
@@ -163,7 +159,6 @@ def run_report_pdf_command(
             period_end=pe,
             zone_keys=zone_keys,
             send_email=send_email,
-            pdf_written_line=f"Wrote {output.resolve()}",
         )
 
     initial_span = (period_start, period_end)

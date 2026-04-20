@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -27,7 +28,7 @@ def load_report_json(path: Path) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
-def save_report_json(path: Path, data: dict[str, Any], *, quiet: bool = False) -> None:
+def save_report_json(path: Path, data: dict[str, Any]) -> None:
     """Write report dict to path atomically (temp file + fsync + rename)."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
@@ -37,8 +38,7 @@ def save_report_json(path: Path, data: dict[str, Any], *, quiet: bool = False) -
         f.flush()
         os.fsync(f.fileno())
     tmp.replace(path)
-    if not quiet:
-        print(f"Wrote {path}", flush=True)
+    logging.info("Wrote %s", path)
 
 
 def find_and_extract_reusable_snapshot(

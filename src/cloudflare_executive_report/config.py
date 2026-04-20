@@ -161,7 +161,7 @@ class AppConfig:
     cache_dir: str = "~/.cache/cf-report"
     history_dir: str = "~/.cf-report"
     default_zone: str = ""
-    log_level: str = "info"
+    log_level: str = "warning"
     default_period: str = "last_month"
     types: list[str] = field(default_factory=list)
     zones: list[ZoneEntry] = field(default_factory=list)
@@ -460,7 +460,7 @@ def template_config() -> AppConfig:
         cache_dir="~/.cache/cf-report",
         history_dir="~/.cf-report",
         default_zone="",
-        log_level="info",
+        log_level="warning",
         default_period="last_month",
         types=[],
         zones=[],

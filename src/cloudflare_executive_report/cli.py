@@ -93,8 +93,9 @@ app = typer.Typer(
     context_settings={"help_option_names": ["-h", "--help"]},
 )
 
-_cli_verbose = False
+_cli_verbose = 0
 _cli_quiet = False
+_cli_log_file: Path | None = None
 
 
 def _check_last_argv() -> None:
@@ -115,23 +116,25 @@ def _check_last_argv() -> None:
 @app.callback()
 def main_callback(
     ctx: typer.Context,
-    verbose: bool = typer.Option(
-        False,
+    verbose: int = typer.Option(
+        0,
         "--verbose",
         "-v",
-        help="Same as log_level debug for this run (overrides config); includes HTTP traces.",
+        count=True,
+        help="Increase verbosity (-v: INFO, -vv: DEBUG, -vvv: TRACE).",
     ),
-    quiet: bool = typer.Option(
-        False, "--quiet", "-q", help="Suppress progress output (errors still shown)."
-    ),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Only show errors."),
+    log_file: Path | None = typer.Option(None, "--log-file", help="Write all logs to file."),
 ) -> None:
     """Incremental by default; use --last N or --start/--end for fixed windows."""
-    global _cli_verbose, _cli_quiet
+    global _cli_verbose, _cli_quiet, _cli_log_file
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose
     ctx.obj["quiet"] = quiet
+    ctx.obj["log_file"] = log_file
     _cli_verbose = verbose
     _cli_quiet = quiet
+    _cli_log_file = log_file
 
 
 @app.command("init")
@@ -240,8 +243,9 @@ def cmd_report(
     indices for selected --types); or use --last N or --start/--end. Omit ``--zone``
     to include all configured zones.
     """
-    verbose = ctx.obj.get("verbose", False)
+    verbose = ctx.obj.get("verbose", 0)
     quiet = ctx.obj.get("quiet", False)
+    log_file = ctx.obj.get("log_file")
 
     if output is None:
         typer.echo("Error: --output / -o is required.", err=True)
@@ -265,6 +269,9 @@ def cmd_report(
     except CliConfigError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.GENERAL_ERROR) from None
+
+    if history_dir is not None:
+        cfg.history_dir = str(history_dir)
 
     try:
         sync_opts = validate_and_build_sync_options(
@@ -293,7 +300,9 @@ def cmd_report(
     if history_dir is not None:
         cfg.history_dir = str(history_dir)
 
-    setup_logging(verbose=verbose, quiet=quiet, log_level=_config_log_level(cfg))
+    setup_logging(
+        verbose_count=verbose, quiet=quiet, log_level=_config_log_level(cfg), log_file=log_file
+    )
 
     zone_effective = resolve_zone_filter(cfg, zone)
     zone_keys = zone_ids_for_report(cfg, zone_effective)
@@ -334,8 +343,6 @@ def cmd_report(
     )
     if outcome.stderr:
         typer.echo(outcome.stderr, err=True)
-    if outcome.pdf_written_line:
-        typer.echo(outcome.pdf_written_line)
     if outcome.email_sent_line:
         typer.echo(outcome.email_sent_line)
     raise typer.Exit(outcome.exit_code)
@@ -351,7 +358,9 @@ def zones_list(ctx: typer.Context) -> None:
     except (FileNotFoundError, ValueError) as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.GENERAL_ERROR) from None
-    setup_logging(verbose=verbose, quiet=quiet, log_level=_config_log_level(cfg))
+    setup_logging(
+        verbose_count=verbose, quiet=quiet, log_level=_config_log_level(cfg), log_file=None
+    )
     try:
         with CloudflareClient(cfg.api_token, verbose=effective_debug_enabled()) as c:
             zs = c.list_zones()
@@ -370,21 +379,41 @@ def zones_add(
     ctx: typer.Context,
     zone_id: str | None = typer.Option(None, "--id", help="Zone ID"),
     name: str | None = typer.Option(None, "--name", help="Zone name (hostname)"),
+    add_all: bool = typer.Option(False, "--all", help="Add all accessible zones."),
 ) -> None:
     """Add a zone to config (fetch missing id/name via API)."""
     verbose = _cli_verbose
     quiet = _cli_quiet
-    if (zone_id is None) == (name is None):
-        typer.echo("Specify exactly one of --id or --name", err=True)
+    log_file = _cli_log_file
+
+    # Exactly one of --id, --name, or --all
+    provided = sum([zone_id is not None, name is not None, add_all])
+    if provided != 1:
+        typer.echo("Specify exactly one of --id, --name, or --all", err=True)
         raise typer.Exit(exits.INVALID_PARAMS)
+
     try:
         cfg = load_config()
     except (FileNotFoundError, ValueError) as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.GENERAL_ERROR) from None
-    setup_logging(verbose=verbose, quiet=quiet, log_level=_config_log_level(cfg))
+    setup_logging(
+        verbose_count=verbose, quiet=quiet, log_level=_config_log_level(cfg), log_file=log_file
+    )
     try:
         with CloudflareClient(cfg.api_token, verbose=effective_debug_enabled()) as c:
+            if add_all:
+                all_z = c.list_zones()
+                added_count = 0
+                existing_ids = {z.id for z in cfg.zones}
+                for z in all_z:
+                    if z["id"] not in existing_ids:
+                        cfg.zones.append(ZoneEntry(id=str(z["id"]), name=str(z["name"])))
+                        added_count += 1
+                save_config(cfg)
+                typer.echo(f"Added {added_count} new zones.")
+                return
+
             if zone_id:
                 z = c.get_zone(zone_id)
             else:
@@ -393,6 +422,7 @@ def zones_add(
                 if not z:
                     typer.echo(f"Zone not found: {name}", err=True)
                     raise typer.Exit(exits.GENERAL_ERROR) from None
+
         entry = ZoneEntry(id=str(z["id"]), name=str(z["name"]))
         for existing in cfg.zones:
             if existing.id == entry.id or existing.name == entry.name:
@@ -418,15 +448,18 @@ def zones_remove(
     """Remove a zone from config."""
     verbose = _cli_verbose
     quiet = _cli_quiet
-    if (zone_id is None) == (name is None):
-        typer.echo("Specify exactly one of --id or --name", err=True)
-        raise typer.Exit(exits.INVALID_PARAMS)
+    log_file = _cli_log_file
     try:
         cfg = load_config()
     except (FileNotFoundError, ValueError) as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.GENERAL_ERROR) from None
-    setup_logging(verbose=verbose, quiet=quiet, log_level=_config_log_level(cfg))
+    setup_logging(
+        verbose_count=verbose, quiet=quiet, log_level=_config_log_level(cfg), log_file=log_file
+    )
+    if (zone_id is None) == (name is None):
+        typer.echo("Specify exactly one of --id or --name", err=True)
+        raise typer.Exit(exits.INVALID_PARAMS)
     key = zone_id or name
     assert key
     new_z = [z for z in cfg.zones if z.id != key and z.name != key]
@@ -485,8 +518,9 @@ def cmd_sync(
     config: Path | None = typer.Option(None, "--config", help="Override config path."),
 ) -> None:
     """Incremental sync by default; use --last N or --start/--end for explicit windows."""
-    verbose = ctx.obj.get("verbose", False)
+    verbose = ctx.obj.get("verbose", 0)
     quiet = ctx.obj.get("quiet", False)
+    log_file = ctx.obj.get("log_file")
 
     try:
         cfg = load_app_config(config)
@@ -522,7 +556,9 @@ def cmd_sync(
     if history_dir is not None:
         cfg.history_dir = str(history_dir)
 
-    setup_logging(verbose=verbose, quiet=quiet, log_level=_config_log_level(cfg))
+    setup_logging(
+        verbose_count=verbose, quiet=quiet, log_level=_config_log_level(cfg), log_file=log_file
+    )
 
     zone_effective = resolve_zone_filter(cfg, zone)
 
@@ -552,8 +588,9 @@ def cmd_clean(
     ),
 ) -> None:
     """Prune or wipe the DNS cache directory."""
-    verbose = ctx.obj.get("verbose", False)
+    verbose = ctx.obj.get("verbose", 0)
     quiet = ctx.obj.get("quiet", False)
+    log_file = ctx.obj.get("log_file")
     try:
         cfg = load_config()
     except (FileNotFoundError, ValueError) as e:
@@ -561,7 +598,9 @@ def cmd_clean(
         raise typer.Exit(exits.GENERAL_ERROR) from None
     if history_dir is not None:
         cfg.history_dir = str(history_dir)
-    setup_logging(verbose=verbose, quiet=quiet, log_level=_config_log_level(cfg))
+    setup_logging(
+        verbose_count=verbose, quiet=quiet, log_level=_config_log_level(cfg), log_file=log_file
+    )
     if delete_all and not force:
         typer.echo("Error: --all requires --force.", err=True)
         raise typer.Exit(exits.INVALID_PARAMS)

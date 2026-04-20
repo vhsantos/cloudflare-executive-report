@@ -35,10 +35,8 @@ def test_finalize_pdf_and_optional_email_no_email(mock_cfg: AppConfig) -> None:
         period_end="2026-04-01",
         zone_keys=["z1"],
         send_email=False,
-        pdf_written_line="Wrote test.pdf",
     )
     assert res.exit_code == exits.SUCCESS
-    assert res.pdf_written_line == "Wrote test.pdf"
     assert res.email_sent_line is None
 
 
@@ -53,7 +51,6 @@ def test_finalize_pdf_and_optional_email_success(mock_send: MagicMock, mock_cfg:
         period_end="2026-04-01",
         zone_keys=["z1"],
         send_email=True,
-        pdf_written_line="Wrote test.pdf",
     )
     assert res.exit_code == exits.SUCCESS
     assert "Sent report" in res.email_sent_line
@@ -148,7 +145,6 @@ def test_finalize_pdf_and_optional_email_disabled(mock_cfg: AppConfig) -> None:
         period_end="2026-04-01",
         zone_keys=["z1"],
         send_email=True,
-        pdf_written_line="Wrote test.pdf",
     )
     assert res.exit_code == exits.INVALID_PARAMS
     assert "requires email.enabled: true" in res.stderr
@@ -166,7 +162,6 @@ def test_finalize_pdf_and_optional_email_error(mock_send: MagicMock, mock_cfg: A
         period_end="2026-04-01",
         zone_keys=["z1"],
         send_email=True,
-        pdf_written_line="Wrote test.pdf",
     )
     assert res.exit_code == exits.INVALID_PARAMS
     assert "Bad email config" in res.stderr

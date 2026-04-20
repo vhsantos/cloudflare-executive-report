@@ -510,7 +510,7 @@ def write_report_pdf(
                     log.warning("Unknown stream %r - skipped", stream)
 
         if want_portfolio_page and len(portfolio_zone_blocks) >= 2:
-            log.info(
+            log.debug(
                 "Inserting multi-zone portfolio summary for %d zones",
                 len(portfolio_zone_blocks),
             )
