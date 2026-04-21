@@ -262,6 +262,10 @@ class HttpAdaptiveFetcher:
     stream_id: ClassVar[str] = "http_adaptive"
     cache_filename: ClassVar[str] = "http_adaptive.json"
     collect_label: ClassVar[str] = "HTTP adaptive"
+    required_permissions: ClassVar[tuple[str, ...]] = (
+        "Zone > Zone Read",
+        "Zone > Analytics Read",
+    )
 
     def outside_retention(self, day: date, *, plan_legacy_id: str | None) -> bool:
         _ = plan_legacy_id

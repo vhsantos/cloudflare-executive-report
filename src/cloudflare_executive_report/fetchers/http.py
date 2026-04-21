@@ -159,6 +159,10 @@ class HttpFetcher:
     stream_id: ClassVar[str] = "http"
     cache_filename: ClassVar[str] = "http.json"
     collect_label: ClassVar[str] = "HTTP"
+    required_permissions: ClassVar[tuple[str, ...]] = (
+        "Zone > Zone Read",
+        "Zone > Analytics Read",
+    )
 
     def outside_retention(self, day: date, *, plan_legacy_id: str | None) -> bool:
         _ = plan_legacy_id

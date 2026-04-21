@@ -269,6 +269,10 @@ class SecurityFetcher:
     stream_id: ClassVar[str] = "security"
     cache_filename: ClassVar[str] = "security.json"
     collect_label: ClassVar[str] = "Security"
+    required_permissions: ClassVar[tuple[str, ...]] = (
+        "Zone > Zone Read",
+        "Zone > Analytics Read",
+    )
 
     def outside_retention(self, day: date, *, plan_legacy_id: str | None) -> bool:
         return date_outside_security_retention(day, plan_legacy_id=plan_legacy_id)

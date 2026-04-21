@@ -219,3 +219,5 @@ logos/
 tools/
 !docs/examples/
 !docs/examples/*pdf
+.agents
+.vscode

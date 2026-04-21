@@ -163,6 +163,10 @@ class DnsFetcher:
     stream_id: ClassVar[str] = "dns"
     cache_filename: ClassVar[str] = "dns.json"
     collect_label: ClassVar[str] = "DNS"
+    required_permissions: ClassVar[tuple[str, ...]] = (
+        "Zone > Zone Read",
+        "Zone > Analytics Read",
+    )
 
     def outside_retention(self, day: date, *, plan_legacy_id: str | None) -> bool:
         return date_outside_dns_retention(day, dns_retention_days(plan_legacy_id))

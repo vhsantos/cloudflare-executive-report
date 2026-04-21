@@ -71,6 +71,10 @@ class CertificatesFetcher:
     stream_id: ClassVar[str] = "certificates"
     cache_filename: ClassVar[str] = "certificates.json"
     collect_label: ClassVar[str] = "Certificates"
+    required_permissions: ClassVar[tuple[str, ...]] = (
+        "Zone > Zone Read",
+        "Zone > SSL and Certificates Read",
+    )
 
     def outside_retention(self, day: date, *, plan_legacy_id: str | None) -> bool:
         _ = (day, plan_legacy_id)

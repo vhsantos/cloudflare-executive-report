@@ -94,6 +94,10 @@ class AuditFetcher:
     stream_id: ClassVar[str] = "audit"
     cache_filename: ClassVar[str] = "audit.json"
     collect_label: ClassVar[str] = "Audit logs"
+    required_permissions: ClassVar[tuple[str, ...]] = (
+        "Account > Account Settings Read",
+        "Account > Access: Audit Logs Read",
+    )
 
     def outside_retention(self, day: date, *, plan_legacy_id: str | None) -> bool:
         _ = (day, plan_legacy_id)
