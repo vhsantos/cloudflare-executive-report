@@ -125,10 +125,12 @@ def test_run_sync_range_end_too_late(tmp_path: Path) -> None:
     # Future date
     opts = SyncOptions(mode=SyncMode.range, start="2026-01-01", end="2099-01-01")
 
-    with patch("cloudflare_executive_report.sync.orchestrator.cache_lock"):
-        with patch("cloudflare_executive_report.sync.orchestrator.CloudflareClient"):
-            res = run_sync(cfg, opts)
-            assert res == exits.INVALID_PARAMS
+    with (
+        patch("cloudflare_executive_report.sync.orchestrator.cache_lock"),
+        patch("cloudflare_executive_report.sync.orchestrator.CloudflareClient"),
+    ):
+        res = run_sync(cfg, opts)
+        assert res == exits.INVALID_PARAMS
 
 
 @patch("cloudflare_executive_report.sync.orchestrator.CloudflareClient")

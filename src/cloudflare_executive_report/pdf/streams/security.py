@@ -204,10 +204,7 @@ def append_security_stream(
             continue
         ip = str(r.get("ip") or "").strip()
         co = str(r.get("country") or "").strip()
-        if ip and co:
-            label = f"{ip} ({co})"
-        else:
-            label = ip or co or "-"
+        label = f"{ip} ({co})" if ip and co else ip or co or "-"
         act = str(r.get("action") or "").strip()
         if act:
             label = f"{label} · {act}"

@@ -31,7 +31,7 @@ def probe_zone_analytics_read(client: CloudflareClient, zone_id: str) -> Any:
     today = datetime.now(UTC).date()
     yesterday = today - timedelta(days=1)
 
-    # Format as YYYY-MM-DD – the only format Cloudflare accepts for Date scalars.
+    # Format as YYYY-MM-DD - the only format Cloudflare accepts for Date scalars.
     date_geq = str(yesterday)  # e.g. "2026-04-19"
     date_lt = str(today)  # e.g. "2026-04-20"
 
@@ -108,7 +108,7 @@ def probe_account_analytics_read(client: CloudflareClient, account_id: str) -> A
     today = datetime.now(UTC).date()
     yesterday = today - timedelta(days=1)
 
-    # Format as YYYY-MM-DD – the only format Cloudflare accepts for Date scalars.
+    # Format as YYYY-MM-DD - the only format Cloudflare accepts for Date scalars.
     date_geq = str(yesterday)  # e.g. "2026-04-19"
     date_lt = str(today)  # e.g. "2026-04-20"
 

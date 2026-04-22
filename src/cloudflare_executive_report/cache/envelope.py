@@ -34,10 +34,10 @@ def read_json_file(path: Path) -> dict[str, Any] | None:
             return cast(dict[str, Any], json.load(f))
     except json.JSONDecodeError:
         log.warning("Corrupt cache JSON deleted: %s", path)
-        try:
+        from contextlib import suppress
+
+        with suppress(OSError):
             path.unlink()
-        except OSError:
-            pass
         return None
 
 

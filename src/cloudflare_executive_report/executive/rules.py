@@ -422,7 +422,7 @@ def build_executive_rule_output(
             err_pct=e5,
         )
     elif err_5xx > RELIABILITY_5XX_HEALTHY_MAX and latency > LATENCY_WARNING_MS:
-        e5, lms = round(err_5xx, 2), int(round(latency))
+        e5, lms = round(err_5xx, 2), round(latency)
         add_takeaway(
             SECT_SIGNALS,
             "warning",
@@ -432,7 +432,7 @@ def build_executive_rule_output(
             latency_ms=lms,
         )
     if cache_hit < CACHE_HIT_RATIO_LOW_THRESHOLD and bandwidth_gb > BANDWIDTH_GB_MIN_THRESHOLD:
-        ch, gbw = round(cache_hit, 1), int(round(bandwidth_gb))
+        ch, gbw = round(cache_hit, 1), round(bandwidth_gb)
         add_takeaway(
             SECT_SIGNALS,
             "warning",
@@ -504,14 +504,14 @@ def build_executive_rule_output(
         )
         if abs(pct_traffic) > TRAFFIC_DELTA_PCT_THRESHOLD:
             if pct_traffic > 0:
-                pct_i = int(round(pct_traffic))
+                pct_i = round(pct_traffic)
                 add_takeaway(SECT_DELTAS, "info", "traffic_up", state="comparison", pct=pct_i)
                 add_takeaway(SECT_WINS, "positive", "traffic_up", state="win", pct=pct_i)
             else:
-                pct_dn = abs(int(round(pct_traffic)))
+                pct_dn = abs(round(pct_traffic))
                 add_takeaway(SECT_DELTAS, "warning", "traffic_down", state="comparison", pct=pct_dn)
         if pct_threats > THREATS_DELTA_PCT_THRESHOLD:
-            pt = int(round(pct_threats))
+            pt = round(pct_threats)
             if abs(pct_traffic) < TRAFFIC_FLAT_DELTA_PCT:
                 add_takeaway(
                     SECT_DELTAS, "critical", "threats_vs_traffic_flat", state="comparison", pct=pt
@@ -524,17 +524,17 @@ def build_executive_rule_output(
             p_ha.get("origin_response_duration_avg_ms")
         )
         if latency_delta > LATENCY_DELTA_WARNING_MS:
-            ms_up = int(round(latency_delta))
+            ms_up = round(latency_delta)
             add_takeaway(SECT_DELTAS, "warning", "latency_delta", state="comparison", ms=ms_up)
         elif latency_delta < LATENCY_DELTA_WIN_MS:
-            ms_dn = abs(int(round(latency_delta)))
+            ms_dn = abs(round(latency_delta))
             add_takeaway(SECT_WINS, "positive", "latency_delta", state="win", ms=ms_dn)
         cache_delta = _pp_delta(
             as_float(cache.get("cache_hit_ratio") or http.get("cache_hit_ratio")),
             as_float(p_http.get("cache_hit_ratio")),
         )
         if cache_delta < CACHE_DELTA_WARNING_PP:
-            pp_dn = abs(int(round(cache_delta)))
+            pp_dn = abs(round(cache_delta))
             add_takeaway(SECT_DELTAS, "warning", "cache_efficiency", state="comparison", pp=pp_dn)
         p_apex = as_int(p_dr.get("apex_unproxied_a_aaaa"))
         c_apex = as_int(dr.get("apex_unproxied_a_aaaa"))

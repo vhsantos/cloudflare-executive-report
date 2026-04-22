@@ -68,10 +68,7 @@ log = logging.getLogger(__name__)
 
 
 def _dates_incremental(idx_latest: str | None, y: date) -> list[date]:
-    if idx_latest:
-        latest = parse_ymd(idx_latest)
-    else:
-        latest = y
+    latest = parse_ymd(idx_latest) if idx_latest else y
     out: list[date] = []
     d = latest + timedelta(days=1)
     while d <= y:
@@ -197,10 +194,9 @@ def _run_sync_locked(
     default_output_mode = (not write_stdout) and (output_path is None)
 
     with CloudflareClient(cfg.api_token, verbose=verbose_http) as client:
-        if opts.mode == SyncMode.range and opts.start and opts.end:
-            if parse_ymd(opts.end) > y:
-                log.error("--end cannot be after yesterday (UTC). Use --include-today for today.")
-                return exits.INVALID_PARAMS
+        if opts.mode == SyncMode.range and opts.start and opts.end and parse_ymd(opts.end) > y:
+            log.error("--end cannot be after yesterday (UTC). Use --include-today for today.")
+            return exits.INVALID_PARAMS
 
         # Cache zone metadata once per run to avoid redundant API calls
         zmeta_by_zone_id: dict[str, dict[str, Any]] = {}
@@ -442,10 +438,7 @@ def run_clean(
                     if "_" in ds:
                         parts = ds.split("_")
                         # If first part is exactly 16 chars (our hash), date is the second part
-                        if len(parts) >= 2 and len(parts[0]) == 16:
-                            ds = parts[1]
-                        else:
-                            ds = parts[0]
+                        ds = parts[1] if len(parts) >= 2 and len(parts[0]) == 16 else parts[0]
                     try:
                         d = parse_ymd(ds)
                     except ValueError:

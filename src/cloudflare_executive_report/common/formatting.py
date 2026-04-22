@@ -48,8 +48,8 @@ def format_count_compact(v: Any) -> str:
     if n >= 1_000_000:
         return f"{trim_decimal(n / 1_000_000, 1)}M"
     if n >= 1_000:
-        return f"{int(round(n / 1_000))}K"
-    return str(int(round(n)))
+        return f"{round(n / 1_000)}K"
+    return str(round(n))
 
 
 def format_percent_compact(v: Any) -> str:
@@ -61,7 +61,7 @@ def format_number_compact(v: Any) -> str:
     """Format a number using integer or one-decimal display."""
     x = float(v or 0.0)
     if abs(x) >= 10:
-        return str(int(round(x)))
+        return str(round(x))
     return trim_decimal(x, 1)
 
 
