@@ -7,7 +7,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from cloudflare_executive_report.cache import read_day_file, write_day_file
+from cloudflare_executive_report.cache import CacheEnvelope, read_day_file, write_day_file
 from cloudflare_executive_report.cf_client import (
     CloudflareAPIError,
     CloudflareClient,
@@ -18,7 +18,7 @@ from cloudflare_executive_report.fetchers.registry import day_cache_path
 from cloudflare_executive_report.fetchers.types import Fetcher
 
 
-def should_refetch_cached(cached: dict | None, refresh: bool) -> bool:
+def should_refetch_cached(cached: CacheEnvelope | None, refresh: bool) -> bool:
     if refresh:
         return True
     if cached is None:

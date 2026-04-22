@@ -6,7 +6,7 @@ import json
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from reportlab.platypus import PageBreak, Spacer
 
@@ -115,7 +115,7 @@ def _load_previous_report(cfg: AppConfig) -> dict[str, Any] | None:
         return None
     try:
         with open(candidates[0], encoding="utf-8") as f:
-            return json.load(f)
+            return cast(dict[str, Any], json.load(f))
     except (OSError, json.JSONDecodeError):
         return None
 
@@ -416,12 +416,11 @@ def write_report_pdf(
                     story.append(PageBreak())
                 sid = stream.strip().lower()
                 if sid == "dns":
-                    loaded = loaded_dns
-                    if loaded is None:
+                    if loaded_dns is None:
                         continue
                     if snapshot_zone and isinstance(snapshot_zone.get("dns"), dict):
-                        loaded.rollup = dict(snapshot_zone.get("dns") or {})
-                    if loaded.api_day_count == 0:
+                        loaded_dns.rollup = dict(snapshot_zone.get("dns") or {})
+                    if loaded_dns.api_day_count == 0:
                         _warn_skip_no_api_data("DNS", zone_name, spec.start, spec.end)
                         continue
                     append_dns_stream(
@@ -429,20 +428,19 @@ def write_report_pdf(
                         zone_name=zone_name,
                         period_start=spec.start,
                         period_end=spec.end,
-                        dns=loaded.rollup,
-                        daily_queries=loaded.daily_queries,
-                        missing_dates=loaded.missing_dates,
+                        dns=loaded_dns.rollup,
+                        daily_queries=loaded_dns.daily_queries,
+                        missing_dates=loaded_dns.missing_dates,
                         layout=spec.dns_layout,
                         theme=th,
                         top=spec.top,
                     )
                 elif sid == "http":
-                    loaded = loaded_http
-                    if loaded is None:
+                    if loaded_http is None:
                         continue
                     if snapshot_zone and isinstance(snapshot_zone.get("http"), dict):
-                        loaded.rollup = dict(snapshot_zone.get("http") or {})
-                    if loaded.api_day_count == 0:
+                        loaded_http.rollup = dict(snapshot_zone.get("http") or {})
+                    if loaded_http.api_day_count == 0:
                         _warn_skip_no_api_data("HTTP", zone_name, spec.start, spec.end)
                         continue
                     append_http_stream(
@@ -450,25 +448,24 @@ def write_report_pdf(
                         zone_name=zone_name,
                         period_start=spec.start,
                         period_end=spec.end,
-                        http=loaded.rollup,
-                        daily_requests_cached=loaded.daily_requests_cached,
-                        daily_requests_uncached=loaded.daily_requests_uncached,
-                        daily_bytes_cached=loaded.daily_bytes_cached,
-                        daily_bytes_uncached=loaded.daily_bytes_uncached,
-                        daily_uniques=loaded.daily_uniques,
-                        missing_dates=loaded.missing_dates,
+                        http=loaded_http.rollup,
+                        daily_requests_cached=loaded_http.daily_requests_cached,
+                        daily_requests_uncached=loaded_http.daily_requests_uncached,
+                        daily_bytes_cached=loaded_http.daily_bytes_cached,
+                        daily_bytes_uncached=loaded_http.daily_bytes_uncached,
+                        daily_uniques=loaded_http.daily_uniques,
+                        missing_dates=loaded_http.missing_dates,
                         layout=spec.http_layout,
                         theme=th,
                         top=spec.top,
                         cache_stream_in_report=cache_stream_in_report,
                     )
                 elif sid == "security":
-                    loaded = loaded_security
-                    if loaded is None:
+                    if loaded_security is None:
                         continue
                     if snapshot_zone and isinstance(snapshot_zone.get("security"), dict):
-                        loaded.rollup = dict(snapshot_zone.get("security") or {})
-                    if loaded.api_day_count == 0:
+                        loaded_security.rollup = dict(snapshot_zone.get("security") or {})
+                    if loaded_security.api_day_count == 0:
                         _warn_skip_no_api_data("Security", zone_name, spec.start, spec.end)
                         continue
                     append_security_stream(
@@ -476,21 +473,20 @@ def write_report_pdf(
                         zone_name=zone_name,
                         period_start=spec.start,
                         period_end=spec.end,
-                        security=loaded.rollup,
-                        daily_security_triple=loaded.daily_security_triple,
-                        missing_dates=loaded.missing_dates,
+                        security=loaded_security.rollup,
+                        daily_security_triple=loaded_security.daily_security_triple,
+                        missing_dates=loaded_security.missing_dates,
                         layout=spec.security_layout,
                         theme=th,
                         top=spec.top,
                         cache_stream_in_report=cache_stream_in_report,
                     )
                 elif sid == "cache":
-                    loaded = loaded_cache
-                    if loaded is None:
+                    if loaded_cache is None:
                         continue
                     if snapshot_zone and isinstance(snapshot_zone.get("cache"), dict):
-                        loaded.rollup = dict(snapshot_zone.get("cache") or {})
-                    if loaded.api_day_count == 0:
+                        loaded_cache.rollup = dict(snapshot_zone.get("cache") or {})
+                    if loaded_cache.api_day_count == 0:
                         _warn_skip_no_api_data("Cache", zone_name, spec.start, spec.end)
                         continue
                     append_cache_stream(
@@ -498,13 +494,13 @@ def write_report_pdf(
                         zone_name=zone_name,
                         period_start=spec.start,
                         period_end=spec.end,
-                        cache=loaded.rollup,
-                        daily_cache_cf_origin=loaded.daily_cache_cf_origin,
-                        missing_dates=loaded.missing_dates,
+                        cache=loaded_cache.rollup,
+                        daily_cache_cf_origin=loaded_cache.daily_cache_cf_origin,
+                        missing_dates=loaded_cache.missing_dates,
                         layout=spec.cache_layout,
                         theme=th,
                         top=spec.top,
-                        http_mime_1d=loaded.http_mime_1d,
+                        http_mime_1d=loaded_cache.http_mime_1d,
                     )
                 else:
                     log.warning("Unknown stream %r - skipped", stream)

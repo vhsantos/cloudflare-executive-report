@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import date
-from typing import Any
+from typing import Any, cast
 
 from cloudflare_executive_report.common.constants import (
     MITIGATING_SECURITY_ACTIONS,
@@ -18,7 +18,10 @@ from cloudflare_executive_report.common.formatting import (
     trim_decimal,
 )
 from cloudflare_executive_report.common.safe_types import as_dict, as_float, as_int
-from cloudflare_executive_report.executive.nist_catalog import build_nist_reference_rows
+from cloudflare_executive_report.executive.nist_catalog import (
+    NistSourceLine,
+    build_nist_reference_rows,
+)
 from cloudflare_executive_report.executive.phrase_catalog import (
     format_line_with_severity_prefix,
     get_phrase,
@@ -373,9 +376,13 @@ def build_executive_summary(
         ]
         for section_key in TX_ORDER
     }
-    takeaways = [item["display"] for bucket in categorized_takeaways.values() for item in bucket]
+    takeaways = [
+        str(item["display"]) for bucket in categorized_takeaways.values() for item in bucket
+    ]
     actions = [f"[{line.check_id}] {line.body}" for line in rule_out.actions]
-    nist_reference = build_nist_reference_rows(augmented_takeaways + list(rule_out.actions))
+    nist_reference = build_nist_reference_rows(
+        cast(Sequence[NistSourceLine], augmented_takeaways + list(rule_out.actions))
+    )
     prev_http = as_dict(previous_zone.get("http")) if previous_zone else {}
     prev_dns = as_dict(previous_zone.get("dns")) if previous_zone else {}
     prev_ha = as_dict(previous_zone.get("http_adaptive")) if previous_zone else {}

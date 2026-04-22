@@ -53,11 +53,12 @@ _TOKEN_KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 #
 # SECT_ACTIONS ("actions"): Recommended next steps only. Shown under "actions" in JSON, not mixed
 # into the numbered takeaway paragraphs for PDF (flat takeaways list excludes this section).
-SECT_WINS = "wins"
-SECT_RISKS = "risks"
-SECT_SIGNALS = "signals"
-SECT_DELTAS = "deltas"
+SECT_WINS: TakeawaySection = "wins"
+SECT_RISKS: TakeawaySection = "risks"
+SECT_SIGNALS: TakeawaySection = "signals"
+SECT_DELTAS: TakeawaySection = "deltas"
 SECT_ACTIONS = "actions"
+
 
 # Flatten order for PDF and the flat takeaways list.
 TX_ORDER: tuple[str, ...] = (SECT_WINS, SECT_RISKS, SECT_SIGNALS, SECT_DELTAS)
@@ -241,8 +242,11 @@ def evaluate_comparison_gate(
     previous_bounds = _period_bounds(previous_period)
     current_bounds = _period_bounds(current_period)
     bounds_bad = (
-        previous_bounds is None or current_bounds is None or previous_bounds[1] >= current_bounds[0]
+        previous_bounds is None
+        or current_bounds is None
+        or as_int(previous_bounds[1]) >= as_int(current_bounds[0])
     )
+
     days_bad = current_days <= 0 or previous_days <= 0 or current_days != previous_days
     if bounds_bad or days_bad:
         return _comparison_gate_blocked(
@@ -491,12 +495,12 @@ def build_executive_rule_output(
         p_dr = as_dict(previous_zone.get("dns_records"))
         p_zh = as_dict(previous_zone.get("zone_health"))
         pct_traffic = _percent_delta(
-            float(as_int(http.get("total_requests"))),
-            float(as_int(p_http.get("total_requests"))),
+            as_int(http.get("total_requests")),
+            as_int(p_http.get("total_requests")),
         )
         pct_threats = _percent_delta(
-            float(as_int(sec.get("mitigated_count"))),
-            float(as_int(p_sec.get("mitigated_count"))),
+            as_int(sec.get("mitigated_count")),
+            as_int(p_sec.get("mitigated_count")),
         )
         if abs(pct_traffic) > TRAFFIC_DELTA_PCT_THRESHOLD:
             if pct_traffic > 0:

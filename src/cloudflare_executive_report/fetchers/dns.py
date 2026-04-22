@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from cloudflare_executive_report.cf_client import (
     CloudflareAPIError,
@@ -96,7 +96,7 @@ def _groups_base(data: dict[str, Any] | None) -> dict[str, Any]:
     zones = ((data.get("viewer") or {}).get("zones")) or []
     if not zones:
         return {}
-    return zones[0]
+    return cast(dict[str, Any], zones[0])
 
 
 def _groups(data: dict[str, Any] | None) -> list[dict[str, Any]]:

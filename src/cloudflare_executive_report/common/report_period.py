@@ -8,6 +8,7 @@ from pathlib import Path
 from cloudflare_executive_report.cache import load_zone_index
 from cloudflare_executive_report.common.dates import format_ymd, last_n_complete_days, utc_today
 from cloudflare_executive_report.common.period_resolver import resolved_period_for_options
+from cloudflare_executive_report.config import ZoneEntry
 from cloudflare_executive_report.fetchers.registry import registered_stream_ids
 from cloudflare_executive_report.sync.options import SyncMode, SyncOptions
 
@@ -18,7 +19,7 @@ def streams_for_sync_types(types: frozenset[str]) -> list[str]:
 
 
 def report_bounds_from_indices(
-    zones: list,
+    zones: list[ZoneEntry],
     cache_root: Path,
     y: date,
     opts: SyncOptions,

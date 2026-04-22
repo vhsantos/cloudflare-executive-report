@@ -2,9 +2,9 @@
 
 from cloudflare_executive_report.cache.envelope import (
     SCHEMA_VERSION,
+    CacheEnvelope,
     read_day_file,
     read_json_file,
-    utc_now_z,
     write_day_file,
     write_json_atomic,
 )
@@ -19,9 +19,11 @@ from cloudflare_executive_report.cache.index import (
 )
 from cloudflare_executive_report.cache.lock import CacheLockTimeout, cache_lock
 from cloudflare_executive_report.cache.paths import index_path
+from cloudflare_executive_report.common.dates import utc_now_z
 
 __all__ = [
     "SCHEMA_VERSION",
+    "CacheEnvelope",
     "CacheLockTimeout",
     "IndexStream",
     "ZoneIndex",

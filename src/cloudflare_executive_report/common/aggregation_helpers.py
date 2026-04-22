@@ -63,7 +63,9 @@ def country_label_code(client_country_name: str) -> tuple[str, str]:
         fuzzy = pycountry.countries.search_fuzzy(raw)
         if fuzzy:
             country = fuzzy[0]
-            return country.name, country.alpha_2
+            name = getattr(country, "name", raw)
+            code = getattr(country, "alpha_2", "ZZ")
+            return str(name), str(code)
     except LookupError:
         pass
     return raw, raw[:2].upper() if len(raw) == 2 else "ZZ"

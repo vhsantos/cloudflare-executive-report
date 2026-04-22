@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -83,7 +83,7 @@ class ValidationReport:
     permissions: list[PermissionResult]
     write_access_detected: bool = False
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[PermissionResult]:
         return iter(self.permissions)
 
     def __len__(self) -> int:
@@ -264,7 +264,7 @@ def _run_probe(
             is_account_scoped=is_account,
             used_by=used_by,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         # Broad catch is intentional: we must never let an unexpected probe
         # failure crash the entire validation run. We log and surface as ERROR.
         log.debug("Unexpected error probing '%s': %s", permission, exc)
@@ -311,7 +311,7 @@ def _check_write_permissions(client: CloudflareClient, zone_id: str) -> bool:
             return False
 
         return False
-    except Exception:  # noqa: BLE001
+    except Exception:
         return False
 
 

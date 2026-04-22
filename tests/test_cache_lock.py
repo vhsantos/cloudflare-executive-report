@@ -22,11 +22,10 @@ def test_cache_lock_basic(tmp_path: Path):
 
 def test_cache_lock_contention(tmp_path: Path):
     """Test that a second lock wait fails after timeout."""
-    with cache_lock(tmp_path):
-        with pytest.raises(CacheLockTimeout):
-            # Try to acquire again with a very short timeout
-            with cache_lock(tmp_path, wait_seconds=0.1):
-                pass
+    with cache_lock(tmp_path), pytest.raises(CacheLockTimeout):
+        # Try to acquire again with a very short timeout
+        with cache_lock(tmp_path, wait_seconds=0.1):
+            pass
 
 
 def test_cache_lock_stale_recovery(tmp_path: Path):

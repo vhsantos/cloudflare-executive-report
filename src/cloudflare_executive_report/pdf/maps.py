@@ -108,9 +108,9 @@ def _choropleth_cartopy(
     h_fig = width_in / 2.0
     fig = plt.figure(figsize=(width_in, h_fig), facecolor="white")
     ax = fig.add_axes((0, 0, 1, 1), projection=ccrs.PlateCarree())
-    ax.set_global()
+    ax.set_global()  # type: ignore[attr-defined]
     ax.set_facecolor(MAP_OCEAN_COLOR)
-    ax.add_feature(cfeature.OCEAN, facecolor=MAP_OCEAN_COLOR, zorder=0)
+    ax.add_feature(cfeature.OCEAN, facecolor=MAP_OCEAN_COLOR, zorder=0)  # type: ignore[attr-defined]
     reader = shpreader.Reader(
         shpreader.natural_earth(resolution="50m", category="cultural", name="admin_0_countries")
     )
@@ -130,8 +130,8 @@ def _choropleth_cartopy(
         if val > 0:
             face = cmap(max(float(norm(float(val))), MAP_NONZERO_FLOOR))
         else:
-            face = MAP_LAND_NO_DATA_COLOR
-        ax.add_geometries(
+            face = MAP_LAND_NO_DATA_COLOR  # type: ignore[assignment]
+        ax.add_geometries(  # type: ignore[attr-defined]
             [geom],
             ccrs.PlateCarree(),
             facecolor=face,
@@ -139,13 +139,12 @@ def _choropleth_cartopy(
             linewidth=MAP_POLY_EDGE_WIDTH,
             zorder=1,
         )
-    ax.add_feature(
+    ax.add_feature(  # type: ignore[attr-defined]
         cfeature.COASTLINE,
         linewidth=MAP_COASTLINE_WIDTH,
         edgecolor=MAP_COASTLINE_COLOR,
-        zorder=2,
     )
-    ax.add_feature(
+    ax.add_feature(  # type: ignore[attr-defined]
         cfeature.BORDERS,
         linewidth=MAP_BORDER_WIDTH,
         edgecolor=MAP_BORDER_COLOR,

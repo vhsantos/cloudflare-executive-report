@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from typing import Protocol
 
 
-class _NistSourceLine(Protocol):
+class NistSourceLine(Protocol):
     """Minimal shape for lines that carry check ids and NIST tags."""
 
     check_id: str
@@ -44,7 +44,7 @@ NIST_CONTROL_URLS: dict[str, str] = {
 }
 
 
-def build_nist_reference_rows(lines: Sequence[_NistSourceLine]) -> list[dict[str, object]]:
+def build_nist_reference_rows(lines: Sequence[NistSourceLine]) -> list[dict[str, object]]:
     """Build sorted appendix rows: one entry per NIST id with linked check ids."""
     by_nist: dict[str, dict[str, object]] = {}
     for line in lines:

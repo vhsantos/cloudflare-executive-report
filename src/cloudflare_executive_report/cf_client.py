@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import Any, cast
 
 import httpx
 from cloudflare import (
@@ -217,7 +217,7 @@ class CloudflareClient:
             log.debug("SDK ssl.certificate_packs.list zone_id=%s", zone_id)
         try:
             page = self._sdk.ssl.certificate_packs.list(zone_id=zone_id, status="all")
-            return page.result  # Already a list
+            return cast(list[dict[str, Any]], page.result)  # Already a list
         except Exception as e:
             _map_sdk_exception(e)
             raise
@@ -287,7 +287,7 @@ class CloudflareClient:
                 ):
                     raise CloudflareAuthError(f"Permission denied: {msg}") from None
                 raise CloudflareAPIError(msg)
-            return body["data"]
+            return cast(dict[str, Any], body["data"])
         raise CloudflareAPIError(str(last_network))
 
     def _graphql_after_429(self, payload: dict[str, Any], first: httpx.Response) -> dict[str, Any]:
@@ -319,7 +319,7 @@ class CloudflareClient:
                         f"Date format error (use YYYY-MM-DDT00:00:00Z): {msg}"
                     ) from None
                 raise CloudflareAPIError(msg)
-            return body["data"]
+            return cast(dict[str, Any], body["data"])
         raise CloudflareRateLimitError(
             "Rate limit exceeded after retries",
             retry_after=ra,

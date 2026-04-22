@@ -57,7 +57,7 @@ class RenderContext:
     @property
     def gap_pt(self) -> float:
         """Column gap in points."""
-        return self.theme.col_gap_in * inch
+        return self.theme.col_gap_in * inch  # type: ignore[no-any-return]
 
 
 _CONTEXT: RenderContext | None = None
@@ -116,7 +116,7 @@ def ranked_table_label_cell(text: str, styles: Any) -> KeepInFrame:
     )
 
 
-class KpiColumnDivider(Flowable):
+class KpiColumnDivider(Flowable):  # type: ignore[misc]
     """Thin vertical rule spanning ``span_frac`` of the cell height (centered)."""
 
     def __init__(
@@ -178,7 +178,7 @@ def figure_from_svg_bytes(svg: bytes, *, width_in: float, height_in: float) -> D
         )
         raise RuntimeError(msg) from e
 
-    drawing = svg2rlg(io.BytesIO(svg))
+    drawing = svg2rlg(io.BytesIO(svg))  # type: ignore[arg-type]
     if drawing is None:
         raise ValueError("Could not parse SVG chart bytes.")
     target_w = width_in * inch
@@ -244,7 +244,7 @@ def ranked_rows_from_dicts(
 
 
 def _inner_grid_width_pt(total_width_in: float, theme: Theme) -> float:
-    return max(0.0, total_width_in * inch - 2 * theme.outer_card_pad_pt)
+    return max(0.0, total_width_in * inch - 2 * theme.outer_card_pad_pt)  # type: ignore[no-any-return]
 
 
 def _scale_ratios_to_pt(total_pt: float, ratios: tuple[float, ...]) -> list[float]:
@@ -302,12 +302,12 @@ def _bar_cell_table(bar_total_pt: float, bar_w: float, theme: Theme) -> Table:
     return t
 
 
-def _ranked_inner_table_style(num_rows: int, theme: Theme) -> list:
+def _ranked_inner_table_style(num_rows: int, theme: Theme) -> list[Any]:
     if num_rows <= 0:
         return []
     last = num_rows - 1
     vpad = PDF_RANKED_TABLE_ROW_PAD_PT
-    styles: list[tuple] = [
+    styles: list[tuple[Any, ...]] = [
         ("FONT", (1, 0), (1, last), "Helvetica", 9),
         ("TEXTCOLOR", (0, 0), (-1, last), colors.HexColor(theme.slate)),
         ("ALIGN", (0, 0), (0, last), "LEFT"),

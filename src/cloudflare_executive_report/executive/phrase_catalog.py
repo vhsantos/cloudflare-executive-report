@@ -13,7 +13,7 @@ SP 800-53 controls (single source of truth for new rules).
 
 from __future__ import annotations
 
-from typing import Any, TypedDict
+from typing import Any, TypedDict, cast
 
 
 class PhraseStateEntry(TypedDict, total=False):
@@ -367,7 +367,7 @@ PREFIXES: dict[str, str] = {
 def get_phrase(phrase_key: str, state: str) -> dict[str, Any]:
     """Return phrase payload for one phrase key and explicit state."""
     entry = RULE_CATALOG[phrase_key]
-    state_entry = entry[state]
+    state_entry = cast(dict[str, Any], entry).get(state)
     if not isinstance(state_entry, dict):
         raise TypeError(f"State {state!r} for phrase key {phrase_key!r} must be a dict")
     text = state_entry.get("text")

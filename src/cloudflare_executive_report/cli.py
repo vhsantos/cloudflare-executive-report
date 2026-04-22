@@ -78,7 +78,7 @@ def _parse_sync_types(raw: str) -> frozenset[str]:
     return frozenset(found)
 
 
-def _resolve_types(cli_types: str | None, config_types: list[str] | None) -> frozenset[str]:
+def _resolve_types(cli_types: str | None, config_types: list[str]) -> frozenset[str]:
     """Determine active streams. CLI overrides Config. Empty or None means ALL."""
     if cli_types:
         return _parse_sync_types(cli_types)
@@ -431,11 +431,12 @@ def zones_add(
             if zone_id:
                 z = c.get_zone(zone_id)
             else:
-                assert name
-                z = c.find_zone_by_name(name)
-                if not z:
+                assert name is not None
+                z_found = c.find_zone_by_name(name)
+                if not z_found:
                     typer.echo(f"Zone not found: {name}", err=True)
                     raise typer.Exit(exits.GENERAL_ERROR) from None
+                z = z_found
 
         entry = ZoneEntry(id=str(z["id"]), name=str(z["name"]))
         for existing in cfg.zones:

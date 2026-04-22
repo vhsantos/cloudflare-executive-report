@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from cloudflare_executive_report.aggregators import (
     build_audit_section,
@@ -41,6 +40,10 @@ def _cache_state_warning(stream_label: str, zone_name: str, ds: str, state: str)
     if state == "no_data":
         return f"{base} unavailable (cached entry has no data object)"
     return f"{base} unavailable (cached state unknown)"
+
+
+class SectionBuilder(Protocol):
+    def __call__(self, daily_api_data: list[dict[str, Any]], *, top: int) -> dict[str, Any]: ...
 
 
 @dataclass
@@ -172,7 +175,7 @@ def _finalize_stream_load(
     scratch: _StreamDaysScratch,
     *,
     top: int,
-    build_rollup: Callable[[list[dict[str, Any]], int], dict[str, Any]],
+    build_rollup: SectionBuilder,
 ) -> tuple[dict[str, Any], list[str], list[str], int]:
     rollup = build_rollup(scratch.api_days, top=top) if scratch.api_days else {}
     for w in scratch.warnings:

@@ -355,7 +355,7 @@ class AppConfig:
 
         raw_types = data.get("types")
         if raw_types is None:
-            types = None
+            types = []
         elif isinstance(raw_types, list):
             types = [str(value) for value in raw_types]
         else:
