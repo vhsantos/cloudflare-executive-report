@@ -119,27 +119,25 @@ def send_pdf_report_email(
         smtplib.SMTPException: SMTP-level failures.
     """
     if not cfg.enabled:
-        msg = "email.enabled is false; enable it in config to send mail"
-        raise ValueError(msg)
+        error_msg = "email.enabled is false; enable it in config to send mail"
+        raise ValueError(error_msg)
     validate_email_config_for_send(cfg)
     path = pdf_path.resolve()
     if not path.is_file():
-        msg = f"PDF not found: {path}"
-        raise ValueError(msg)
+        error_msg = f"PDF not found: {path}"
+        raise ValueError(error_msg)
 
     raw_to = list(recipients) if recipients is not None else list(cfg.recipients)
     to_list = _normalized_recipient_list(raw_to)
     period = f"{period_start} to {period_end}"
     from_header = _resolved_from_header(cfg)
     date_str = datetime.now(UTC).strftime("%Y-%m-%d")
-    ph_kwargs = {
-        "date_str": date_str,
-        "period": period,
-        "zone_count": zone_count,
-    }
-    subject = apply_email_placeholders(cfg.subject, **ph_kwargs)
-    body = apply_email_placeholders(cfg.body, **ph_kwargs)
-
+    subject = apply_email_placeholders(
+        cfg.subject, date_str=date_str, period=period, zone_count=zone_count
+    )
+    body = apply_email_placeholders(
+        cfg.body, date_str=date_str, period=period, zone_count=zone_count
+    )
     msg = EmailMessage()
     msg["From"] = from_header
     msg["To"] = ", ".join(to_list)

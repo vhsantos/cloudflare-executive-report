@@ -354,10 +354,15 @@ class AppConfig:
         )
 
         raw_types = data.get("types")
-        if isinstance(raw_types, list):
+        if raw_types is None:
+            types = []
+        elif isinstance(raw_types, list):
             types = [str(value) for value in raw_types]
         else:
-            types = []
+            # Just crash with a clear message - user will fix config
+            raise TypeError(
+                f"'types' must be a list (or null). Got {type(raw_types).__name__}: {raw_types}"
+            )
 
         return cls(
             api_token=api_token,

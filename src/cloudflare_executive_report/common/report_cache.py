@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cloudflare_executive_report.cache import read_day_file
+from cloudflare_executive_report.cache import CacheEnvelope, read_day_file
 from cloudflare_executive_report.common.dates import (
     format_ymd,
     iter_dates_inclusive,
@@ -17,7 +17,7 @@ from cloudflare_executive_report.fetchers.registry import day_cache_path
 from cloudflare_executive_report.sync.options import SyncOptions
 
 
-def cached_stream_payload_usable(raw: dict | None) -> bool:
+def cached_stream_payload_usable(raw: CacheEnvelope | None) -> bool:
     """True when a cache day file has usable analytics payload (not miss, null, or error)."""
     if not raw:
         return False

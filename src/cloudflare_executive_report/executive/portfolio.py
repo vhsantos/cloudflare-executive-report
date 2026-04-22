@@ -73,7 +73,7 @@ def build_portfolio_summary(
     """Aggregate multi-zone executive summary data for portfolio PDF section."""
     zone_rows: list[PortfolioZoneRow] = []
     risk_zone_counts: dict[str, int] = {}
-    grade_distribution = {grade: 0 for grade in GRADE_ORDER}
+    grade_distribution = dict.fromkeys(GRADE_ORDER, 0)
 
     for zone in zone_blocks:
         zone_name = str(zone.get("zone_name") or zone.get("zone_id") or "").strip()

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import Any, cast
 
 import httpx
 from cloudflare import (
@@ -125,6 +125,34 @@ class CloudflareClient:
             _map_sdk_exception(e)
             raise
 
+    def list_accounts(self) -> list[dict[str, Any]]:
+        """All accounts accessible to the token (SDK auto-pagination)."""
+        if self._verbose:
+            log.debug("SDK accounts.list()")
+        try:
+            return [a.model_dump() for a in self._sdk.accounts.list()]
+        except Exception as e:
+            _map_sdk_exception(e)
+            raise
+
+    def get_first_account_id(self) -> str | None:
+        """Return the first accessible account ID using a single API request.
+
+        Breaks out of the SDK iterator after the first item so that auto-pagination
+        never fetches page 2. Use this instead of list_accounts() when only an
+        account ID is needed as a probe target.
+        """
+        if self._verbose:
+            log.debug("SDK accounts.list() - first item only")
+        try:
+            for account in self._sdk.accounts.list():
+                account_id = str(account.id or "").strip()
+                return account_id or None
+        except Exception as e:
+            _map_sdk_exception(e)
+            raise
+        return None
+
     def get_zone(self, zone_id: str) -> dict[str, Any]:
         if self._verbose:
             log.debug("SDK zones.get zone_id=%s", zone_id)
@@ -189,7 +217,7 @@ class CloudflareClient:
             log.debug("SDK ssl.certificate_packs.list zone_id=%s", zone_id)
         try:
             page = self._sdk.ssl.certificate_packs.list(zone_id=zone_id, status="all")
-            return page.result  # Already a list
+            return cast(list[dict[str, Any]], page.result)  # Already a list
         except Exception as e:
             _map_sdk_exception(e)
             raise
@@ -228,20 +256,38 @@ class CloudflareClient:
                     continue
                 raise CloudflareAPIError(f"Network error after retries: {e}") from e
             except httpx.HTTPStatusError as e:
-                raise CloudflareAPIError(
-                    f"HTTP {e.response.status_code}: {_truncate(e.response.text)}"
-                ) from e
+                # Retry 5xx server errors like 503 "too many queries"
+                if e.response.status_code in (500, 502, 503, 504) and net_attempt < NETWORK_RETRIES:
+                    time.sleep(NETWORK_BACKOFF[min(net_attempt, len(NETWORK_BACKOFF) - 1)])
+                    continue
+
+                # Include CF-Ray in all HTTP errors
+                ray_id = e.response.headers.get("cf-ray", "unknown")
+                msg = f"HTTP {e.response.status_code}: "
+                msg += f"{_truncate(e.response.text)} (cf-ray: {ray_id})"
+
+                raise CloudflareAPIError(msg) from e
 
             errs = body.get("errors")
             if errs:
                 msg = errs[0].get("message", str(errs))
                 low = msg.lower()
+
+                # Parsing / Validation
                 if "iso8601" in low or "datetime" in low:
                     raise CloudflareAPIError(
-                        f"Date format error (use YYYY-MM-DDT00:00:00Z): {msg}"
+                        f"Date format error (use YYYY-MM-DD for filters): {msg}"
                     ) from None
+
+                if (
+                    "not authorized" in low
+                    or "unauthorized" in low
+                    or "permission" in low
+                    or "does not have access" in low
+                ):
+                    raise CloudflareAuthError(f"Permission denied: {msg}") from None
                 raise CloudflareAPIError(msg)
-            return body["data"]
+            return cast(dict[str, Any], body["data"])
         raise CloudflareAPIError(str(last_network))
 
     def _graphql_after_429(self, payload: dict[str, Any], first: httpx.Response) -> dict[str, Any]:
@@ -273,7 +319,7 @@ class CloudflareClient:
                         f"Date format error (use YYYY-MM-DDT00:00:00Z): {msg}"
                     ) from None
                 raise CloudflareAPIError(msg)
-            return body["data"]
+            return cast(dict[str, Any], body["data"])
         raise CloudflareRateLimitError(
             "Rate limit exceeded after retries",
             retry_after=ra,

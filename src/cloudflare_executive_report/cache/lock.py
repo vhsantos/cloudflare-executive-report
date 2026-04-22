@@ -92,7 +92,7 @@ def cache_lock(cache_root: Path, wait_seconds: float = 30.0) -> Generator[None, 
     try:
         yield
     finally:
-        try:
+        from contextlib import suppress
+
+        with suppress(OSError):
             lock_path.unlink(missing_ok=True)
-        except OSError:
-            pass

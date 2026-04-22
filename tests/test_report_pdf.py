@@ -15,7 +15,7 @@ from cloudflare_executive_report.pdf.layout_spec import ReportSpec
 pytest.importorskip("reportlab")
 pytest.importorskip("matplotlib")
 
-from cloudflare_executive_report.pdf.orchestrate import write_report_pdf  # noqa: E402
+from cloudflare_executive_report.pdf.orchestrate import write_report_pdf
 
 FIXTURE_CACHE = Path(__file__).resolve().parent.parent / "docs" / "sample-data" / "cache"
 ZONE_ID = "a1b2c3d4e5f6789012345678abcdef01"
@@ -27,6 +27,7 @@ def test_cf_report_report_help() -> None:
         capture_output=True,
         text=True,
         check=False,
+        env={"TERM": "dumb", "NO_COLOR": "1"},
     )
     assert r.returncode == 0
     out = r.stdout

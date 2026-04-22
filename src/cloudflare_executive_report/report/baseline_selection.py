@@ -104,13 +104,18 @@ def select_previous_report_for_period(
         if not _report_has_zone(rep, zone_id):
             continue
         candidate_type = normalize_report_type(rep.get("report_type"))
-        if baseline_expected is not None and candidate_type is not None:
-            if candidate_type not in {
+        if (
+            baseline_expected is not None
+            and candidate_type is not None
+            and candidate_type
+            not in {
                 current_report_type,
                 "custom",
                 "incremental",
-            } and not candidate_type.startswith("last_"):
-                continue
+            }
+            and not candidate_type.startswith("last_")
+        ):
+            continue
         if baseline_expected is not None:
             if (ps, pe) != baseline_expected:
                 continue

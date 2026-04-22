@@ -44,6 +44,13 @@ from cloudflare_executive_report.fetchers.registry import (
 )
 from cloudflare_executive_report.report.command_flow import run_report_pdf_command
 from cloudflare_executive_report.sync.orchestrator import run_clean, run_sync
+from cloudflare_executive_report.validate.consts import ALL_PERMISSIONS
+from cloudflare_executive_report.validate.runner import (
+    STATUS_MISSING,
+    STATUS_OK,
+    STATUS_SKIPPED,
+    validate_token_permissions,
+)
 
 
 def _valid_sync_types() -> frozenset[str]:
@@ -61,17 +68,23 @@ def _parse_sync_types(raw: str) -> frozenset[str]:
         if p in valid:
             found.add(p)
         else:
-            typer.echo(
-                f"Ignoring unknown type {p!r} (allowed: {allowed})",
-                err=True,
-            )
+            typer.echo(f"Warning: unknown type {p!r} will be ignored.", err=True)
     if not found:
         typer.echo(
-            f"Error: at least one valid type is required ({allowed}).",
+            f"Error: no valid types specified. Allowed: {allowed}",
             err=True,
         )
         raise typer.Exit(exits.INVALID_PARAMS)
     return frozenset(found)
+
+
+def _resolve_types(cli_types: str | None, config_types: list[str]) -> frozenset[str]:
+    """Determine active streams. CLI overrides Config. Empty or None means ALL."""
+    if cli_types:
+        return _parse_sync_types(cli_types)
+    if config_types:
+        return frozenset(config_types)
+    return _parse_sync_types(default_types_csv())
 
 
 def _config_log_level(cfg: AppConfig) -> str:
@@ -214,8 +227,8 @@ def cmd_report(
             "else all configured zones."
         ),
     ),
-    types: str = typer.Option(
-        default_types_csv(),
+    types: str | None = typer.Option(
+        None,
         "--types",
         help=(
             f"Comma-separated stream ids (default: {default_types_csv()}). "
@@ -251,11 +264,18 @@ def cmd_report(
         typer.echo("Error: --output / -o is required.", err=True)
         raise typer.Exit(exits.INVALID_PARAMS)
 
-    type_set = _parse_sync_types(types)
-    if "http_adaptive" not in type_set:
+    try:
+        cfg = load_app_config(config)
+    except CliConfigError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(exits.GENERAL_ERROR) from None
+
+    type_set = _resolve_types(types, cfg.types)
+    if "http_adaptive" in _valid_sync_types() and "http_adaptive" not in type_set:
         # Executive summary reliability KPIs require adaptive HTTP metrics.
         type_set = frozenset(set(type_set) | {"http_adaptive"})
     pdf_streams = _pdf_streams_from_types(type_set)
+
     if not pdf_streams:
         typer.echo(
             "Error: --types must include at least one of dns, http "
@@ -263,12 +283,6 @@ def cmd_report(
             err=True,
         )
         raise typer.Exit(exits.INVALID_PARAMS)
-
-    try:
-        cfg = load_app_config(config)
-    except CliConfigError as e:
-        typer.echo(str(e), err=True)
-        raise typer.Exit(exits.GENERAL_ERROR) from None
 
     if history_dir is not None:
         cfg.history_dir = str(history_dir)
@@ -417,11 +431,12 @@ def zones_add(
             if zone_id:
                 z = c.get_zone(zone_id)
             else:
-                assert name
-                z = c.find_zone_by_name(name)
-                if not z:
+                assert name is not None
+                z_found = c.find_zone_by_name(name)
+                if not z_found:
                     typer.echo(f"Zone not found: {name}", err=True)
                     raise typer.Exit(exits.GENERAL_ERROR) from None
+                z = z_found
 
         entry = ZoneEntry(id=str(z["id"]), name=str(z["name"]))
         for existing in cfg.zones:
@@ -497,8 +512,8 @@ def cmd_sync(
         "--zone",
         help="Zone id or name in config; if omitted, uses default_zone from config when set.",
     ),
-    types: str = typer.Option(
-        default_types_csv(),
+    types: str | None = typer.Option(
+        None,
         "--types",
         help=f"Comma-separated stream ids (default: {default_types_csv()}).",
     ),
@@ -528,7 +543,8 @@ def cmd_sync(
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.GENERAL_ERROR) from None
 
-    type_set = _parse_sync_types(types)
+    type_set = _resolve_types(types, cfg.types)
+
     try:
         opts = validate_and_build_sync_options(
             default_period=cfg.default_period,
@@ -617,6 +633,142 @@ def cmd_clean(
         quiet=quiet,
     )
     raise typer.Exit(code)
+
+
+@app.command("validate")
+def cmd_validate(
+    ctx: typer.Context,
+    zone: str | None = typer.Option(
+        None,
+        "--zone",
+        help=(
+            "Zone id or name to use for zone-scoped probes. "
+            "Defaults to default_zone from config, then first configured zone."
+        ),
+    ),
+    config: Path | None = typer.Option(None, "--config", help="Override config path."),
+) -> None:
+    """Check that the configured API token has all required Cloudflare permissions.
+
+    Runs one lightweight API call per permission and prints a status table.
+    Exits with a non-zero code when any permission is MISSING.
+    """
+    verbose = ctx.obj.get("verbose", 0)
+    quiet = ctx.obj.get("quiet", False)
+    log_file = ctx.obj.get("log_file")
+
+    try:
+        cfg = load_app_config(config)
+    except CliConfigError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(exits.GENERAL_ERROR) from None
+
+    setup_logging(
+        verbose_count=verbose,
+        quiet=quiet,
+        log_level=_config_log_level(cfg),
+        log_file=log_file,
+    )
+
+    # Resolve the zone for zone-scoped probes.
+    zone_effective = resolve_zone_filter(cfg, zone)
+    test_zone_id: str | None = None
+    if zone_effective:
+        matched = zones_matching_filter(cfg, zone_effective)
+        if not matched:
+            typer.echo(f"Error: Zone not found in config: {zone_effective!r}.", err=True)
+            raise typer.Exit(exits.INVALID_PARAMS)
+        test_zone_id = matched[0].id
+    elif cfg.zones:
+        test_zone_id = cfg.zones[0].id
+
+    if not test_zone_id:
+        typer.echo(
+            "Warning: no zones configured - zone-scoped permissions will be skipped.",
+            err=True,
+        )
+
+    typer.echo(f"Validating token permissions ({len(ALL_PERMISSIONS)} checks)...")
+    if test_zone_id:
+        typer.echo(f"Zone used for zone-scoped probes: {test_zone_id}")
+    typer.echo("")
+
+    try:
+        with CloudflareClient(cfg.api_token, verbose=effective_debug_enabled()) as client:
+            results = validate_token_permissions(
+                client,
+                test_zone_id,
+                enabled_streams=cfg.types,
+            )
+    except CloudflareAuthError as e:
+        typer.echo(f"Authentication failed: {e}", err=True)
+        raise typer.Exit(exits.AUTH_FAILED) from None
+    except CloudflareAPIError as e:
+        typer.echo(f"API error during validation: {e}", err=True)
+        raise typer.Exit(exits.GENERAL_ERROR) from None
+
+    # -----------------------------------------------------------------------
+    # Print results table
+    # -----------------------------------------------------------------------
+    col_perm = 46
+    col_status = 14
+    col_used = 28
+
+    header = f"{'Permission':<{col_perm}}  {'Status':<{col_status}}  {'Used By':<{col_used}}  Notes"
+    separator = "-" * (len(header) + 4)
+    typer.echo(header)
+    typer.echo(separator)
+
+    missing: list[str] = []
+    for result in results:
+        used_display = ", ".join(result.used_by) if result.used_by else "-"
+        notes = result.message or ""
+        typer.echo(
+            f"{result.permission:<{col_perm}}  {result.status:<{col_status}}  "
+            f"{used_display:<{col_used}}  {notes}".rstrip()
+        )
+        if result.status == STATUS_MISSING:
+            missing.append(result.permission)
+
+    typer.echo("")
+
+    # -----------------------------------------------------------------------
+    # Summary and exit
+    # -----------------------------------------------------------------------
+    ok_count = sum(1 for r in results if r.status == STATUS_OK)
+    skipped_count = sum(1 for r in results if r.status == STATUS_SKIPPED)
+    missing_count = len(missing)
+    typer.echo(f"Result: {ok_count} OK  |  {missing_count} MISSING  |  {skipped_count} SKIPPED")
+
+    if missing:
+        typer.echo("", err=True)
+        typer.echo("Missing permissions:", err=True)
+        for perm in missing:
+            typer.echo(f"  - {perm}", err=True)
+        typer.echo(
+            "\nGrant the above permissions in your Cloudflare token settings and re-run.",
+            err=True,
+        )
+        raise typer.Exit(exits.AUTH_FAILED)
+
+    typer.echo("All required permissions are available.")
+
+    if results.write_access_detected:
+        msg_width = 80
+        msg_warning = "SECURITY WARNING: UNWANTED WRITE PERMISSIONS DETECTED."
+        msg_line1 = "Your API token appears to have WRITE access to your Cloudflare zone."
+        msg_line2 = "This tool only requires READ permissions. For better security, it is"
+        msg_line3 = "strongly recommended to restrict this token to 'Read' access only."
+        typer.echo("")
+        typer.echo("!" * msg_width, err=True)
+        typer.echo(msg_warning.center(msg_width), err=True)
+        typer.echo("", err=True)
+        typer.echo(msg_line1.center(msg_width), err=True)
+        typer.echo(msg_line2.center(msg_width), err=True)
+        typer.echo(msg_line3.center(msg_width), err=True)
+        typer.echo("!" * msg_width, err=True)
+
+    raise typer.Exit(exits.SUCCESS)
 
 
 def main() -> None:

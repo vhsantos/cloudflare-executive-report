@@ -55,8 +55,6 @@ def collect_http_appendix_notes(http: dict[str, Any], *, profile: str) -> list[s
 def _country_totals_from_rollup(http: dict[str, Any]) -> dict[str, int]:
     out: dict[str, int] = {}
     for row in http.get("top_countries") or []:
-        if not isinstance(row, dict):
-            continue
         code = str(row.get("code") or "").upper()
         if len(code) != 2:
             continue
@@ -153,17 +151,15 @@ def append_http_stream(
     side_row_limit = min(top, PDF_MAP_SIDE_TABLE_MAX_ROWS)
 
     rows_raw = list(http.get("top_countries") or [])
-    ranked: list[dict[str, Any]] = []
-    for r in rows_raw[:top]:
-        if not isinstance(r, dict):
-            continue
-        ranked.append(
-            {
-                "name": str(r.get("country") or r.get("code") or ""),
-                "count": int(r.get("requests") or 0),
-                "percentage": float(r.get("percentage") or 0.0),
-            }
-        )
+    ranked: list[dict[str, Any]] = [
+        {
+            "name": str(r.get("country") or r.get("code") or ""),
+            "count": int(r.get("requests") or 0),
+            "percentage": float(r.get("percentage") or 0.0),
+        }
+        for r in rows_raw[:top]
+        if isinstance(r, dict)
+    ]
     bar_rows_full = ranked_rows_from_dicts(ranked, top, "name")
     bar_rows_side = ranked_rows_from_dicts(ranked, side_row_limit, "name")
     append_map_and_ranked_table(

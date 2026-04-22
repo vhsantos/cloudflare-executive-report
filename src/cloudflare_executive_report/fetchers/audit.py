@@ -11,6 +11,7 @@ from cloudflare_executive_report.cf_client import (
     CloudflareClient,
     CloudflareRateLimitError,
 )
+from cloudflare_executive_report.common.boundary import filter_dict_rows
 from cloudflare_executive_report.common.dates import day_bounds_utc, format_ymd, utc_today
 
 
@@ -60,14 +61,14 @@ def fetch_audit_snapshot_with_account(
         if not account_id:
             return {"date": format_ymd(day), "unavailable": True, "reason": "missing_account_id"}
         # SDK: audit_logs.list
-        rows = client.list_account_audit_logs(
-            account_id,
-            since=since_iso,
-            before=until_iso,
-            limit=100,
+        rows = filter_dict_rows(
+            client.list_account_audit_logs(
+                account_id,
+                since=since_iso,
+                before=until_iso,
+                limit=100,
+            )
         )
-        if not isinstance(rows, list):
-            rows = []
     except CloudflareAuthError:
         return {"date": format_ymd(day), "unavailable": True, "reason": "permission_denied"}
     except CloudflareAPIError as e:
@@ -76,8 +77,6 @@ def fetch_audit_snapshot_with_account(
     actor_values: list[str] = []
     action_values: list[str] = []
     for r in rows:
-        if not isinstance(r, dict):
-            continue
         actor = r.get("actor") or {}
         if isinstance(actor, dict):
             actor_values.append(str(actor.get("email") or actor.get("id") or "").strip())
@@ -94,6 +93,10 @@ class AuditFetcher:
     stream_id: ClassVar[str] = "audit"
     cache_filename: ClassVar[str] = "audit.json"
     collect_label: ClassVar[str] = "Audit logs"
+    required_permissions: ClassVar[tuple[str, ...]] = (
+        "Account > Account Settings Read",
+        "Account > Access: Audit Logs Read",
+    )
 
     def outside_retention(self, day: date, *, plan_legacy_id: str | None) -> bool:
         _ = (day, plan_legacy_id)

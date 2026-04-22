@@ -10,17 +10,16 @@ from cloudflare_executive_report.cf_client import (
     CloudflareClient,
     CloudflareRateLimitError,
 )
+from cloudflare_executive_report.common.boundary import filter_dict_rows
 from cloudflare_executive_report.common.dates import format_ymd, utc_today
 from cloudflare_executive_report.common.retention import date_outside_http_retention
 
 
 def _accumulate_content_type_map(
     acc: dict[str, tuple[int, int]],
-    rows: list[Any],
+    rows: list[dict[str, Any]],
 ) -> None:
     for row in rows:
-        if not isinstance(row, dict):
-            continue
         raw = row.get("edgeResponseContentTypeName")
         if raw is None:
             raw = row.get("edgeResponseContentType")
@@ -37,7 +36,7 @@ def _http_groups(data: dict[str, Any] | None) -> list[dict[str, Any]]:
     zones = ((data.get("viewer") or {}).get("zones")) or []
     if not zones:
         return []
-    return zones[0].get("httpRequests1dGroups") or []
+    return filter_dict_rows(zones[0].get("httpRequests1dGroups"))
 
 
 Q_HTTP_DAY = """
@@ -159,6 +158,10 @@ class HttpFetcher:
     stream_id: ClassVar[str] = "http"
     cache_filename: ClassVar[str] = "http.json"
     collect_label: ClassVar[str] = "HTTP"
+    required_permissions: ClassVar[tuple[str, ...]] = (
+        "Zone > Zone Read",
+        "Zone > Analytics Read",
+    )
 
     def outside_retention(self, day: date, *, plan_legacy_id: str | None) -> bool:
         _ = plan_legacy_id

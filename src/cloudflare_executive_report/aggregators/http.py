@@ -8,6 +8,7 @@ from cloudflare_executive_report.common.aggregation_helpers import (
     country_label_code,
     pct_of_total,
 )
+from cloudflare_executive_report.common.boundary import filter_dict_rows
 from cloudflare_executive_report.common.formatting import format_bytes_human, format_count_human
 
 
@@ -31,9 +32,7 @@ def build_http_section(
 
     country_requests: dict[str, int] = {}
     for day in daily_api_data:
-        for row in day.get("country_map") or []:
-            if not isinstance(row, dict):
-                continue
+        for row in filter_dict_rows(day.get("country_map")):
             country_name = row.get("clientCountryName")
             if country_name is None:
                 continue
@@ -42,9 +41,7 @@ def build_http_section(
 
     content_type_requests: dict[str, int] = {}
     for day in daily_api_data:
-        for row in day.get("response_content_types") or []:
-            if not isinstance(row, dict):
-                continue
+        for row in filter_dict_rows(day.get("response_content_types")):
             raw = row.get("edgeResponseContentTypeName")
             if raw is None:
                 raw = row.get("edgeResponseContentType")

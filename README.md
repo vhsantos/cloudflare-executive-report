@@ -2,10 +2,11 @@
 
 > Turn Cloudflare analytics into executive-ready PDF reports with security scores, NIST mappings, and multi-zone portfolio views.
 
+[![Security: Read-Only](https://img.shields.io/badge/security-read--only-brightgreen.svg)](SECURITY.md)
 [![PyPI version](https://img.shields.io/pypi/v/cloudflare-executive-report)](https://pypi.org/project/cloudflare-executive-report/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-![Coverage](https://img.shields.io/badge/coverage-75%25-yellowgreen)
+![Coverage](https://img.shields.io/codecov/c/github/vhsantos/cloudflare-executive-report)
 
 ---
 
@@ -73,26 +74,38 @@ That's it. You just generated your first executive report.
 
 ---
 
-## 🔐 API token setup (read-only)
+## 🔐 API token setup
 
-Create a token in Cloudflare Dashboard -> **Manage Account** -> **Account API Tokens**
+Create a read-only API token in Cloudflare Dashboard → **Manage Account** → **Account API Tokens**
 
-### Minimum required permissions
+### Required permissions
 
-| Permission     | Purpose                      |
-| -------------- | ---------------------------- |
-| Zone Read      | Zone metadata                |
-| Analytics Read | DNS/HTTP/security/cache data |
+| Permission                        | Required        |
+| --------------------------------- | --------------- |
+| Zone > Zone Read                  | ✅ Yes          |
+| Zone > Analytics Read             | ✅ Yes          |
+| Zone > DNS Read                   | ⚠️ Recommended  |
+| Zone > SSL and Certificates Read  | ⚠️ Recommended  |
+| Zone > Zone Settings Read         | ⚠️ Recommended  |
+| Zone > Firewall Services Read     | ⚠️ Recommended  |
+| Zone > WAF Read                   | ⚠️ Recommended  |
+| Account > Access: Audit Logs Read | ℹ️ Nice-to-have |
+| Account > Account Settings Read   | ℹ️ Nice-to-have |
 
-### For full zone health (recommended)
+> **✅ Required** = Tool won't work | **⚠️ Recommended** = Full features | **ℹ️ Nice-to-have** = Better validation
 
-| Permission             | Purpose                   |
-| ---------------------- | ------------------------- |
-| Zone Settings Read     | SSL/HTTPS/security status |
-| DNS Read               | DNSSEC status             |
-| Firewall Services Read | Firewall rule counts      |
+### Quick validation
 
-> Missing health permissions = `unavailable` fields + warnings. Use `--skip-zone-health` to bypass.
+```bash
+# Shows exactly which permissions you have
+cf-report validate
+```
+
+### Security notes
+
+- 🔒 **Read-only only** - The tool never needs write permissions
+- 💾 **All data stays local** - Cached in `~/.cf-report/`, no telemetry
+- 📖 **[Full security guide →](SECURITY.md)** - Step-by-step token creation, data storage details, and security checklist
 
 ---
 
@@ -129,7 +142,7 @@ Score = max(0, 100 - (total_risk_weight / 60) * 100)
 ## ⚙️ Quick config (`~/.cf-report/config.yaml`)
 
 ```yaml
-api_token: "cfat_xxx"
+api_token: "cfat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 cache_dir: "~/.cf-report/cache"
 history_dir: "~/.cf-report/history"
 log_level: "info"
@@ -139,11 +152,11 @@ zones:
     name: "example.com"
 
 pdf:
-  profile: "executive"     # minimal | executive | detailed
-  chart_format: "png"      # png | svg
-  map_format: "png"        # png | svg
+  profile: "executive" # minimal | executive | detailed
+  chart_format: "png" # png | svg
+  map_format: "png" # png | svg
   colors:
-    primary: "#2563eb"     # your brand color
+    primary: "#2563eb" # your brand color
     accent: "#f38020"
 
 email:

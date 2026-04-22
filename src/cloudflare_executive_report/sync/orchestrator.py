@@ -19,7 +19,9 @@ from cloudflare_executive_report.aggregators import (
     SECTION_BUILDERS,
 )
 from cloudflare_executive_report.cache import (
+    CacheEnvelope,
     CacheLockTimeout,
+    ZoneIndex,
     cache_lock,
     load_zone_index,
     merge_stream_bounds,
@@ -51,7 +53,7 @@ from cloudflare_executive_report.common.report_period import (
     report_bounds_from_indices,
     streams_for_sync_types,
 )
-from cloudflare_executive_report.config import AppConfig
+from cloudflare_executive_report.config import AppConfig, ZoneEntry
 from cloudflare_executive_report.fetchers.registry import (
     FETCHER_REGISTRY,
     day_cache_path,
@@ -66,10 +68,7 @@ log = logging.getLogger(__name__)
 
 
 def _dates_incremental(idx_latest: str | None, y: date) -> list[date]:
-    if idx_latest:
-        latest = parse_ymd(idx_latest)
-    else:
-        latest = y
+    latest = parse_ymd(idx_latest) if idx_latest else y
     out: list[date] = []
     d = latest + timedelta(days=1)
     while d <= y:
@@ -78,7 +77,7 @@ def _dates_incremental(idx_latest: str | None, y: date) -> list[date]:
     return out
 
 
-def _sync_days_for_mode(opts: SyncOptions, idx, y: date) -> list[date]:
+def _sync_days_for_mode(opts: SyncOptions, idx: ZoneIndex, y: date) -> list[date]:
     resolved = resolved_period_for_options(opts=opts, y=y, today=utc_today())
     if resolved is not None:
         d0, d1 = resolved
@@ -181,7 +180,7 @@ def run_sync(
 def _run_sync_locked(
     cfg: AppConfig,
     opts: SyncOptions,
-    zones: list,
+    zones: list[ZoneEntry],
     cache_root: Path,
     y: date,
     *,
@@ -195,13 +194,12 @@ def _run_sync_locked(
     default_output_mode = (not write_stdout) and (output_path is None)
 
     with CloudflareClient(cfg.api_token, verbose=verbose_http) as client:
-        if opts.mode == SyncMode.range and opts.start and opts.end:
-            if parse_ymd(opts.end) > y:
-                log.error("--end cannot be after yesterday (UTC). Use --include-today for today.")
-                return exits.INVALID_PARAMS
+        if opts.mode == SyncMode.range and opts.start and opts.end and parse_ymd(opts.end) > y:
+            log.error("--end cannot be after yesterday (UTC). Use --include-today for today.")
+            return exits.INVALID_PARAMS
 
         # Cache zone metadata once per run to avoid redundant API calls
-        zmeta_by_zone_id: dict[str, dict] = {}
+        zmeta_by_zone_id: dict[str, dict[str, Any]] = {}
         for z in zones:
             try:
                 zmeta_by_zone_id[z.id] = client.get_zone(z.id)
@@ -245,9 +243,9 @@ def _run_sync_locked(
             new_idx = load_zone_index(cache_root, z.id, z.name)
             new_idx.zone_name = z.name
             if days:
-                s, e = format_ymd(min(days)), format_ymd(max(days))
+                start_ds, end_ds = format_ymd(min(days)), format_ymd(max(days))
                 for sid in streams:
-                    new_idx = merge_stream_bounds(new_idx, s, e, sid)
+                    new_idx = merge_stream_bounds(new_idx, start_ds, end_ds, sid)
                 if opts.mode == SyncMode.incremental:
                     yy = format_ymd(y)
                     for sid in streams:
@@ -275,7 +273,7 @@ def _run_sync_locked(
         missing_days_sorted = sorted(all_missing_days)
         partial = len(missing_days_sorted) > 0
 
-        zones_out: list[dict] = []
+        zones_out: list[dict[str, Any]] = []
         all_warnings: list[str] = []
 
         for z in zones:
@@ -283,14 +281,14 @@ def _run_sync_locked(
             plan = (zmeta.get("plan") or {}).get("legacy_id")
 
             cache_end = format_ymd(y) if opts.include_today else report_end
-            zblock: dict = {"zone_id": z.id, "zone_name": z.name}
+            zblock: dict[str, Any] = {"zone_id": z.id, "zone_name": z.name}
             zone_warnings: list[str] = []
 
             for sid in streams_for_sync_types(opts.types):
                 fetcher = FETCHER_REGISTRY[sid]
                 builder = SECTION_BUILDERS[sid]
 
-                def read_stream(zi: str, ds: str, stream_id: str = sid) -> dict | None:
+                def read_stream(zi: str, ds: str, stream_id: str = sid) -> CacheEnvelope | None:
                     return read_day_file(day_cache_path(cache_root, zi, ds, stream_id))
 
                 api_days, warns = collect_days_payloads(
@@ -440,10 +438,7 @@ def run_clean(
                     if "_" in ds:
                         parts = ds.split("_")
                         # If first part is exactly 16 chars (our hash), date is the second part
-                        if len(parts) >= 2 and len(parts[0]) == 16:
-                            ds = parts[1]
-                        else:
-                            ds = parts[0]
+                        ds = parts[1] if len(parts) >= 2 and len(parts[0]) == 16 else parts[0]
                     try:
                         d = parse_ymd(ds)
                     except ValueError:

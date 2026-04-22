@@ -6,7 +6,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, TypedDict, cast
 
 from cloudflare_executive_report.common.dates import utc_now_z
 
@@ -26,22 +26,22 @@ class CacheEnvelope(TypedDict, total=False):
     _retry_after: str | None
 
 
-def read_json_file(path: Path) -> CacheEnvelope | None:
+def read_json_file(path: Path) -> dict[str, Any] | None:
     if not path.is_file():
         return None
     try:
         with path.open(encoding="utf-8") as f:
-            return json.load(f)
+            return cast(dict[str, Any], json.load(f))
     except json.JSONDecodeError:
         log.warning("Corrupt cache JSON deleted: %s", path)
-        try:
+        from contextlib import suppress
+
+        with suppress(OSError):
             path.unlink()
-        except OSError:
-            pass
         return None
 
 
-def write_json_atomic(path: Path, payload: CacheEnvelope) -> None:
+def write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     data = json.dumps(payload, indent=2, ensure_ascii=False)
@@ -54,7 +54,7 @@ def write_json_atomic(path: Path, payload: CacheEnvelope) -> None:
 
 def read_day_file(path: Path) -> CacheEnvelope | None:
     """Return full on-disk envelope dict, or None if missing/corrupt."""
-    return read_json_file(path)
+    return cast(CacheEnvelope | None, read_json_file(path))
 
 
 def write_day_file(
@@ -75,4 +75,4 @@ def write_day_file(
         payload["_error"] = error
     if retry_after:
         payload["_retry_after"] = retry_after
-    write_json_atomic(path, payload)
+    write_json_atomic(path, cast(dict[str, Any], payload))

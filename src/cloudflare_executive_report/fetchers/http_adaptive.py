@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from cloudflare_executive_report.cf_client import (
     CloudflareAPIError,
@@ -144,7 +144,10 @@ def _status_rows_rollup(
             n4 += c
         elif bucket == "5xx":
             n5 += c
-    status_rows = [{"value": k, "count": v} for k, v in sorted(merged.items(), key=lambda x: -x[1])]
+    status_rows = cast(
+        "list[dict[str, int | str]]",
+        [{"value": k, "count": v} for k, v in sorted(merged.items(), key=lambda x: -x[1])],
+    )
     return total, n4, n5, status_rows
 
 
@@ -262,6 +265,10 @@ class HttpAdaptiveFetcher:
     stream_id: ClassVar[str] = "http_adaptive"
     cache_filename: ClassVar[str] = "http_adaptive.json"
     collect_label: ClassVar[str] = "HTTP adaptive"
+    required_permissions: ClassVar[tuple[str, ...]] = (
+        "Zone > Zone Read",
+        "Zone > Analytics Read",
+    )
 
     def outside_retention(self, day: date, *, plan_legacy_id: str | None) -> bool:
         _ = plan_legacy_id

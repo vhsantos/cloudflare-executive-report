@@ -83,30 +83,32 @@ def test_sync_to_report_integration_smoke(tmp_path: Path, mock_client: MagicMock
     )
 
     # 1. Run Sync (mocking the client creation)
-    with patch(
-        "cloudflare_executive_report.sync.orchestrator.CloudflareClient", return_value=mock_client
-    ):
-        # We also need to mock it in write_report_pdf if it fetches live health
-        with patch(
+    with (
+        patch(
+            "cloudflare_executive_report.sync.orchestrator.CloudflareClient",
+            return_value=mock_client,
+        ),
+        patch(
             "cloudflare_executive_report.pdf.orchestrate.CloudflareClient", return_value=mock_client
-        ):
-            res = run_sync(cfg, opts, write_report_json=True)
-            assert res == 0
+        ),
+    ):
+        res = run_sync(cfg, opts, write_report_json=True)
+        assert res == 0
 
-            # Check if cache files were created
-            zone_cache = cache_dir / ZONE_ID
-            assert zone_cache.is_dir()
+        # Check if cache files were created
+        zone_cache = cache_dir / ZONE_ID
+        assert zone_cache.is_dir()
 
-            # 2. Run Report PDF
-            pdf_out = history_dir / "report.pdf"
-            spec = ReportSpec(
-                zone_ids=[ZONE_ID],
-                start="2026-04-16",  # Assuming today is 17th
-                end="2026-04-16",
-                streams=("http", "security", "dns"),
-            )
+        # 2. Run Report PDF
+        pdf_out = history_dir / "report.pdf"
+        spec = ReportSpec(
+            zone_ids=[ZONE_ID],
+            start="2026-04-16",  # Assuming today is 17th
+            end="2026-04-16",
+            streams=("http", "security", "dns"),
+        )
 
-            write_report_pdf(pdf_out, cfg, spec, sync_opts=opts)
+        write_report_pdf(pdf_out, cfg, spec, sync_opts=opts)
 
-            assert pdf_out.is_file()
-            assert pdf_out.stat().st_size > 0
+        assert pdf_out.is_file()
+        assert pdf_out.stat().st_size > 0

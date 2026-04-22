@@ -124,7 +124,7 @@ def test_correlation_origin_overloaded_uses_exact_phrase():
     )
     texts = [m.body for m in out.lines_for_section(SECT_SIGNALS)]
     assert any(
-        "Origin overloaded: high error rate (0.8%) with slow response (600ms)" == t for t in texts
+        t == "Origin overloaded: high error rate (0.8%) with slow response (600ms)" for t in texts
     )
 
 

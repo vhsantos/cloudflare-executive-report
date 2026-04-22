@@ -87,7 +87,7 @@ def footer_canvas_factory(
     *,
     theme: Theme,
     left_text: str,
-):
+) -> Any:
     return partial(
         draw_report_chrome,
         theme=theme,

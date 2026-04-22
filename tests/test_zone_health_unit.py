@@ -61,7 +61,7 @@ def test_fetch_zone_health_flow(
     mock_dnssec.return_value = "active"
     mock_rules.return_value = 5
 
-    res, warns = fetch_zone_health(client, "z1", "n1", skip=False)
+    res, _warns = fetch_zone_health(client, "z1", "n1", skip=False)
     assert res["ssl_mode"] == "on"
     assert res["dnssec_status"] == "active"
     assert res["security_rules_active"] == 5

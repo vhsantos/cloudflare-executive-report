@@ -115,11 +115,10 @@ def apply_row_label_formatter(
     name_key: str,
     formatter: Callable[[str], str],
 ) -> list[dict[str, Any]]:
-    """Copy items (up to ``top``) and replace ``name_key`` with a display string."""
+    """Copy items (up to ``top``) and replace ``name_key`` with a display string.
+    Assumes items are already validated dicts. Use filter_dict_rows at call site."""
     out: list[dict[str, Any]] = []
     for it in items[:top]:
-        if not isinstance(it, dict):
-            continue
         row = dict(it)
         row[name_key] = formatter(str(row.get(name_key) or ""))
         out.append(row)

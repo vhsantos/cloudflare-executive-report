@@ -47,6 +47,7 @@ dev = [
     "pytest-cov>=5",
     "ruff>=0.8",
     "mypy>=1.10",
+    "types-PyYAML>=6.0.3",
 ]
 
 # Optional SVG support
@@ -120,7 +121,7 @@ src = ["src", "tests"]
 # I = import sorting
 # UP = pyupgrade
 # B = flake8-bugbear
-select = ["E", "F", "I", "UP", "B"]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM", "RUF"]
 
 
 [tool.ruff.lint.per-file-ignores]
@@ -136,13 +137,29 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.mypy]
 
 # Python version for type checking
-python_version = "3.11"
+python_version = "3.12"
 
 # Enable stricter checks
 strict = true
 
-# Ignore missing type hints from external libs
-ignore_missing_imports = true
+# Keep your warnings (some are redundant but fine to be explicit)
+warn_unused_configs = true
+warn_unused_ignores = true
+warn_unreachable = true
 
 # Limit checking to your source
 files = ["src"]
+
+# Ignore missing type hints from external libs
+[[tool.mypy.overrides]]
+module = [
+    "cartopy",
+    "cartopy.*",
+    "pycountry",
+    "pycountry.*",
+    "reportlab",
+    "reportlab.*",
+    "svglib",
+    "svglib.*",
+]
+ignore_missing_imports = true

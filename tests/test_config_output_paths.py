@@ -101,7 +101,7 @@ def test_portfolio_sort_by_yaml_round_trip() -> None:
 
 
 def test_portfolio_sort_by_rejects_invalid_value() -> None:
-    with pytest.raises(ValueError, match="portfolio.sort_by"):
+    with pytest.raises(ValueError, match=r"portfolio\.sort_by"):
         AppConfig.from_yaml_dict({"zones": [], "portfolio": {"sort_by": "critical_risks"}})
 
 
@@ -117,7 +117,7 @@ def test_pdf_profile_defaults_to_executive() -> None:
 
 
 def test_pdf_profile_rejects_invalid_value() -> None:
-    with pytest.raises(ValueError, match="pdf.profile"):
+    with pytest.raises(ValueError, match=r"pdf\.profile"):
         AppConfig.from_yaml_dict({"zones": [], "pdf": {"profile": "full"}})
 
 
@@ -135,12 +135,12 @@ def test_pdf_colors_yaml_round_trip() -> None:
 
 
 def test_pdf_colors_reject_invalid_hex() -> None:
-    with pytest.raises(ValueError, match="pdf.colors.primary"):
+    with pytest.raises(ValueError, match=r"pdf\.colors\.primary"):
         AppConfig.from_yaml_dict({"zones": [], "pdf": {"colors": {"primary": "orange"}}})
 
 
 def test_email_ssl_and_starttls_both_true_rejected() -> None:
-    with pytest.raises(ValueError, match="email.smtp_ssl"):
+    with pytest.raises(ValueError, match=r"email\.smtp_ssl"):
         AppConfig.from_yaml_dict(
             {
                 "zones": [],

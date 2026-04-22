@@ -38,8 +38,6 @@ def marginal_counts_for_dimension(
     """
     counts: dict[str, int] = {}
     for row in rows:
-        if not isinstance(row, dict):
-            continue
         dims = row.get("dimensions") or {}
         if not isinstance(dims, dict):
             continue
@@ -133,8 +131,6 @@ def marginal_counts_and_sums_for_dimension(
     counts: dict[str, int] = {}
     sums: dict[str, int] = {}
     for row in rows:
-        if not isinstance(row, dict):
-            continue
         dims = row.get("dimensions") or {}
         if not isinstance(dims, dict):
             continue

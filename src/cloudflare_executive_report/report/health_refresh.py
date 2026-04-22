@@ -15,7 +15,7 @@ from cloudflare_executive_report.cf_client import (
 from cloudflare_executive_report.common.dates import utc_yesterday
 from cloudflare_executive_report.common.logging_config import effective_debug_enabled
 from cloudflare_executive_report.common.report_snapshot import is_report_snapshot_valid
-from cloudflare_executive_report.config import AppConfig
+from cloudflare_executive_report.config import AppConfig, ZoneEntry
 from cloudflare_executive_report.report.snapshot import load_report_json, save_report_json
 from cloudflare_executive_report.report.zone_block import (
     update_zone_json_block_health_and_executive,
@@ -41,13 +41,17 @@ def refresh_snapshot_zone_health(
     if snapshot_data is not None:
         report_raw = snapshot_data
     else:
-        report_raw = load_report_json(out)
+        loaded = load_report_json(out)
+        if loaded is None:
+            log.error("Current report JSON missing or invalid for health-only refresh.")
+            return exits.INVALID_PARAMS
+        report_raw = loaded
 
     if report_raw is None or not is_report_snapshot_valid(report_raw):
         log.error("Current report JSON missing or invalid for health-only refresh.")
         return exits.INVALID_PARAMS
 
-    zones = list(cfg.zones)
+    zones: list[ZoneEntry] = list(cfg.zones)
     if zone_filter:
         zf = zone_filter.strip()
         zones = [z for z in zones if z.id == zf or z.name == zf]
@@ -66,7 +70,7 @@ def refresh_snapshot_zone_health(
     zones_payload = report_raw.get("zones") or []
     if not isinstance(zones_payload, list):
         return exits.INVALID_PARAMS
-    zblocks_by_id: dict[str, dict] = {}
+    zblocks_by_id: dict[str, dict[str, Any]] = {}
     for item in zones_payload:
         if isinstance(item, dict):
             zid = str(item.get("zone_id") or "").strip()
@@ -87,7 +91,7 @@ def refresh_snapshot_zone_health(
 
     try:
         with CloudflareClient(cfg.api_token, verbose=verbose_http) as client:
-            zmeta_by_zone_id: dict[str, dict] = {}
+            zmeta_by_zone_id: dict[str, dict[str, Any]] = {}
             for z in zones:
                 try:
                     zmeta_by_zone_id[z.id] = client.get_zone(z.id)

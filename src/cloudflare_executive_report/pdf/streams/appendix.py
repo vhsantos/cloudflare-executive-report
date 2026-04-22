@@ -77,10 +77,7 @@ def include_report_appendix(
             raw_ids = row.get("check_ids") or []
             checks = ", ".join(str(value) for value in raw_ids) if isinstance(raw_ids, list) else ""
             label = f"[{nist_id}]"
-            if url:
-                text = f'<a href="{url}" color="{theme.primary}">{label}</a>'
-            else:
-                text = label
+            text = f'<a href="{url}" color="{theme.primary}">{label}</a>' if url else label
             if title:
                 text += f" {title}"
             if checks:

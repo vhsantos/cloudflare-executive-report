@@ -6,6 +6,7 @@ from typing import Any
 
 import pycountry
 
+from cloudflare_executive_report.common.boundary import filter_dict_rows
 from cloudflare_executive_report.fetchers.security import (
     ROLLUP_CHALLENGE_SUBSTRINGS,
     ROLLUP_EXCLUDE_ACTION_PREFIXES,
@@ -19,9 +20,7 @@ def merge_rows(days: list[dict[str, Any]], key: str) -> dict[str, int]:
     """Merge value/count row lists across days into a single count map."""
     counts: dict[str, int] = {}
     for day in days:
-        for row in day.get(key) or []:
-            if not isinstance(row, dict):
-                continue
+        for row in filter_dict_rows(day.get(key)):
             value = row.get("value")
             if value is None:
                 continue
@@ -63,7 +62,9 @@ def country_label_code(client_country_name: str) -> tuple[str, str]:
         fuzzy = pycountry.countries.search_fuzzy(raw)
         if fuzzy:
             country = fuzzy[0]
-            return country.name, country.alpha_2
+            name = getattr(country, "name", raw)
+            code = getattr(country, "alpha_2", "ZZ")
+            return str(name), str(code)
     except LookupError:
         pass
     return raw, raw[:2].upper() if len(raw) == 2 else "ZZ"
@@ -92,9 +93,7 @@ def merge_value_count_rows(
     for day in days:
         if not isinstance(day, dict) or day.get("unavailable"):
             continue
-        for row in day.get(key) or []:
-            if not isinstance(row, dict):
-                continue
+        for row in filter_dict_rows(day.get(key)):
             value = str(row.get("value") or "").strip()
             if not value:
                 continue
@@ -112,9 +111,7 @@ def cache_served_cf_origin_from_status_rows(day: dict[str, Any]) -> tuple[int, i
     """Return (served_cf_requests, served_origin_requests) from cache status rows."""
     total = 0
     origin = 0
-    for row in day.get("by_cache_status") or []:
-        if not isinstance(row, dict):
-            continue
+    for row in filter_dict_rows(day.get("by_cache_status")):
         status = norm_cache_status(str(row.get("value") or ""))
         count = int(row.get("count") or 0)
         if not status:
@@ -142,12 +139,7 @@ def security_merge_ip_buckets(
     """Merge security attack source bucket rows and return ranked output."""
     merged: dict[tuple[str, str], int] = {}
     for day in days:
-        rows = day.get("attack_source_buckets")
-        if not isinstance(rows, list):
-            continue
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
+        for row in filter_dict_rows(day.get("attack_source_buckets")):
             ip = str(row.get("ip") or "").strip()
             if not ip:
                 continue

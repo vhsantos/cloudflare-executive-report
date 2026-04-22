@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from cloudflare_executive_report.aggregators import (
     build_audit_section,
@@ -20,6 +19,7 @@ from cloudflare_executive_report.aggregators import (
     build_security_section,
 )
 from cloudflare_executive_report.cache.envelope import read_day_file
+from cloudflare_executive_report.common.boundary import filter_dict_rows
 from cloudflare_executive_report.common.dates import (
     format_ymd,
     iter_dates_inclusive,
@@ -41,6 +41,10 @@ def _cache_state_warning(stream_label: str, zone_name: str, ds: str, state: str)
     if state == "no_data":
         return f"{base} unavailable (cached entry has no data object)"
     return f"{base} unavailable (cached state unknown)"
+
+
+class SectionBuilder(Protocol):
+    def __call__(self, daily_api_data: list[dict[str, Any]], *, top: int) -> dict[str, Any]: ...
 
 
 @dataclass
@@ -172,7 +176,7 @@ def _finalize_stream_load(
     scratch: _StreamDaysScratch,
     *,
     top: int,
-    build_rollup: Callable[[list[dict[str, Any]], int], dict[str, Any]],
+    build_rollup: SectionBuilder,
 ) -> tuple[dict[str, Any], list[str], list[str], int]:
     rollup = build_rollup(scratch.api_days, top=top) if scratch.api_days else {}
     for w in scratch.warnings:
@@ -565,9 +569,7 @@ def _merge_http_mime_1d_for_range(
     """Merge ``response_content_types`` from HTTP daily payloads (request-weighted bars)."""
     acc: dict[str, int] = {}
     for d in http_days:
-        for row in d.get("response_content_types") or []:
-            if not isinstance(row, dict):
-                continue
+        for row in filter_dict_rows(d.get("response_content_types")):
             raw = row.get("edgeResponseContentTypeName")
             if raw is None:
                 raw = row.get("edgeResponseContentType")
@@ -594,9 +596,7 @@ def _daily_cache_cf_origin_pair(data: dict[str, Any]) -> tuple[int, int]:
     """Same origin bucket as security eyeball pass (dynamic / miss / bypass)."""
     total = 0
     origin = 0
-    for row in data.get("by_cache_status") or []:
-        if not isinstance(row, dict):
-            continue
+    for row in filter_dict_rows(data.get("by_cache_status")):
         st = str(row.get("value") or "").strip().lower()
         c = int(row.get("count") or 0)
         if not st:

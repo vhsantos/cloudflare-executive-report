@@ -131,7 +131,7 @@ def semantic_baseline_bounds(
         this_month_start, _ = month_bounds(today)
         prev_month_day = this_month_start - timedelta(days=1)
         prev_start, prev_end = month_bounds(prev_month_day)
-        current_start, current_end = month_bounds(today)
+        current_start, _current_end = month_bounds(today)
         current_span = (today - current_start).days + 1
         end_day = min(prev_start.day + current_span - 1, prev_end.day)
         return prev_start, date(prev_start.year, prev_start.month, end_day)

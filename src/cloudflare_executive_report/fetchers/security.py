@@ -154,8 +154,6 @@ def _marginals_from_action_source_rows(
 def _ip_rows_allow_missing_country(zone: dict[str, Any], alias: str) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for row in zone_alias_groups(zone, alias):
-        if not isinstance(row, dict):
-            continue
         dims = row.get("dimensions") or {}
         if not isinstance(dims, dict):
             continue
@@ -184,8 +182,6 @@ def _fold_eyeball_matrix(rows: list[dict[str, Any]]) -> tuple[int, int, int]:
     """
     mitigated = served_cf = served_origin = 0
     for row in rows:
-        if not isinstance(row, dict):
-            continue
         c = int(row.get("count") or 0)
         dims = row.get("dimensions") or {}
         if not isinstance(dims, dict):
@@ -269,6 +265,10 @@ class SecurityFetcher:
     stream_id: ClassVar[str] = "security"
     cache_filename: ClassVar[str] = "security.json"
     collect_label: ClassVar[str] = "Security"
+    required_permissions: ClassVar[tuple[str, ...]] = (
+        "Zone > Zone Read",
+        "Zone > Analytics Read",
+    )
 
     def outside_retention(self, day: date, *, plan_legacy_id: str | None) -> bool:
         return date_outside_security_retention(day, plan_legacy_id=plan_legacy_id)

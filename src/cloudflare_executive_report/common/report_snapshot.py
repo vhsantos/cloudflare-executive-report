@@ -35,9 +35,7 @@ def is_report_snapshot_valid(report: dict[str, Any] | None) -> bool:
     if not str(report.get("tool_version") or "").strip():
         return False
     zones = report.get("zones")
-    if not isinstance(zones, list) or len(zones) < 1:
-        return False
-    return True
+    return isinstance(zones, list) and len(zones) >= 1
 
 
 def data_fingerprint_matches(report: dict[str, Any] | None, expected: dict[str, Any]) -> bool:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from cloudflare_executive_report.cf_client import (
     CloudflareAPIError,
@@ -96,7 +96,7 @@ def _groups_base(data: dict[str, Any] | None) -> dict[str, Any]:
     zones = ((data.get("viewer") or {}).get("zones")) or []
     if not zones:
         return {}
-    return zones[0]
+    return cast(dict[str, Any], zones[0])
 
 
 def _groups(data: dict[str, Any] | None) -> list[dict[str, Any]]:
@@ -163,6 +163,10 @@ class DnsFetcher:
     stream_id: ClassVar[str] = "dns"
     cache_filename: ClassVar[str] = "dns.json"
     collect_label: ClassVar[str] = "DNS"
+    required_permissions: ClassVar[tuple[str, ...]] = (
+        "Zone > Zone Read",
+        "Zone > Analytics Read",
+    )
 
     def outside_retention(self, day: date, *, plan_legacy_id: str | None) -> bool:
         return date_outside_dns_retention(day, dns_retention_days(plan_legacy_id))

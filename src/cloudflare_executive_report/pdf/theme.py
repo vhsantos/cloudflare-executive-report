@@ -35,7 +35,7 @@ class Theme:
     section_size: int = 11
 
     def content_width_in(self) -> float:
-        page_w_in = A4[0] / inch
+        page_w_in = float(A4[0] / inch)
         return page_w_in - 2 * self.margin_in
 
     def half_inner_width_in(self) -> float:
