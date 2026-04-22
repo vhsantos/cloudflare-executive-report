@@ -27,6 +27,7 @@ def test_cf_report_report_help() -> None:
         capture_output=True,
         text=True,
         check=False,
+        env={"TERM": "dumb", "NO_COLOR": "1"},
     )
     assert r.returncode == 0
     out = r.stdout
