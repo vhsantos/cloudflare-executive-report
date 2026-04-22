@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import date
 from typing import Any, Literal
 
 from cloudflare_executive_report.common.constants import (
@@ -79,7 +80,7 @@ def _period_days(period: dict[str, Any]) -> int:
         return 0
 
 
-def _period_bounds(period: dict[str, Any]) -> tuple[object, object] | None:
+def _period_bounds(period: dict[str, Any]) -> tuple[date, date] | None:
     start = str(period.get("start") or "")
     end = str(period.get("end") or "")
     if not start or not end:

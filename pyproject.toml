@@ -152,5 +152,14 @@ files = ["src"]
 
 # Ignore missing type hints from external libs
 [[tool.mypy.overrides]]
-module = ["cartopy", "cartopy.*", "reportlab", "reportlab.*", "svglib", "svglib.*"]
+module = [
+    "cartopy",
+    "cartopy.*",
+    "pycountry",
+    "pycountry.*",
+    "reportlab",
+    "reportlab.*",
+    "svglib",
+    "svglib.*",
+]
 ignore_missing_imports = true
