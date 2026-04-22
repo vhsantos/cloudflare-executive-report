@@ -203,8 +203,6 @@ def _format_cert_expiry_human(soonest: Any, *, as_of: date) -> str:
 def _actions_mitigated_from_top_actions(security: dict[str, Any]) -> int:
     total = 0
     for row in security.get("top_actions") or []:
-        if not isinstance(row, dict):
-            continue
         action = str(row.get("action") or "").strip().lower()
         if action in _DEFENSIVE_ACTIONS:
             total += as_int(row.get("count"))

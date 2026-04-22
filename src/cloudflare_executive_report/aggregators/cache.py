@@ -11,6 +11,7 @@ from cloudflare_executive_report.common.aggregation_helpers import (
     pct_of_total,
     top_pct,
 )
+from cloudflare_executive_report.common.boundary import filter_dict_rows
 from cloudflare_executive_report.common.formatting import format_bytes_human, format_count_human
 
 
@@ -27,18 +28,14 @@ def build_cache_section(
     served_origin_total = 0
 
     for day in daily_api_data:
-        for row in day.get("by_cache_status") or []:
-            if not isinstance(row, dict):
-                continue
+        for row in filter_dict_rows(day.get("by_cache_status")):
             key = norm_cache_status(str(row.get("value") or ""))
             if not key:
                 continue
             status_counts[key] = status_counts.get(key, 0) + int(row.get("count") or 0)
             status_bytes[key] = status_bytes.get(key, 0) + int(row.get("edgeResponseBytes") or 0)
 
-        for row in day.get("top_path_status") or []:
-            if not isinstance(row, dict):
-                continue
+        for row in filter_dict_rows(day.get("top_path_status")):
             path = str(row.get("path") or "").strip()
             if path:
                 path_counts[path] = path_counts.get(path, 0) + int(row.get("count") or 0)

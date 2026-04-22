@@ -47,6 +47,7 @@ dev = [
     "pytest-cov>=5",
     "ruff>=0.8",
     "mypy>=1.10",
+    "types-PyYAML>=6.0.3",
 ]
 
 # Optional SVG support
@@ -144,7 +145,7 @@ strict = true
 # Keep your warnings (some are redundant but fine to be explicit)
 warn_unused_configs = true
 warn_unused_ignores = true
-#warn_unreachable = true
+warn_unreachable = true
 
 # Limit checking to your source
 files = ["src"]

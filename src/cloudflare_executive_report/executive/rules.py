@@ -242,9 +242,7 @@ def evaluate_comparison_gate(
     previous_bounds = _period_bounds(previous_period)
     current_bounds = _period_bounds(current_period)
     bounds_bad = (
-        previous_bounds is None
-        or current_bounds is None
-        or as_int(previous_bounds[1]) >= as_int(current_bounds[0])
+        previous_bounds is None or current_bounds is None or previous_bounds[1] >= current_bounds[0]
     )
 
     days_bad = current_days <= 0 or previous_days <= 0 or current_days != previous_days

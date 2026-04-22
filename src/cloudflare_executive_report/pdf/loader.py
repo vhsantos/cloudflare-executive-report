@@ -19,6 +19,7 @@ from cloudflare_executive_report.aggregators import (
     build_security_section,
 )
 from cloudflare_executive_report.cache.envelope import read_day_file
+from cloudflare_executive_report.common.boundary import filter_dict_rows
 from cloudflare_executive_report.common.dates import (
     format_ymd,
     iter_dates_inclusive,
@@ -568,9 +569,7 @@ def _merge_http_mime_1d_for_range(
     """Merge ``response_content_types`` from HTTP daily payloads (request-weighted bars)."""
     acc: dict[str, int] = {}
     for d in http_days:
-        for row in d.get("response_content_types") or []:
-            if not isinstance(row, dict):
-                continue
+        for row in filter_dict_rows(d.get("response_content_types")):
             raw = row.get("edgeResponseContentTypeName")
             if raw is None:
                 raw = row.get("edgeResponseContentType")
@@ -597,9 +596,7 @@ def _daily_cache_cf_origin_pair(data: dict[str, Any]) -> tuple[int, int]:
     """Same origin bucket as security eyeball pass (dynamic / miss / bypass)."""
     total = 0
     origin = 0
-    for row in data.get("by_cache_status") or []:
-        if not isinstance(row, dict):
-            continue
+    for row in filter_dict_rows(data.get("by_cache_status")):
         st = str(row.get("value") or "").strip().lower()
         c = int(row.get("count") or 0)
         if not st:

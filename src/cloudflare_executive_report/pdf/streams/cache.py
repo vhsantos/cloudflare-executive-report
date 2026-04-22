@@ -11,6 +11,7 @@ from cloudflare_executive_report.common.aggregation_helpers import (
     CACHE_ORIGIN_FETCH_STATUSES,
     norm_cache_status,
 )
+from cloudflare_executive_report.common.boundary import filter_dict_rows
 from cloudflare_executive_report.common.constants import (
     PDF_SPACE_MEDIUM_PT,
     PDF_SPACE_SMALL_PT,
@@ -59,13 +60,11 @@ def _edge_and_origin_status_items(
     edge = cache.get("by_cache_status_edge")
     origin = cache.get("by_cache_status_origin")
     if isinstance(edge, list) and isinstance(origin, list):
-        return [r for r in edge if isinstance(r, dict)], [r for r in origin if isinstance(r, dict)]
+        return filter_dict_rows(edge), filter_dict_rows(origin)
 
     edge_out: list[dict[str, Any]] = []
     origin_out: list[dict[str, Any]] = []
-    for row in cache.get("by_cache_status") or []:
-        if not isinstance(row, dict):
-            continue
+    for row in filter_dict_rows(cache.get("by_cache_status")):
         key = norm_cache_status(str(row.get("status") or row.get("value") or ""))
         if not key:
             continue

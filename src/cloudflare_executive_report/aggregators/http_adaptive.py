@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from cloudflare_executive_report.common.aggregation_helpers import pct_of_total, top_pct
+from cloudflare_executive_report.common.boundary import filter_dict_rows
 from cloudflare_executive_report.common.formatting import format_count_human
 
 
@@ -39,9 +40,7 @@ def build_http_adaptive_section(
         if origin_avg is not None and sample_count > 0:
             weighted_origin_avg_num += float(origin_avg) * sample_count
             weighted_den_origin_avg += sample_count
-        for row in day.get("by_edge_status") or []:
-            if not isinstance(row, dict):
-                continue
+        for row in filter_dict_rows(day.get("by_edge_status")):
             status = str(row.get("value") or "").strip()
             if not status:
                 continue
