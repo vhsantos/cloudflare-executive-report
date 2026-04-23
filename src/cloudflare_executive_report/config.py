@@ -16,10 +16,10 @@ from cloudflare_executive_report.pdf.figure_quality import parse_pdf_image_quali
 CONFIG_DIR_NAME = ".cf-report"
 CONFIG_FILE_NAME = "config.yaml"
 
-DEFAULT_EMAIL_SUBJECT_TEMPLATE = f"{PROJECT_NAME} - {{date}}"
+DEFAULT_EMAIL_SUBJECT_TEMPLATE = f"{PROJECT_NAME} - {{{{date}}}}"
 DEFAULT_EMAIL_BODY_TEMPLATE = (
     "Hello,\n\n"
-    f"Attached is the {PROJECT_NAME} for {{period}} ({{zone_count}} zone(s)).\n\n"
+    f"Attached is the {PROJECT_NAME} for {{{{period}}}} ({{{{zone_count}}}} zone(s)).\n\n"
     "Regards,\n"
     "Cloudflare Report Tool\n"
 )
@@ -72,7 +72,7 @@ def parse_pdf_profile(
     field_name: str = "pdf.profile",
 ) -> Literal["minimal", "executive", "detailed"]:
     """Return validated PDF output profile (report length preset)."""
-    value = (raw or "executive").strip().lower()
+    value = (raw or "detailed").strip().lower()
     if value not in {"minimal", "executive", "detailed"}:
         msg = f"{field_name} must be minimal, executive, or detailed (got {value!r})"
         raise ValueError(msg)
@@ -111,10 +111,10 @@ class CoverConfig:
 class PdfConfig:
     """PDF rendering options."""
 
-    image_quality: str = "medium"
+    image_quality: str = "high"
     chart_format: Literal["png", "svg"] = "png"
     map_format: Literal["png", "svg"] = "png"
-    profile: Literal["minimal", "executive", "detailed"] = "executive"
+    profile: Literal["minimal", "executive", "detailed"] = "detailed"
     primary_color: str = "#2563eb"
     accent_color: str = "#f38020"
 
@@ -158,10 +158,10 @@ class AppConfig:
     """Application settings loaded from config.yaml."""
 
     api_token: str = ""
-    cache_dir: str = "~/.cache/cf-report"
-    history_dir: str = "~/.cf-report"
+    cache_dir: str = "~/.cf-report/cache"
+    history_dir: str = "~/.cf-report/history"
     default_zone: str = ""
-    log_level: str = "warning"
+    log_level: str = "info"
     default_period: str = "last_month"
     types: list[str] = field(default_factory=list)
     zones: list[ZoneEntry] = field(default_factory=list)
@@ -366,11 +366,11 @@ class AppConfig:
 
         return cls(
             api_token=api_token,
-            cache_dir=str(data.get("cache_dir") or "~/.cf-report/cache"),
-            history_dir=str(data.get("history_dir") or "~/.cf-report/history"),
-            default_zone=str(data.get("default_zone") or ""),
-            log_level=str(data.get("log_level") or "info"),
-            default_period=str(data.get("default_period") or "last_month"),
+            cache_dir=str(data.get("cache_dir") or cls.cache_dir),
+            history_dir=str(data.get("history_dir") or cls.history_dir),
+            default_zone=str(data.get("default_zone") or cls.default_zone),
+            log_level=str(data.get("log_level") or cls.log_level),
+            default_period=str(data.get("default_period") or cls.default_period),
             types=types,
             zones=zones,
             pdf=PdfConfig(
@@ -462,28 +462,4 @@ def save_config_template(cfg: AppConfig, path: Path | None = None) -> None:
 def template_config() -> AppConfig:
     return AppConfig(
         api_token="cfat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-        cache_dir="~/.cache/cf-report",
-        history_dir="~/.cf-report",
-        default_zone="",
-        log_level="warning",
-        default_period="last_month",
-        types=[],
-        zones=[],
-        pdf=PdfConfig(
-            image_quality="medium",
-            chart_format="png",
-            map_format="png",
-            profile="executive",
-            primary_color="#2563eb",
-            accent_color="#f38020",
-        ),
-        executive=ExecutiveConfig(
-            disabled_rules=[],
-            include_appendix=True,
-            reference_risk_weight=60,
-            verdict_warn_threshold=3,
-        ),
-        email=EmailConfig(),
-        portfolio=PortfolioConfig(sort_by="score"),
-        cover=CoverConfig(),
     )
