@@ -1,11 +1,15 @@
 {
   "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.17.1/.schema/devbox.schema.json",
-  "packages": [],
+  "packages": ["python@3.12"],
   "shell": {
-    "init_hook": ["echo 'Welcome to devbox!' > /dev/null"],
+    "init_hook": [". $VENV_DIR/bin/activate"],
     "scripts": {
-      "test": ["pytest", "-q"],
-      "lint": ["ruff", "check", "src", "tests"]
+      "install": "pip install -e .[dev,svg]",
+      "init": "cf-report init",
+      "validate": "cf-report validate",
+      "sync": "cf-report sync --last 7",
+      "report": "cf-report report --last 7",
+      "lint": "ruff check --fix . && ruff format --check . && mypy src/ && pytest --tb=short"
     }
   }
 }
