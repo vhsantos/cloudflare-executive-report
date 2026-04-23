@@ -21,6 +21,7 @@ from cloudflare_executive_report.cli_common import (
     load_app_config,
     resolve_zone_filter,
     validate_and_build_sync_options,
+    validate_api_token,
     zone_ids_for_report,
     zones_matching_filter,
 )
@@ -266,6 +267,7 @@ def cmd_report(
 
     try:
         cfg = load_app_config(config)
+        validate_api_token(cfg)
     except CliConfigError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.GENERAL_ERROR) from None
@@ -369,7 +371,8 @@ def zones_list(ctx: typer.Context) -> None:
     quiet = _cli_quiet
     try:
         cfg = load_config()
-    except (FileNotFoundError, ValueError) as e:
+        validate_api_token(cfg)
+    except (CliConfigError, FileNotFoundError, ValueError) as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.GENERAL_ERROR) from None
     setup_logging(
@@ -408,7 +411,8 @@ def zones_add(
 
     try:
         cfg = load_config()
-    except (FileNotFoundError, ValueError) as e:
+        validate_api_token(cfg)
+    except (CliConfigError, FileNotFoundError, ValueError) as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.GENERAL_ERROR) from None
     setup_logging(
@@ -539,6 +543,7 @@ def cmd_sync(
 
     try:
         cfg = load_app_config(config)
+        validate_api_token(cfg)
     except CliConfigError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.GENERAL_ERROR) from None
@@ -659,6 +664,7 @@ def cmd_validate(
 
     try:
         cfg = load_app_config(config)
+        validate_api_token(cfg)
     except CliConfigError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.GENERAL_ERROR) from None

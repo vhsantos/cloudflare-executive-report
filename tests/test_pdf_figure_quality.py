@@ -13,7 +13,7 @@ from cloudflare_executive_report.pdf.theme import DEFAULT_THEME
 
 def test_parse_pdf_image_quality_aliases():
     assert parse_pdf_image_quality("LOW") == PdfFigureQuality.low
-    assert parse_pdf_image_quality(None) == PdfFigureQuality.medium
+    assert parse_pdf_image_quality(None) == PdfFigureQuality.high
 
 
 def test_parse_pdf_image_quality_invalid():

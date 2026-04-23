@@ -6,11 +6,13 @@ import pytest
 
 from cloudflare_executive_report.cli_common import (
     CLI_TOP_MAX,
+    CliConfigError,
     CliValidationError,
     cache_has_any_zone_data,
     validate_and_build_sync_options,
+    validate_api_token,
 )
-from cloudflare_executive_report.config import ZoneEntry
+from cloudflare_executive_report.config import AppConfig, ZoneEntry
 from cloudflare_executive_report.sync.options import SyncMode
 
 
@@ -314,3 +316,20 @@ def test_reject_invalid_default_period():
             top=10,
             skip_zone_health=False,
         )
+
+
+def test_validate_api_token_success():
+    cfg = AppConfig(api_token="cfat_valid")
+    assert validate_api_token(cfg) == "cfat_valid"
+
+
+def test_validate_api_token_missing():
+    cfg = AppConfig(api_token="")
+    with pytest.raises(CliConfigError, match="No API token"):
+        validate_api_token(cfg)
+
+
+def test_validate_api_token_whitespace():
+    cfg = AppConfig(api_token="  ")
+    with pytest.raises(CliConfigError, match="No API token"):
+        validate_api_token(cfg)

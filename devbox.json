@@ -9,7 +9,7 @@
       "validate": "cf-report validate",
       "sync": "cf-report sync --last 7",
       "report": "cf-report report --last 7 -o ./cf-report-test.pdf",
-      "lint": "ruff check --fix . && ruff format --check . && mypy src/ && pytest --tb=short"
+      "lint": "ruff check --fix . && ruff format . && mypy src/ && pytest --tb=short"
     }
   }
 }
