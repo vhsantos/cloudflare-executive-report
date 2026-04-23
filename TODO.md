@@ -1,13 +1,8 @@
 # TODO
 
-## Documentation
+## CLI
 
-- [ ] Add clear instructions how/which/why each token Permission policies are need.
-
-## Token
-
-- [ ] check if token exists
-- [ ] validate if token has access to the corrects polices (maybe put the token requirements on each stream)
+- [ ] Improve --zone parameter to accpet multiples zones, like --zones <zone1> <zone2> ...
 
 ## Performance and Cloudflare API limits
 
@@ -112,6 +107,7 @@ Current: ~75%
 Target: 85%
 
 Priority files to improve:
+
 - [ ] `aggregate.py` (86% → 100%) - missing error paths and edge cases
 - [ ] `report/command_flow.py` (59% → 85%) - mock more sync/health failure branches
 - [ ] `sync/orchestrator.py` (75% → 90%) - test more sync modes and CLI edge cases
