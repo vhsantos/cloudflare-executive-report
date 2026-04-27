@@ -271,6 +271,29 @@ def append_executive_summary(
             ],
         )
     )
+    story.append(Spacer(1, PDF_SPACE_MEDIUM_PT))
+
+    # Email security and routing
+    email_k = kpis.get("email") or {}
+    email_enabled = bool(email_k.get("routing_enabled"))
+    email_row_items: list[tuple[str, str] | tuple[str, str, str]] = [
+        ("DMARC Policy", str(email_k.get("dns_dmarc_policy") or "unavailable")),
+        (
+            "DMARC Pass Rate",
+            format_percent_compact(email_k.get("dmarc_pass_rate_pct")),
+            _indicator_for(summary, "email.dmarc_pass_rate_pct"),
+        ),
+    ]
+    if email_enabled:
+        email_row_items.append(
+            (
+                "Delivery Failed",
+                format_percent_compact(email_k.get("delivery_failed_rate_pct")),
+                _indicator_for(summary, "email.delivery_failed_rate_pct"),
+            )
+        )
+
+    story.append(kpi_row(email_row_items))
     story.append(Spacer(1, PDF_SPACE_SMALL_PT))
 
     takeaways = [str(x) for x in (summary.get("takeaways") or []) if str(x).strip()]

@@ -94,7 +94,17 @@ def test_comparison_gate_warning_merged_into_deltas_not_risks():
         "http_adaptive": {},
         "dns_records": {"apex_unproxied_a_aaaa": 0},
         "audit": {"total_events": 0},
-        "certificates": {"total_certificate_packs": 1, "expiring_in_30_days": 0},
+        "certificates": {
+            "total_certificate_packs": 1,
+            "expiring_in_30_days": 0,
+            "soonest_expiry": "2026-12-01T00:00:00Z",
+        },
+        "email": {
+            "dns_dkim_configured": True,
+            "dns_dmarc_policy": "reject",
+            "dns_spf_policy": "hardfail",
+        },
+        "warnings": [],
     }
     out = build_executive_rule_output(
         current_zone=clean_zone,
@@ -317,6 +327,7 @@ def test_all_action_phrase_keys_are_reachable_by_rules():
         "cert_expire_30",
         "audit_activity",
         "security_level_off",
+        "email_dkim_missing",
     }
     assert keys_flex | keys_full == expected
 

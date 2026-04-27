@@ -49,6 +49,11 @@ Suggested order when choosing the next item: bot posture (if API stable for your
   - Shape: new rule + phrase; default to info to avoid noise on small sites.
   - Risk: many zones rely only on managed challenge; product judgment.
 
+- [ ] **DKIM Selector Rotation (EMAIL-009)** - Detect unrotated or long-lived DKIM selectors.
+  - Data: fetcher needs to collect selector creation dates or multiple selectors per domain.
+  - Shape: risk if keys are older than 6-12 months.
+  - Action: recommend rotation and removal of expired selectors.
+
 - [ ] **Rules clarity for executives** - CTO-readable counts: "N custom WAF rules, M rate limits" (ruleset-based, not legacy Firewall Rules API); optional dashboard hint in action text.
   - Data: largely present; extend phrase labeling if counts suffice without new API.
 

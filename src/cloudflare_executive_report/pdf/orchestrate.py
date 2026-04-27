@@ -35,6 +35,7 @@ from cloudflare_executive_report.pdf.loader import (
     load_certificates_for_range,
     load_dns_for_range,
     load_dns_records_for_range,
+    load_email_for_range,
     load_http_adaptive_for_range,
     load_http_for_range,
     load_security_for_range,
@@ -55,6 +56,10 @@ from cloudflare_executive_report.pdf.streams.cache import (
 from cloudflare_executive_report.pdf.streams.dns import (
     append_dns_stream,
     collect_dns_appendix_notes,
+)
+from cloudflare_executive_report.pdf.streams.email import (
+    append_email_stream,
+    collect_email_appendix_notes,
 )
 from cloudflare_executive_report.pdf.streams.executive_summary import append_executive_summary
 from cloudflare_executive_report.pdf.streams.http import (
@@ -227,6 +232,7 @@ def write_report_pdf(
             loaded_certificates = None
             loaded_security = None
             loaded_cache = None
+            loaded_email = None
             zone_warnings: list[str] = []
 
             for stream in spec.streams:
@@ -285,6 +291,19 @@ def write_report_pdf(
                     appendix_metric_notes.extend(
                         collect_cache_appendix_notes(loaded_cache.rollup, profile=cfg.pdf.profile)
                     )
+                elif sid == "email":
+                    loaded_email = load_email_for_range(
+                        cache_root,
+                        zone_id,
+                        zone_name,
+                        spec.start,
+                        spec.end,
+                        top=spec.top,
+                    )
+                    zone_warnings.extend(loaded_email.warnings)
+                    appendix_metric_notes.extend(
+                        collect_email_appendix_notes(loaded_email.rollup, profile=cfg.pdf.profile)
+                    )
 
             snapshot_zone = _find_zone_snapshot(report_snapshot, zone_id)
 
@@ -325,6 +344,17 @@ def write_report_pdf(
                     top=spec.top,
                 )
                 zone_warnings.extend(loaded_certificates.warnings)
+
+                if loaded_email is None:
+                    loaded_email = load_email_for_range(
+                        cache_root,
+                        zone_id,
+                        zone_name,
+                        spec.start,
+                        spec.end,
+                        top=spec.top,
+                    )
+                zone_warnings.extend(loaded_email.warnings)
 
                 if snapshot_zone and isinstance(snapshot_zone.get("executive_summary"), dict):
                     executive_summary = dict(snapshot_zone.get("executive_summary") or {})
@@ -378,6 +408,7 @@ def write_report_pdf(
                         dns_records=loaded_dns_records.rollup if loaded_dns_records else None,
                         audit=loaded_audit.rollup if loaded_audit else None,
                         certificates=loaded_certificates.rollup if loaded_certificates else None,
+                        email=loaded_email.rollup if loaded_email else None,
                         warnings=zone_warnings,
                         as_of_date=parse_ymd(spec.end),
                         current_period={"start": spec.start, "end": spec.end},
@@ -501,6 +532,27 @@ def write_report_pdf(
                         theme=th,
                         top=spec.top,
                         http_mime_1d=loaded_cache.http_mime_1d,
+                    )
+                elif sid == "email":
+                    if loaded_email is None:
+                        continue
+                    if snapshot_zone and isinstance(snapshot_zone.get("email"), dict):
+                        loaded_email.rollup = dict(snapshot_zone.get("email") or {})
+                    if loaded_email.api_day_count == 0:
+                        _warn_skip_no_api_data("Email", zone_name, spec.start, spec.end)
+                        continue
+                    append_email_stream(
+                        story,
+                        zone_name=zone_name,
+                        period_start=spec.start,
+                        period_end=spec.end,
+                        email=loaded_email.rollup,
+                        daily_forwarded=loaded_email.daily_forwarded,
+                        daily_delivery_failed=loaded_email.daily_delivery_failed,
+                        daily_dropped_rejected=loaded_email.daily_dropped_rejected,
+                        missing_dates=loaded_email.missing_dates,
+                        layout=spec.email_layout,
+                        theme=th,
                     )
                 else:
                     log.warning("Unknown stream %r - skipped", stream)
