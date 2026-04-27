@@ -14,6 +14,7 @@ from cloudflare_executive_report.aggregators import (
     build_certificates_section,
     build_dns_records_section,
     build_dns_section,
+    build_email_section,
     build_http_adaptive_section,
     build_http_section,
     build_security_section,
@@ -104,6 +105,17 @@ class SnapshotStreamLoadResult:
     """Per-day snapshot streams (DNS records, audit, certificates) rolled up for reporting."""
 
     rollup: dict[str, Any]
+    missing_dates: list[str]
+    warnings: list[str] = field(default_factory=list)
+    api_day_count: int = 0
+
+
+@dataclass
+class LoadEmailResult:
+    rollup: dict[str, Any]
+    daily_forwarded: list[tuple[date, int | None]]
+    daily_delivery_failed: list[tuple[date, int | None]]
+    daily_dropped_rejected: list[tuple[date, int | None]]
     missing_dates: list[str]
     warnings: list[str] = field(default_factory=list)
     api_day_count: int = 0
@@ -692,4 +704,99 @@ def load_cache_for_range(
         warnings=warns,
         api_day_count=n_api,
         http_mime_1d=http_mime_1d,
+    )
+
+
+def load_email_for_range(
+    cache_root: Path,
+    zone_id: str,
+    zone_name: str,
+    start: str,
+    end: str,
+    *,
+    top: int = 10,
+) -> LoadEmailResult:
+    """Load Email Routing daily payloads and compute timeseries for charts."""
+    warnings: list[str] = []
+    api_days: list[dict[str, Any]] = []
+    daily_forwarded: list[tuple[date, int | None]] = []
+    daily_failed: list[tuple[date, int | None]] = []
+    daily_dropped_rejected: list[tuple[date, int | None]] = []
+    missing_dates: list[str] = []
+
+    for d in iter_dates_inclusive(parse_ymd(start), parse_ymd(end)):
+        ds = format_ymd(d)
+        path = day_cache_path(cache_root, zone_id, ds, "email")
+        raw = read_day_file(path)
+        if not raw:
+            warnings.append(_cache_state_warning("Email", zone_name, ds, "miss"))
+            missing_dates.append(ds)
+            daily_forwarded.append((d, None))
+            daily_failed.append((d, None))
+            daily_dropped_rejected.append((d, None))
+            continue
+
+        src = raw.get("_source")
+        if src in ("null", "error"):
+            warnings.append(_cache_state_warning("Email", zone_name, ds, str(src)))
+            missing_dates.append(ds)
+            daily_forwarded.append((d, None))
+            daily_failed.append((d, None))
+            daily_dropped_rejected.append((d, None))
+            continue
+
+        data = raw.get("data")
+        if not isinstance(data, dict):
+            warnings.append(_cache_state_warning("Email", zone_name, ds, "no_data"))
+            missing_dates.append(ds)
+            daily_forwarded.append((d, None))
+            daily_failed.append((d, None))
+            daily_dropped_rejected.append((d, None))
+            continue
+        api_days.append(data)
+
+        # Compute daily stats for timeseries charts
+        fwd = 0
+        fail = 0
+        dr = 0
+        for m in data.get("erg_metrics") or []:
+            if not isinstance(m, dict):
+                continue
+            action = str(m.get("action") or "").lower()
+            status = str(m.get("status") or "").lower()
+            count = int(m.get("count") or 0)
+            if action == "forward":
+                if status == "delivered":
+                    fwd += count
+                else:
+                    # status "deliveryfailed" or anything else for forward action
+                    fail += count
+            elif action == "drop" or action == "reject":
+                dr += count
+            else:
+                # Unexpected actions treated as failed
+                fail += count
+
+        daily_forwarded.append((d, fwd))
+        daily_failed.append((d, fail))
+        daily_dropped_rejected.append((d, dr))
+
+    rollup, miss, warns, count = _finalize_stream_load(
+        _StreamDaysScratch(
+            api_days=api_days,
+            daily_metric=[],
+            missing_dates=missing_dates,
+            warnings=warnings,
+        ),
+        top=top,
+        build_rollup=build_email_section,
+    )
+    return LoadEmailResult(
+        rollup=rollup,
+        daily_forwarded=daily_forwarded,
+        daily_delivery_failed=daily_failed,
+        daily_dropped_rejected=daily_dropped_rejected,
+        missing_dates=miss,
+        warnings=warns,
+        api_day_count=count,
     )

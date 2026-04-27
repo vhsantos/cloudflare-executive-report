@@ -284,8 +284,13 @@ def _run_sync_locked(
             zblock: dict[str, Any] = {"zone_id": z.id, "zone_name": z.name}
             zone_warnings: list[str] = []
 
-            for sid in streams_for_sync_types(opts.types):
-                fetcher = FETCHER_REGISTRY[sid]
+            all_streams = sorted(SECTION_BUILDERS.keys())
+            sync_streams = set(streams_for_sync_types(opts.types))
+
+            for sid in all_streams:
+                stream_fetcher = FETCHER_REGISTRY.get(sid)
+                if not stream_fetcher:
+                    continue
                 builder = SECTION_BUILDERS[sid]
 
                 def read_stream(zi: str, ds: str, stream_id: str = sid) -> CacheEnvelope | None:
@@ -297,10 +302,10 @@ def _run_sync_locked(
                     z.name,
                     report_start,
                     cache_end,
-                    label=fetcher.collect_label,
+                    label=stream_fetcher.collect_label,
                 )
-                if opts.include_today:
-                    extra, tw, rl = fetcher.append_live_today(
+                if opts.include_today and sid in sync_streams:
+                    extra, tw, rl = stream_fetcher.append_live_today(
                         client, z.id, z.name, plan_legacy_id=plan, zone_meta=zmeta
                     )
                     api_days = api_days + extra

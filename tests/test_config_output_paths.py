@@ -12,9 +12,9 @@ from cloudflare_executive_report.config import (
 
 def test_default_history_dir_separate_from_cache():
     cfg = AppConfig()
-    assert cfg.history_dir == "~/.cf-report"
-    assert cfg.cache_dir == "~/.cache/cf-report"
-    assert str(cfg.history_path()).endswith("/.cf-report")
+    assert cfg.history_dir == "~/.cf-report/history"
+    assert cfg.cache_dir == "~/.cf-report/cache"
+    assert str(cfg.history_path()).endswith("/history")
 
 
 def test_from_yaml_dict_disabled_rules() -> None:
@@ -111,9 +111,9 @@ def test_pdf_profile_yaml_round_trip() -> None:
     assert back.pdf.profile == "minimal"
 
 
-def test_pdf_profile_defaults_to_executive() -> None:
+def test_pdf_profile_defaults_to_detailed() -> None:
     cfg = AppConfig.from_yaml_dict({"zones": []})
-    assert cfg.pdf.profile == "executive"
+    assert cfg.pdf.profile == "detailed"
 
 
 def test_pdf_profile_rejects_invalid_value() -> None:

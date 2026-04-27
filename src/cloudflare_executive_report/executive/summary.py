@@ -246,6 +246,17 @@ def _verdict(
     return "healthy", reasons
 
 
+def _get_float(d: dict[str, Any], key: str) -> float | None:
+    """Return float value from dict or None if missing/invalid."""
+    v = d.get(key)
+    if v is None:
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
 def build_executive_summary(
     *,
     zone_id: str = "",
@@ -264,6 +275,7 @@ def build_executive_summary(
     current_period: dict[str, Any] | None = None,
     previous_report: dict[str, Any] | None = None,
     previous_zone: dict[str, Any] | None = None,
+    email: dict[str, Any] | None = None,
     disabled_rules: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     """Build a compact CTO summary object from existing section rollups.
@@ -280,6 +292,7 @@ def build_executive_summary(
     dr = as_dict(dns_records)
     au = as_dict(audit)
     ce = as_dict(certificates)
+    e = as_dict(email)
     warn = list(warnings or [])
     as_of = as_of_date if as_of_date is not None else utc_today()
 
@@ -295,10 +308,6 @@ def build_executive_summary(
     encrypted_requests = as_int(h.get("encrypted_requests"))
     enc_gap = max(0, total_requests - encrypted_requests)
     enc_gap_pct = (100.0 * enc_gap / total_requests) if total_requests > 0 else 0.0
-
-    takeaways: list[str] = []
-
-    mitigation_rate = float(s.get("mitigation_rate_pct") or 0.0)
 
     msg_filt = ExecutiveMessageFilter.from_entries(list(disabled_rules or []))
     gate = evaluate_comparison_gate(
@@ -317,6 +326,7 @@ def build_executive_summary(
         "dns_records": dr,
         "audit": au,
         "certificates": ce,
+        "email": e,
     }
     comparison_baseline = None
     if gate.allowed:
@@ -381,48 +391,38 @@ def build_executive_summary(
     nist_reference = build_nist_reference_rows(
         cast(Sequence[NistSourceLine], augmented_takeaways + list(rule_out.actions))
     )
-    prev_http = as_dict(previous_zone.get("http")) if previous_zone else {}
-    prev_dns = as_dict(previous_zone.get("dns")) if previous_zone else {}
-    prev_ha = as_dict(previous_zone.get("http_adaptive")) if previous_zone else {}
-    prev_sec = as_dict(previous_zone.get("security")) if previous_zone else {}
-    prev_dr = as_dict(previous_zone.get("dns_records")) if previous_zone else {}
-    prev_requests = (
-        as_float(prev_http.get("total_requests")) if previous_zone and gate.allowed else None
-    )
-    prev_cache_hit = (
-        as_float(prev_http.get("cache_hit_ratio")) if previous_zone and gate.allowed else None
-    )
-    prev_4xx = (
-        as_float(prev_ha.get("status_4xx_rate_pct")) if previous_zone and gate.allowed else None
-    )
-    prev_origin_ms = (
-        as_float(prev_ha.get("origin_response_duration_avg_ms"))
-        if previous_zone and gate.allowed
-        else None
-    )
-    prev_qps = as_float(prev_dns.get("average_qps")) if previous_zone and gate.allowed else None
-    prev_encrypted_requests = (
-        as_float(prev_http.get("encrypted_requests")) if previous_zone and gate.allowed else None
-    )
-    prev_mitigated = (
-        as_float(prev_sec.get("mitigated_count")) if previous_zone and gate.allowed else None
-    )
-    prev_mitigation_rate = (
-        as_float(prev_sec.get("mitigation_rate_pct")) if previous_zone and gate.allowed else None
-    )
-    prev_5xx = (
-        as_float(prev_ha.get("status_5xx_rate_pct")) if previous_zone and gate.allowed else None
-    )
-    prev_dns_queries = (
-        as_float(prev_dns.get("total_queries")) if previous_zone and gate.allowed else None
-    )
-    prev_proxied = (
-        as_float(prev_dr.get("proxied_records")) if previous_zone and gate.allowed else None
-    )
-    prev_dns_only = (
-        as_float(prev_dr.get("dns_only_records")) if previous_zone and gate.allowed else None
-    )
-    prev_p95 = as_float(prev_ha.get("latency_p95_ms")) if previous_zone and gate.allowed else None
+
+    mitigation_rate = float(s.get("mitigation_rate_pct") or 0.0)
+
+    p_zone = as_dict(previous_zone) if previous_zone and gate.allowed else {}
+    prev_http = as_dict(p_zone.get("http"))
+    prev_dns = as_dict(p_zone.get("dns"))
+    prev_ha = as_dict(p_zone.get("http_adaptive"))
+    prev_sec = as_dict(p_zone.get("security"))
+    prev_dr = as_dict(p_zone.get("dns_records"))
+    prev_email = as_dict(p_zone.get("email"))
+
+    prev_requests = _get_float(prev_http, "total_requests")
+    prev_cache_hit = _get_float(prev_http, "cache_hit_ratio")
+    prev_encrypted_requests = _get_float(prev_http, "encrypted_requests")
+
+    prev_qps = _get_float(prev_dns, "average_qps")
+    prev_dns_queries = _get_float(prev_dns, "total_queries")
+
+    prev_4xx = _get_float(prev_ha, "status_4xx_rate_pct")
+    prev_5xx = _get_float(prev_ha, "status_5xx_rate_pct")
+    prev_origin_ms = _get_float(prev_ha, "origin_response_duration_avg_ms")
+    prev_p95 = _get_float(prev_ha, "latency_p95_ms")
+
+    prev_mitigated = _get_float(prev_sec, "mitigated_count")
+    prev_mitigation_rate = _get_float(prev_sec, "mitigation_rate_pct")
+
+    prev_proxied = _get_float(prev_dr, "proxied_records")
+    prev_dns_only = _get_float(prev_dr, "dns_only_records")
+
+    prev_dmarc_pass = _get_float(prev_email, "dmarc_pass_rate_pct")
+    prev_delivery_failed_rate = _get_float(prev_email, "delivery_failed_rate_pct")
+
     kpi_indicators = {
         "traffic.total_requests": _kpi_indicator_pct_with_baseline(
             current=as_float(total_requests), previous=prev_requests
@@ -442,6 +442,15 @@ def build_executive_summary(
             current=as_float(mitigation_rate),
             previous=prev_mitigation_rate,
             mode="pp",
+        ),
+        "email.dmarc_pass_rate_pct": _kpi_indicator(
+            current=as_float(e.get("dmarc_pass_rate_pct")), previous=prev_dmarc_pass, mode="pp"
+        ),
+        "email.delivery_failed_rate_pct": _kpi_indicator(
+            current=as_float(e.get("delivery_failed_rate_pct")),
+            previous=prev_delivery_failed_rate,
+            mode="pp",
+            better_when_lower=True,
         ),
         "traffic.status_4xx_rate_pct": _kpi_indicator(
             current=as_float(ha.get("status_4xx_rate_pct")),
@@ -576,6 +585,14 @@ def build_executive_summary(
                 "cert_expires_human": _format_cert_expiry_human(
                     ce.get("soonest_expiry"), as_of=as_of
                 ),
+            },
+            "email": {
+                "routing_enabled": bool(e.get("email_routing_enabled")),
+                "dns_dmarc_policy": str(e.get("dns_dmarc_policy") or "unavailable"),
+                "dmarc_pass_rate_pct": float(e.get("dmarc_pass_rate_pct") or 0.0),
+                "total_received": int(e.get("total_received") or 0),
+                "delivery_failed": int(e.get("delivery_failed") or 0),
+                "delivery_failed_rate_pct": float(e.get("delivery_failed_rate_pct") or 0.0),
             },
         },
         "takeaways": takeaways,

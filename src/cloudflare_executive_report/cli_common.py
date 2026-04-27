@@ -25,6 +25,17 @@ def load_app_config(config_path: Path | None) -> AppConfig:
         raise CliConfigError(str(e)) from e
 
 
+def validate_api_token(cfg: AppConfig) -> str:
+    """Return validated API token or raise CliConfigError."""
+    token = (cfg.api_token or "").strip()
+
+    if not token:
+        raise CliConfigError(
+            "No API token configured. Set CF_REPORT_API_TOKEN or run: cf-report init"
+        )
+    return token
+
+
 def resolve_zone_filter(cfg: AppConfig, zone_option: str | None) -> str | None:
     """Same as sync/report: explicit --zone, else default_zone, else all zones (None filter)."""
     raw = (zone_option.strip() if zone_option else "") or (cfg.default_zone or "").strip()

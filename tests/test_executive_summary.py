@@ -145,6 +145,11 @@ def test_build_executive_summary_no_actions_when_no_action_rules_match():
             "expiring_in_30_days": 0,
             "soonest_expiry": "2026-12-01T00:00:00Z",
         },
+        email={
+            "dns_dkim_configured": True,
+            "dns_dmarc_policy": "reject",
+            "dns_spf_policy": "hardfail",
+        },
         warnings=[],
     )
     assert out["actions"] == []
@@ -432,3 +437,44 @@ def test_build_executive_summary_disabled_rules_drops_matching_actions() -> None
         disabled_rules=["dnssec"],
     )
     assert not any("Enable DNSSEC" in a for a in out["actions"])
+
+
+def test_build_executive_summary_missing_historical_data_no_indicator():
+    """Verify that missing sections in previous report don't cause fake deltas."""
+    previous_report = {
+        "report_period": {"start": "2026-03-25", "end": "2026-03-31"},
+        "zones": [
+            {
+                "zone_id": "z1",
+                "http": {"total_requests": 1000},
+                "dns": {"total_queries": 500},
+                # Missing dns_records, security, etc.
+                "zone_health": {"ssl_mode": "strict", "dnssec_status": "active"},
+            }
+        ],
+    }
+    previous_zone = previous_report["zones"][0]
+    out = build_executive_summary(
+        zone_id="z1",
+        zone_name="example.com",
+        zone_health={"zone_status": "active", "ssl_mode": "strict", "dnssec_status": "active"},
+        dns={"total_queries": 600, "average_qps": 0.6},
+        http={"total_requests": 1100, "cache_hit_ratio": 11.0, "encrypted_requests": 950},
+        security={"mitigated_count": 15, "mitigation_rate_pct": 1.2},
+        cache={},
+        dns_records={"proxied_records": 19, "dns_only_records": 10, "apex_unproxied_a_aaaa": 0},
+        warnings=[],
+        current_period={"start": "2026-04-01", "end": "2026-04-07"},
+        previous_report=previous_report,
+        previous_zone=previous_zone,
+    )
+
+    # DNS records were missing in previous_zone, so indicators should be empty
+    assert out["kpi_indicators"]["dns_records.proxied_records"] == ""
+    assert out["kpi_indicators"]["dns_records.dns_only_records"] == ""
+
+    # Security was missing too
+    assert out["kpi_indicators"]["security.mitigated_events"] == ""
+
+    # HTTP was present, so it should have an indicator
+    assert out["kpi_indicators"]["traffic.total_requests"] != ""

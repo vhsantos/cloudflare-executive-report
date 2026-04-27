@@ -7,6 +7,7 @@ from typing import Any, ClassVar, cast
 
 from cloudflare_executive_report.cf_client import (
     CloudflareAPIError,
+    CloudflareAuthError,
     CloudflareClient,
     CloudflareRateLimitError,
 )
@@ -191,7 +192,7 @@ def _fetch_optional_timing_ms(
         p50, p95 = _timing_p50_p95_from_data_avg(data)
         if p50 is not None or p95 is not None:
             return p50, p95
-    except CloudflareAPIError as e:
+    except (CloudflareAPIError, CloudflareAuthError) as e:
         if is_terminal_timing_error(str(e)):
             return None, None
     try:
@@ -199,7 +200,7 @@ def _fetch_optional_timing_ms(
         p50, p95 = _timing_p50_p95_from_data_quantiles(data)
         if p50 is not None or p95 is not None:
             return p50, p95
-    except CloudflareAPIError as e:
+    except (CloudflareAPIError, CloudflareAuthError) as e:
         if is_terminal_timing_error(str(e)):
             return None, None
     return None, None
@@ -218,7 +219,7 @@ def _fetch_optional_origin_response_ms(
             return None
         v = avg.get("originResponseDurationMs")
         return float(v) if v is not None else None
-    except CloudflareAPIError:
+    except (CloudflareAPIError, CloudflareAuthError):
         return None
 
 

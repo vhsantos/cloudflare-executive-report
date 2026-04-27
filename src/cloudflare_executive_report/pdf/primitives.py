@@ -16,11 +16,11 @@ from cloudflare_executive_report.common.constants import (
     PDF_MAP_SIDE_BY_SIDE_MAP_WIDTH_SHARE,
     PDF_RANKED_BAR_COLUMN_MAX_SHARE,
     PDF_RANKED_BAR_TRACK_HEIGHT_PT,
-    PDF_RANKED_TABLE_ROW_PAD_PT,
     PDF_SPACE_MEDIUM_PT,
     PDF_SPACE_SMALL_PT,
     PDF_TABLE_BOX_LINE_PT,
     PDF_TABLE_CELL_PAD_X_PT,
+    PDF_TABLE_CELL_PAD_Y_PT,
     PDF_TABLE_INNER_GRID_LINE_PT,
 )
 from cloudflare_executive_report.common.formatting import format_count_human
@@ -302,64 +302,58 @@ def _bar_cell_table(bar_total_pt: float, bar_w: float, theme: Theme) -> Table:
     return t
 
 
-def _ranked_inner_table_style(num_rows: int, theme: Theme) -> list[Any]:
-    if num_rows <= 0:
-        return []
-    last = num_rows - 1
-    vpad = PDF_RANKED_TABLE_ROW_PAD_PT
-    styles: list[tuple[Any, ...]] = [
-        ("FONT", (1, 0), (1, last), "Helvetica", 9),
-        ("TEXTCOLOR", (0, 0), (-1, last), colors.HexColor(theme.slate)),
-        ("ALIGN", (0, 0), (0, last), "LEFT"),
-        ("ALIGN", (1, 0), (1, last), "RIGHT"),
-        ("VALIGN", (0, 0), (-1, last), "MIDDLE"),
-        ("ROWBACKGROUNDS", (0, 0), (-1, -1), [colors.white, colors.HexColor(theme.row_alt)]),
-        ("TOPPADDING", (0, 0), (-1, last), vpad),
-        ("BOTTOMPADDING", (0, 0), (-1, last), vpad),
-        ("LEFTPADDING", (0, 0), (1, last), PDF_TABLE_CELL_PAD_X_PT),
-        ("RIGHTPADDING", (0, 0), (1, last), PDF_TABLE_CELL_PAD_X_PT),
-        ("LEFTPADDING", (2, 0), (2, last), 0),
-        ("RIGHTPADDING", (2, 0), (2, last), 0),
+def _standard_table_style(num_rows: int, theme: Theme, *, has_header: bool = False) -> TableStyle:
+    """Standard zebra-striped style with an optional accent header."""
+    start_row = 1 if has_header else 0
+    cmds: list[tuple[Any, ...]] = [
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+        ("TEXTCOLOR", (0, start_row), (-1, -1), colors.HexColor(theme.slate)),
+        ("FONT", (0, start_row), (-1, -1), "Helvetica", 8),
+        (
+            "ROWBACKGROUNDS",
+            (0, start_row),
+            (-1, -1),
+            [colors.white, colors.HexColor(theme.row_alt)],
+        ),
+        ("BOX", (0, 0), (-1, -1), PDF_TABLE_BOX_LINE_PT, colors.HexColor(theme.border)),
+        (
+            "INNERGRID",
+            (0, 0),
+            (-1, -1),
+            PDF_TABLE_INNER_GRID_LINE_PT,
+            colors.HexColor(theme.border),
+        ),
+        ("LEFTPADDING", (0, 0), (-1, -1), PDF_TABLE_CELL_PAD_X_PT),
+        ("RIGHTPADDING", (0, 0), (-1, -1), PDF_TABLE_CELL_PAD_X_PT),
+        ("TOPPADDING", (0, 0), (-1, -1), PDF_TABLE_CELL_PAD_Y_PT),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), PDF_TABLE_CELL_PAD_Y_PT),
     ]
-    for r in range(num_rows - 1):
-        styles.append(
-            (
-                "LINEBELOW",
-                (0, r),
-                (-1, r),
-                PDF_TABLE_INNER_GRID_LINE_PT,
-                colors.HexColor(theme.border),
-            )
+    if has_header:
+        cmds.extend(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(theme.accent)),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONT", (0, 0), (-1, 0), "Helvetica-Bold", 8),
+            ]
         )
-    return styles
+    return TableStyle(cmds)
 
 
-def table_with_bars(
+def _table_card_container(
     title: str,
-    rows: list[list[Any]],
-    ratios: tuple[float, float, float],
+    inner_table: Table,
     *,
-    total_width_in: float | None = None,
+    width_in: float,
+    theme: Theme,
+    styles: Any,
     show_outer_card: bool = True,
 ) -> Table:
-    """Ranked bar table card using the active :func:`initialize` context."""
-    ctx = get_render_context()
-    theme = ctx.theme
-    styles = ctx.styles
-    width_in = ctx.content_width_in if total_width_in is None else total_width_in
-    inner_w_pt = _inner_grid_width_pt(width_in, theme)
-    ratios_capped = _ranked_column_ratios_with_capped_bar(ratios, PDF_RANKED_BAR_COLUMN_MAX_SHARE)
-    col_pt = _scale_ratios_to_pt(inner_w_pt, ratios_capped)
-    bar_total_pt = col_pt[2]
-    data_rows: list[list[Any]] = []
-    for label, cnt_s, bar_w in rows:
-        bar_cell = _bar_cell_table(bar_total_pt, bar_w, theme)
-        data_rows.append([ranked_table_label_cell(str(label), styles), cnt_s, bar_cell])
-    inner = Table(data_rows, colWidths=col_pt)
-    inner.setStyle(TableStyle(_ranked_inner_table_style(len(data_rows), theme)))
+    """Wraps an inner table in a titled, bordered card container."""
     title_p = Paragraph(f"<font color='{theme.slate}'>{title}</font>", styles["RepCardTitle"])
     pad = theme.outer_card_pad_pt
-    outer = Table([[title_p], [inner]], colWidths=[width_in * inch])
+    outer = Table([[title_p], [inner_table]], colWidths=[width_in * inch])
+
     if show_outer_card:
         outer.setStyle(
             TableStyle(
@@ -395,6 +389,81 @@ def table_with_bars(
             )
         )
     return outer
+
+
+def table_with_bars(
+    title: str,
+    rows: list[list[Any]],
+    ratios: tuple[float, float, float],
+    *,
+    total_width_in: float | None = None,
+    show_outer_card: bool = True,
+) -> Table:
+    """Ranked bar table card using shared container and zebra styling."""
+    ctx = get_render_context()
+    theme = ctx.theme
+    styles = ctx.styles
+    width_in = ctx.content_width_in if total_width_in is None else total_width_in
+
+    inner_w_pt = _inner_grid_width_pt(width_in, theme)
+    ratios_capped = _ranked_column_ratios_with_capped_bar(ratios, PDF_RANKED_BAR_COLUMN_MAX_SHARE)
+    col_pt = _scale_ratios_to_pt(inner_w_pt, ratios_capped)
+    bar_total_pt = col_pt[2]
+
+    data_rows: list[list[Any]] = []
+    for label, cnt_s, bar_w in rows:
+        bar_cell = _bar_cell_table(bar_total_pt, bar_w, theme)
+        data_rows.append([ranked_table_label_cell(str(label), styles), cnt_s, bar_cell])
+
+    inner = Table(data_rows, colWidths=col_pt)
+    inner.setStyle(_standard_table_style(len(data_rows), theme, has_header=False))
+
+    return _table_card_container(
+        title, inner, width_in=width_in, theme=theme, styles=styles, show_outer_card=show_outer_card
+    )
+
+
+def table_standard_card(
+    title: str,
+    rows: list[list[Any]],
+    ratios: tuple[float, ...],
+    *,
+    total_width_in: float | None = None,
+    show_outer_card: bool = True,
+) -> Table:
+    """Generic N-column table card with shared container, styling, and accent header."""
+    ctx = get_render_context()
+    theme = ctx.theme
+    styles = ctx.styles
+    width_in = ctx.content_width_in if total_width_in is None else total_width_in
+
+    inner_w_pt = _inner_grid_width_pt(width_in, theme)
+    col_pt = _scale_ratios_to_pt(inner_w_pt, ratios)
+
+    data_rows: list[list[Any]] = []
+    for i, row in enumerate(rows):
+        formatted_row = []
+        for j, cell in enumerate(row):
+            if j == 0:
+                # Use Paragraph for column 0 to ensure wrapping
+                style_name = "RepTableCell"
+                p_text = (
+                    f"<b><font color='white'>{escape(str(cell))}</font></b>"
+                    if i == 0
+                    else escape(str(cell))
+                )
+                p = Paragraph(p_text, styles[style_name])
+                formatted_row.append(p)
+            else:
+                formatted_row.append(cell)
+        data_rows.append(formatted_row)
+
+    inner = Table(data_rows, colWidths=col_pt)
+    inner.setStyle(_standard_table_style(len(data_rows), theme, has_header=True))
+
+    return _table_card_container(
+        title, inner, width_in=width_in, theme=theme, styles=styles, show_outer_card=show_outer_card
+    )
 
 
 def flex_row(

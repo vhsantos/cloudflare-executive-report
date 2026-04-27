@@ -200,12 +200,22 @@ class CloudflareClient:
             _map_sdk_exception(e)
             raise
 
-    def list_dns_records(self, zone_id: str, *, per_page: int = 100) -> list[dict[str, Any]]:
+    def list_dns_records(
+        self, zone_id: str, *, per_page: int = 100, record_type: str | None = None
+    ) -> list[dict[str, Any]]:
         """List all DNS records for a zone via SDK pagination."""
         if self._verbose:
-            log.debug("SDK dns.records.list zone_id=%s per_page=%s", zone_id, per_page)
+            log.debug(
+                "SDK dns.records.list zone_id=%s per_page=%s type=%s",
+                zone_id,
+                per_page,
+                record_type,
+            )
         try:
-            page = self._sdk.dns.records.list(zone_id=zone_id, per_page=per_page)
+            kwargs: dict[str, Any] = {"zone_id": zone_id, "per_page": per_page}
+            if record_type:
+                kwargs["type"] = record_type
+            page = self._sdk.dns.records.list(**kwargs)
             return [item.model_dump() for item in page]
         except Exception as e:
             _map_sdk_exception(e)
@@ -218,6 +228,28 @@ class CloudflareClient:
         try:
             page = self._sdk.ssl.certificate_packs.list(zone_id=zone_id, status="all")
             return cast(list[dict[str, Any]], page.result)  # Already a list
+        except Exception as e:
+            _map_sdk_exception(e)
+            raise
+
+    def get_email_routing_settings(self, zone_id: str) -> dict[str, Any]:
+        """Get Email Routing settings for a zone via SDK."""
+        if self._verbose:
+            log.debug("SDK email_routing.get zone_id=%s", zone_id)
+        try:
+            settings = self._sdk.email_routing.get(zone_id=zone_id)
+            return settings.model_dump() if settings else {}
+        except Exception as e:
+            _map_sdk_exception(e)
+            raise
+
+    def list_email_routing_rules(self, zone_id: str) -> list[dict[str, Any]]:
+        """List all Email Routing rules for a zone via SDK."""
+        if self._verbose:
+            log.debug("SDK email_routing.rules.list zone_id=%s", zone_id)
+        try:
+            page = self._sdk.email_routing.rules.list(zone_id=zone_id)
+            return [item.model_dump() for item in page]
         except Exception as e:
             _map_sdk_exception(e)
             raise

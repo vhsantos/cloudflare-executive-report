@@ -1,13 +1,8 @@
 # TODO
 
-## Documentation
+## CLI
 
-- [ ] Add clear instructions how/which/why each token Permission policies are need.
-
-## Token
-
-- [ ] check if token exists
-- [ ] validate if token has access to the corrects polices (maybe put the token requirements on each stream)
+- [ ] Improve --zone parameter to accpet multiples zones, like --zones <zone1> <zone2> ...
 
 ## Performance and Cloudflare API limits
 
@@ -53,6 +48,11 @@ Suggested order when choosing the next item: bot posture (if API stable for your
   - Data: ruleset phase `http_ratelimit`; distinguish rate limits from WAF custom rules.
   - Shape: new rule + phrase; default to info to avoid noise on small sites.
   - Risk: many zones rely only on managed challenge; product judgment.
+
+- [ ] **DKIM Selector Rotation (EMAIL-009)** - Detect unrotated or long-lived DKIM selectors.
+  - Data: fetcher needs to collect selector creation dates or multiple selectors per domain.
+  - Shape: risk if keys are older than 6-12 months.
+  - Action: recommend rotation and removal of expired selectors.
 
 - [ ] **Rules clarity for executives** - CTO-readable counts: "N custom WAF rules, M rate limits" (ruleset-based, not legacy Firewall Rules API); optional dashboard hint in action text.
   - Data: largely present; extend phrase labeling if counts suffice without new API.
@@ -112,6 +112,7 @@ Current: ~75%
 Target: 85%
 
 Priority files to improve:
+
 - [ ] `aggregate.py` (86% → 100%) - missing error paths and edge cases
 - [ ] `report/command_flow.py` (59% → 85%) - mock more sync/health failure branches
 - [ ] `sync/orchestrator.py` (75% → 90%) - test more sync modes and CLI edge cases

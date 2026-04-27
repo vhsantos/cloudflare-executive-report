@@ -83,5 +83,6 @@ def update_zone_json_block_health_and_executive(
         previous_report=previous_report,
         previous_zone=find_previous_zone_in_report(previous_report, zone_id),
         disabled_rules=cfg.executive.disabled_rules,
+        email=optional_dict_section(zone_block, "email"),
     )
     return zw

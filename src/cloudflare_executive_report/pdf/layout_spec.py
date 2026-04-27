@@ -57,15 +57,27 @@ class CacheStreamLayout:
     )
 
 
+@dataclass(frozen=True)
+class EmailStreamLayout:
+    blocks: tuple[str, ...] = (
+        "header",
+        "kpi",
+        "timeseries",
+        "top_sources",
+    )
+
+
 @dataclass
 class ReportSpec:
     zone_ids: list[str]
     start: str
     end: str
-    streams: tuple[str, ...] = ("dns", "http")
+    # TODO: Why we need theses ?? What happen with the others streams ??
+    streams: tuple[str, ...] = ("dns", "http", "email")
     include_executive_summary: bool = True
     top: int = 10
     dns_layout: DnsStreamLayout = field(default_factory=DnsStreamLayout)
     http_layout: HttpStreamLayout = field(default_factory=HttpStreamLayout)
     security_layout: SecurityStreamLayout = field(default_factory=SecurityStreamLayout)
     cache_layout: CacheStreamLayout = field(default_factory=CacheStreamLayout)
+    email_layout: EmailStreamLayout = field(default_factory=EmailStreamLayout)

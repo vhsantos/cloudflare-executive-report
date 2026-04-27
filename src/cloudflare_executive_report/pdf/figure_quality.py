@@ -25,7 +25,7 @@ _PDF_IMAGE_QUALITY_DPIS: dict[PdfFigureQuality, tuple[int, int]] = {
 
 
 def parse_pdf_image_quality(raw: str | None) -> PdfFigureQuality:
-    s = (raw or "medium").strip().lower()
+    s = (raw or "high").strip().lower()
     try:
         return PdfFigureQuality(s)
     except ValueError as e:
