@@ -5,6 +5,7 @@ from cloudflare_executive_report.aggregators.cache import build_cache_section
 from cloudflare_executive_report.aggregators.certificates import build_certificates_section
 from cloudflare_executive_report.aggregators.dns import build_dns_section
 from cloudflare_executive_report.aggregators.dns_records import build_dns_records_section
+from cloudflare_executive_report.aggregators.email import build_email_section
 from cloudflare_executive_report.aggregators.http import build_http_section
 from cloudflare_executive_report.aggregators.http_adaptive import build_http_adaptive_section
 from cloudflare_executive_report.aggregators.registry import SECTION_BUILDERS
@@ -17,6 +18,7 @@ __all__ = [
     "build_certificates_section",
     "build_dns_records_section",
     "build_dns_section",
+    "build_email_section",
     "build_http_adaptive_section",
     "build_http_section",
     "build_security_section",

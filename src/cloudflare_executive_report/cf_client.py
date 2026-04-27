@@ -232,6 +232,28 @@ class CloudflareClient:
             _map_sdk_exception(e)
             raise
 
+    def get_email_routing_settings(self, zone_id: str) -> dict[str, Any]:
+        """Get Email Routing settings for a zone via SDK."""
+        if self._verbose:
+            log.debug("SDK email_routing.get zone_id=%s", zone_id)
+        try:
+            settings = self._sdk.email_routing.get(zone_id=zone_id)
+            return settings.model_dump() if settings else {}
+        except Exception as e:
+            _map_sdk_exception(e)
+            raise
+
+    def list_email_routing_rules(self, zone_id: str) -> list[dict[str, Any]]:
+        """List all Email Routing rules for a zone via SDK."""
+        if self._verbose:
+            log.debug("SDK email_routing.rules.list zone_id=%s", zone_id)
+        try:
+            page = self._sdk.email_routing.rules.list(zone_id=zone_id)
+            return [item.model_dump() for item in page]
+        except Exception as e:
+            _map_sdk_exception(e)
+            raise
+
     def graphql(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
         """POST Analytics GraphQL only (manual HTTP; not available on SDK)."""
         return self.graphql_query(query, variables)

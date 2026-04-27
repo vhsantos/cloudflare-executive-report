@@ -259,7 +259,10 @@ def evaluate_comparison_gate(
     if not prev_zone:
         return _comparison_gate_blocked("comparison_first_report", filt)
 
-    needed = ("http", "security", "dns")
+    # TODO: that should return a quick check if comparison is possible or not.
+    # We should put this as constante and evaluate this check to be much more efficient
+    # Core streams required for comparison
+    needed = ("http", "dns")
     if any(as_dict(prev_zone).get(k) in (None, {}) for k in needed):
         return _comparison_gate_blocked("comparison_missing_streams", filt)
 
@@ -314,6 +317,7 @@ def build_executive_rule_output(
     dr = as_dict(current_zone.get("dns_records"))
     au = as_dict(current_zone.get("audit"))
     ce = as_dict(current_zone.get("certificates"))
+    email = as_dict(current_zone.get("email"))
 
     apex_unproxied = as_int(dr.get("apex_unproxied_a_aaaa")) > 0
     ssl_mode = str(zh.get("ssl_mode") or "").strip().lower()
@@ -455,6 +459,47 @@ def build_executive_rule_output(
     if audits > AUDIT_EVENTS_THRESHOLD:
         add_takeaway(SECT_SIGNALS, "warning", "audit_activity", state="observation", events=audits)
 
+    # ------------------------------------------------------------------
+    # Email Security
+    # ------------------------------------------------------------------
+    dmarc = str(email.get("dns_dmarc_policy") or "").lower()
+    spf = str(email.get("dns_spf_policy") or "").lower()
+    dkim = bool(email.get("dns_dkim_configured"))
+
+    if dmarc == "none":
+        add_takeaway(SECT_RISKS, "critical", "email_dmarc_none", state="risk")
+        add_action("info", "email_dmarc_none", state="action")
+    elif dmarc == "quarantine":
+        add_takeaway(SECT_RISKS, "warning", "email_dmarc_quarantine", state="risk")
+        add_action("info", "email_dmarc_quarantine", state="action")
+
+    if spf == "none":
+        add_takeaway(SECT_RISKS, "warning", "email_spf_missing", state="risk")
+        add_action("info", "email_spf_missing", state="action")
+    elif spf == "softfail":
+        add_takeaway(SECT_SIGNALS, "info", "email_spf_softfail", state="observation")
+        add_action("info", "email_spf_softfail", state="action")
+
+    if not dkim:
+        add_takeaway(SECT_RISKS, "warning", "email_dkim_missing", state="risk")
+        add_action("info", "email_dkim_missing", state="action")
+
+    fail_pct = 100.0 - float(email.get("dmarc_pass_rate_pct") or 100.0)
+    if fail_pct > 10.0:  # Use a fixed 10% threshold for now
+        add_takeaway(
+            SECT_SIGNALS,
+            "warning",
+            "email_high_fail_rate",
+            state="observation",
+            fail_pct=round(fail_pct, 1),
+        )
+
+    dropped = int(email.get("dropped") or 0)
+    if dropped > 0:
+        add_takeaway(
+            SECT_SIGNALS, "info", "email_routing_drops", state="observation", dropped=dropped
+        )
+
     always_https = str(zh.get("always_https") or "").strip().lower()
     total_requests = as_int(http.get("total_requests"))
     encrypted_requests = as_int(http.get("encrypted_requests"))
@@ -493,6 +538,8 @@ def build_executive_rule_output(
         p_ha = as_dict(previous_zone.get("http_adaptive"))
         p_dr = as_dict(previous_zone.get("dns_records"))
         p_zh = as_dict(previous_zone.get("zone_health"))
+        p_email = as_dict(previous_zone.get("email"))
+
         pct_traffic = _percent_delta(
             as_int(http.get("total_requests")),
             as_int(p_http.get("total_requests")),
@@ -564,6 +611,18 @@ def build_executive_rule_output(
         p_dnssec = str(p_zh.get("dnssec_status") or "").strip().lower()
         if p_dnssec in {"off", "disabled"} and dnssec not in {"off", "disabled"}:
             add_takeaway(SECT_WINS, "positive", "dnssec", state="win")
+
+        p_dmarc = str(p_email.get("dns_dmarc_policy") or "").lower()
+        if p_dmarc in ("none", "quarantine") and dmarc == "reject":
+            add_takeaway(SECT_WINS, "positive", "email_dmarc_reject", state="win", previous=p_dmarc)
+
+        p_spf = str(p_email.get("dns_spf_policy") or "").lower()
+        if p_spf in ("none", "softfail") and spf == "hardfail":
+            add_takeaway(SECT_WINS, "positive", "email_spf_hardfail", state="win", previous=p_spf)
+
+        p_dkim = bool(p_email.get("dns_dkim_configured"))
+        if not p_dkim and dkim:
+            add_takeaway(SECT_WINS, "positive", "email_dkim_configured", state="win")
 
     if gate_warning is not None:
         sections[SECT_DELTAS].insert(0, gate_warning)

@@ -354,6 +354,99 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "nist": ["SI-4"],
         "observation": {"text": "5xx error rate is {err_pct}% - investigate immediately."},
     },
+    "email_dmarc_none": {
+        "id": "EMAIL-001",
+        "service": "Email",
+        "nist": ["SI-7", "SC-7"],
+        "risk": {
+            "text": "DMARC policy is None. Attackers can send email as your domain.",
+            "weight": 10,
+        },
+        "action": {"text": "Set DMARC policy to quarantine, monitor reports, then move to reject."},
+    },
+    "email_dmarc_quarantine": {
+        "id": "EMAIL-002",
+        "service": "Email",
+        "nist": ["SI-7", "SC-7"],
+        "risk": {
+            "text": "DMARC policy is Quarantine. Suspicious emails go to spam but are not fully blocked.",
+            "weight": 3,
+        },
+        "action": {"text": "Upgrade DMARC policy to reject after verifying legitimate senders."},
+    },
+    "email_dmarc_reject": {
+        "id": "EMAIL-003",
+        "service": "Email",
+        "nist": ["SI-7", "SC-7"],
+        "win": {"text": "DMARC policy upgraded from {previous} to Reject. Spoofing blocked."},
+    },
+    "email_spf_missing": {
+        "id": "EMAIL-004",
+        "service": "Email",
+        "nist": ["SI-7", "SC-7"],
+        "risk": {
+            "text": "SPF record missing. Unauthorized senders can spoof domain",
+            "weight": 8,
+        },
+        "action": {
+            "text": "Add an SPF TXT record. Start with ~all, then move to -all after verification."
+        },
+    },
+    "email_spf_softfail": {
+        "id": "EMAIL-005",
+        "service": "Email",
+        "nist": ["SI-7", "SC-7"],
+        "observation": {"text": "SPF is Soft Fail (~all). Unauthorized senders not fully blocked"},
+        "action": {"text": "Move to hard fail (-all) after verifying all legitimate senders."},
+    },
+    "email_spf_hardfail": {
+        "id": "EMAIL-006",
+        "service": "Email",
+        "nist": ["SI-7", "SC-7"],
+        "win": {
+            "text": "SPF policy hardened from {previous} to Hard Fail. Domain spoofing blocked."
+        },
+    },
+    "email_dkim_missing": {
+        "id": "EMAIL-007",
+        "service": "Email",
+        "nist": ["SI-7"],
+        "risk": {
+            "text": "DKIM missing. Outbound email authenticity cannot be verified.",
+            "weight": 8,
+        },
+        "action": {"text": "Enable DKIM signing to ensure message integrity."},
+    },
+    "email_dkim_configured": {
+        "id": "EMAIL-008",
+        "service": "Email",
+        "nist": ["SI-7"],
+        "win": {"text": "DKIM now is properly configured. Emails authenticity verified"},
+    },
+    "email_dkim_selector_problem": {
+        "id": "EMAIL-009",
+        "service": "Email",
+        "nist": ["SI-7", "AU-6"],
+        "risk": {
+            "text": "DKIM selectors not rotated. Long-lived keys increase risk.",
+            "weight": 3,
+        },
+        "action": {
+            "text": "Rotate DKIM keys frequently (every 6-12 months) and remove expired selectors."
+        },
+    },
+    "email_high_fail_rate": {
+        "id": "EMAIL-010",
+        "service": "Email",
+        "nist": ["AU-6", "SI-4"],
+        "observation": {"text": "High DMARC fail rate: {fail_pct}%. Review unauthorized senders"},
+    },
+    "email_routing_drops": {
+        "id": "EMAIL-011",
+        "service": "Email",
+        "nist": ["SI-4"],
+        "observation": {"text": "Email routing dropped {dropped} messages. Review routing rules"},
+    },
 }
 
 PREFIXES: dict[str, str] = {

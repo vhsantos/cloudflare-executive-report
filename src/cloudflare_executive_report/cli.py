@@ -97,7 +97,7 @@ def _pdf_streams_from_types(type_set: frozenset[str]) -> tuple[str, ...]:
     """Order follows registry; only streams with PDF sections."""
     out: list[str] = []
     for sid in registered_stream_ids():
-        if sid in type_set and sid in ("dns", "http", "security", "cache"):
+        if sid in type_set and sid in ("dns", "http", "security", "cache", "email"):
             out.append(sid)
     return tuple(out)
 
