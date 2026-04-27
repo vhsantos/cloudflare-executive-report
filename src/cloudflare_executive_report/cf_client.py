@@ -200,12 +200,22 @@ class CloudflareClient:
             _map_sdk_exception(e)
             raise
 
-    def list_dns_records(self, zone_id: str, *, per_page: int = 100) -> list[dict[str, Any]]:
+    def list_dns_records(
+        self, zone_id: str, *, per_page: int = 100, record_type: str | None = None
+    ) -> list[dict[str, Any]]:
         """List all DNS records for a zone via SDK pagination."""
         if self._verbose:
-            log.debug("SDK dns.records.list zone_id=%s per_page=%s", zone_id, per_page)
+            log.debug(
+                "SDK dns.records.list zone_id=%s per_page=%s type=%s",
+                zone_id,
+                per_page,
+                record_type,
+            )
         try:
-            page = self._sdk.dns.records.list(zone_id=zone_id, per_page=per_page)
+            kwargs: dict[str, Any] = {"zone_id": zone_id, "per_page": per_page}
+            if record_type:
+                kwargs["type"] = record_type
+            page = self._sdk.dns.records.list(**kwargs)
             return [item.model_dump() for item in page]
         except Exception as e:
             _map_sdk_exception(e)
