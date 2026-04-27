@@ -20,9 +20,9 @@ from cloudflare_executive_report.cf_client import (
 )
 from cloudflare_executive_report.common.dates import (
     day_bounds_utc,
-    day_start_iso_z,
+    # day_start_iso_z,  # Uncomment if using Pattern B (Datetime scalars)
     format_ymd,
-    utc_now_z,
+    # utc_now_z,        # Uncomment if using Pattern B (Datetime scalars)
     utc_today,
 )
 
@@ -176,25 +176,23 @@ class ExampleFetcher:
         plan_legacy_id: str | None,
         zone_meta: dict[str, Any] | None,
     ) -> tuple[list[dict[str, Any]], list[str], bool]:
-        """Partial-day fetch for the current UTC date (report only).
-
-        Returns (extra_day_payloads, warnings, rate_limited).
-
-        If your stream does not support partial-day data, return:
-            return [], [], False
-        """
+        """Partial-day fetch for the current UTC date (report only)."""
         _ = (plan_legacy_id, zone_meta)
         t = utc_today()
         if date_outside_http_retention(t):
             return [], [], False
+
         try:
-            payload = fetch_example_for_bounds(
-                client,
-                zone_id,
-                day_start_iso_z(t),
-                utc_now_z(),
-            )
-            payload["date"] = format_ymd(t)
+            # Pattern A: Date scalars (date_geq/date_leq) - e.g. Email Routing
+            ds = format_ymd(t)
+            payload = fetch_example_for_bounds(client, zone_id, ds, ds)
+
+            # Pattern B: Datetime scalars (datetime_geq/datetime_lt) - e.g. HTTP Adaptive
+            # payload = fetch_example_for_bounds(
+            #     client, zone_id, day_start_iso_z(t), utc_now_z()
+            # )
+
+            payload["date"] = ds
             return (
                 [payload],
                 [

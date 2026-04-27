@@ -100,16 +100,18 @@ def append_example_stream(
     # ------------------------------------------------------------------
     # 1. Section header
     # ------------------------------------------------------------------
-    # Streams without a layout spec pass an empty set so every block is
-    # rendered unconditionally.  To make sections optional (e.g. hide the
-    # timeseries for minimal reports), add a layout dataclass to
-    # ``pdf/layout_spec.py``, pass it as a parameter here, and replace
-    # ``set()`` with ``set(layout.blocks)``.
+    # If using a layout spec (recommended for production streams):
+    # from cloudflare_executive_report.pdf.layout_spec import ExampleStreamLayout
+    # layout = ExampleStreamLayout()
+    # blocks = set(layout.blocks)
+    # For simple streams without block toggling:
+    blocks: set[str] = set()
+
     append_stream_header(
         story,
         styles,
         theme,
-        blocks=set(),
+        blocks=blocks,
         stream_title="Example",
         zone_name=zone_name,
         period_start=period_start,
@@ -119,7 +121,13 @@ def append_example_stream(
     # ------------------------------------------------------------------
     # 2. Missing-dates note
     # ------------------------------------------------------------------
-    append_missing_dates_note(story, styles, set(), missing_dates)
+    append_missing_dates_note(story, styles, blocks, missing_dates)
+
+    # Pattern: If your stream has an "enabled" flag, show minimal UI when disabled:
+    if not example.get("example_enabled"):
+        if "kpi" in blocks:
+            story.append(kpi_row([("Status", "Disabled")]))
+        return  # Exit early - do not render charts or tables
 
     # ------------------------------------------------------------------
     # 3. KPI row

@@ -21,6 +21,13 @@ def build_example_section(
     ``daily_api_data`` is a list of ``data`` blobs exactly as stored by
     ``ExampleFetcher.fetch``.  Never call the Cloudflare API here.
     """
+    # Pattern: If your stream has configuration that doesn't change daily
+    # (e.g. settings), take the latest state from the last day in the range.
+    example_enabled = False
+    if daily_api_data:
+        latest = daily_api_data[-1]
+        example_enabled = bool(latest.get("example_enabled"))
+
     total_count = 0
     dimension_counts: dict[str, int] = {}
 
@@ -45,6 +52,7 @@ def build_example_section(
     ]
 
     return {
+        "example_enabled": example_enabled,
         "total_count": total_count,
         "total_count_human": format_count_human(total_count),
         "top_dimensions": top_dimensions,
