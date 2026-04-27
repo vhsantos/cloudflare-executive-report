@@ -145,6 +145,11 @@ def test_build_executive_summary_no_actions_when_no_action_rules_match():
             "expiring_in_30_days": 0,
             "soonest_expiry": "2026-12-01T00:00:00Z",
         },
+        email={
+            "dns_dkim_configured": True,
+            "dns_dmarc_policy": "reject",
+            "dns_spf_policy": "hardfail",
+        },
         warnings=[],
     )
     assert out["actions"] == []
