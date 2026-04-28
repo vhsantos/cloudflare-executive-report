@@ -9,6 +9,7 @@ from typing import Any, cast
 from cloudflare_executive_report.common.constants import (
     MITIGATING_SECURITY_ACTIONS,
     SECURITY_POSTURE_REFERENCE_RISK_WEIGHT,
+    UNAVAILABLE,
     VERDICT_WARN_THRESHOLD,
 )
 from cloudflare_executive_report.common.dates import format_date_with_days_from_iso, utc_today
@@ -95,7 +96,7 @@ def build_security_posture_score(rule_out: ExecutiveRuleOutput) -> dict[str, Any
 _DEFENSIVE_ACTIONS = MITIGATING_SECURITY_ACTIONS
 
 
-def _as_str(v: Any, *, default: str = "unavailable") -> str:
+def _as_str(v: Any, *, default: str = UNAVAILABLE) -> str:
     s = str(v).strip() if v is not None else ""
     return s if s else default
 
@@ -520,7 +521,7 @@ def build_executive_summary(
                 "opportunistic_encryption": _as_str(zh.get("opportunistic_encryption")),
                 "dnssec_status": dnssec_status,
                 "ddos_protection": _as_str(zh.get("ddos_protection")),
-                "security_rules_active": zh.get("security_rules_active", "unavailable"),
+                "security_rules_active": zh.get("security_rules_active", UNAVAILABLE),
             },
             "traffic": {
                 "total_requests": total_requests,
@@ -568,7 +569,7 @@ def build_executive_summary(
                 "dns_only_records": as_int(dr.get("dns_only_records")),
                 "apex_unproxied_a_aaaa": as_int(dr.get("apex_unproxied_a_aaaa")),
                 "apex_protection_status": (
-                    "unavailable"
+                    UNAVAILABLE
                     if dr.get("unavailable") is True
                     else ("exposed" if as_int(dr.get("apex_unproxied_a_aaaa")) > 0 else "proxied")
                 ),
@@ -588,7 +589,7 @@ def build_executive_summary(
             },
             "email": {
                 "routing_enabled": bool(e.get("email_routing_enabled")),
-                "dns_dmarc_policy": str(e.get("dns_dmarc_policy") or "unavailable"),
+                "dns_dmarc_policy": str(e.get("dns_dmarc_policy") or UNAVAILABLE),
                 "dmarc_pass_rate_pct": float(e.get("dmarc_pass_rate_pct") or 0.0),
                 "total_received": int(e.get("total_received") or 0),
                 "delivery_failed": int(e.get("delivery_failed") or 0),

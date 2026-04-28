@@ -12,6 +12,7 @@ from cloudflare_executive_report.cf_client import (
     CloudflareClient,
     CloudflareRateLimitError,
 )
+from cloudflare_executive_report.common.constants import UNAVAILABLE
 from cloudflare_executive_report.common.dates import (
     format_ymd,
     utc_today,
@@ -86,13 +87,13 @@ def _parse_dns_policies(
 
     if not zone_name:
         log.warning("zone_name is empty for zone_id=%s; DNS policy check skipped", zone_id)
-        return "unavailable", "unavailable", False
+        return UNAVAILABLE, UNAVAILABLE, False
 
     try:
         txt_records = client.list_dns_records(zone_id, per_page=500, record_type="TXT")
     except Exception as e:
         log.debug("Failed to list TXT records for email policies: %s", e)
-        return "unavailable", "unavailable", False
+        return UNAVAILABLE, UNAVAILABLE, False
 
     for rec in txt_records:
         name = str(rec.get("name") or "").strip().lower()
@@ -194,7 +195,7 @@ def fetch_email_for_bounds(
     # Fetch settings
     settings = client.get_email_routing_settings(zone_id)
     enabled = bool(settings.get("enabled"))
-    status = str(settings.get("status") or "unavailable").lower()
+    status = str(settings.get("status") or UNAVAILABLE).lower()
 
     # Fetch rules count only if ER is enabled
     rules_count = 0

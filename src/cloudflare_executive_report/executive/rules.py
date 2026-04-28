@@ -23,13 +23,14 @@ from cloudflare_executive_report.common.constants import (
     MITIGATION_RATE_PCT_THRESHOLD,
     RELIABILITY_5XX_HEALTHY_MAX,
     RELIABILITY_5XX_WARNING_MAX,
+    SKIPPED,
     THREATS_DELTA_PCT_THRESHOLD,
     TRAFFIC_DELTA_PCT_THRESHOLD,
     TRAFFIC_FLAT_DELTA_PCT,
+    UNAVAILABLE,
 )
 from cloudflare_executive_report.common.safe_types import as_dict, as_float, as_int
 from cloudflare_executive_report.executive.phrase_catalog import get_phrase
-from cloudflare_executive_report.zone_health import SKIPPED, UNAVAILABLE
 
 _VALID_SEVERITIES = frozenset({"positive", "warning", "critical", "info"})
 _TOKEN_KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
@@ -514,7 +515,7 @@ def build_executive_rule_output(
             state="action",
             gap_pct=round(enc_gap_pct, 1),
         )
-    if dnssec in {"disabled", "off", "unavailable"}:
+    if dnssec in {"disabled", "off", UNAVAILABLE}:
         add_action("info", "dnssec", state="action")
     if ssl_mode == "full":
         add_action("info", "ssl_mode_full", state="action")

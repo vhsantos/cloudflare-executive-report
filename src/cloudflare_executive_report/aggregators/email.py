@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from cloudflare_executive_report.common.constants import UNAVAILABLE
 from cloudflare_executive_report.common.formatting import format_count_human
 
 
@@ -16,19 +17,19 @@ def build_email_section(
 
     # Latest state (from the last day in the range)
     email_routing_enabled = False
-    email_routing_status = "unavailable"
+    email_routing_status = UNAVAILABLE
     routing_rules_count = 0
-    dns_dmarc_policy = "unavailable"
-    dns_spf_policy = "unavailable"
+    dns_dmarc_policy = UNAVAILABLE
+    dns_spf_policy = UNAVAILABLE
     dns_dkim_configured = False
 
     if daily_api_data:
         latest = daily_api_data[-1]
         email_routing_enabled = bool(latest.get("email_routing_enabled"))
-        email_routing_status = str(latest.get("email_routing_status") or "unavailable")
+        email_routing_status = str(latest.get("email_routing_status") or UNAVAILABLE)
         routing_rules_count = int(latest.get("routing_rules_count") or 0)
-        dns_dmarc_policy = str(latest.get("dns_dmarc_policy") or "unavailable")
-        dns_spf_policy = str(latest.get("dns_spf_policy") or "unavailable")
+        dns_dmarc_policy = str(latest.get("dns_dmarc_policy") or UNAVAILABLE)
+        dns_spf_policy = str(latest.get("dns_spf_policy") or UNAVAILABLE)
         dns_dkim_configured = bool(latest.get("dns_dkim_configured"))
 
     # Aggregated metrics

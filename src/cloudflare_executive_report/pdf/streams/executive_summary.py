@@ -8,7 +8,11 @@ from reportlab.lib import colors
 from reportlab.lib.units import inch
 from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
 
-from cloudflare_executive_report.common.constants import PDF_SPACE_MEDIUM_PT, PDF_SPACE_SMALL_PT
+from cloudflare_executive_report.common.constants import (
+    PDF_SPACE_MEDIUM_PT,
+    PDF_SPACE_SMALL_PT,
+    UNAVAILABLE,
+)
 from cloudflare_executive_report.common.formatting import (
     format_count_compact,
     format_number_compact,
@@ -112,7 +116,8 @@ def append_executive_summary(
 ) -> None:
     styles = get_render_context().styles
 
-    verdict = str(summary.get("verdict") or "warning").upper()
+    verdict_raw = str(summary.get("verdict") or "warning").lower()
+    verdict = "Active" if verdict_raw == "healthy" else verdict_raw.upper()
     story.append(
         _executive_header_block(
             zone_name=zone_name,
@@ -142,9 +147,9 @@ def append_executive_summary(
             [
                 ("Operational status", verdict),
                 ("Security score", score_cell),
-                ("Zone status", str(platform.get("zone_status") or "unavailable")),
-                ("TLS/SSL Mode", str(platform.get("ssl_mode") or "unavailable")),
-                ("Always HTTPS", str(platform.get("always_https") or "unavailable")),
+                ("Zone status", str(platform.get("zone_status") or UNAVAILABLE)),
+                ("TLS/SSL Mode", str(platform.get("ssl_mode") or UNAVAILABLE)),
+                ("Always HTTPS", str(platform.get("always_https") or UNAVAILABLE)),
             ],
         )
     )
@@ -229,7 +234,7 @@ def append_executive_summary(
                 ),
                 (
                     "DNS records",
-                    "unavailable" if dr_un else str(dns_records.get("total_records") or "0"),
+                    UNAVAILABLE if dr_un else str(dns_records.get("total_records") or "0"),
                 ),
                 (
                     "Proxied",
@@ -251,15 +256,15 @@ def append_executive_summary(
         cert_days = cert_human.split("(", 1)[1].split(")", 1)[0].strip()
     else:
         cert_days = cert_human
-    cert_label = "unavailable" if ce_un else cert_days
+    cert_label = UNAVAILABLE if ce_un else cert_days
     if not ce_un and cert_exp30 > 0 and cert_label != "-":
         cert_label = f"expiring soon: {cert_label}"
     cert_packs_v = (
-        "unavailable" if ce_un else str(certificates_k.get("total_certificate_packs") or "0")
+        UNAVAILABLE if ce_un else str(certificates_k.get("total_certificate_packs") or "0")
     )
-    cert_exp30_v = "unavailable" if ce_un else str(certificates_k.get("expiring_in_30_days") or "0")
+    cert_exp30_v = UNAVAILABLE if ce_un else str(certificates_k.get("expiring_in_30_days") or "0")
     apex_status = "-" if dr_un else str(dns_records.get("apex_protection_status") or "-")
-    audit_events = "unavailable" if au_un else str(audit_k.get("total_events") or "0")
+    audit_events = UNAVAILABLE if au_un else str(audit_k.get("total_events") or "0")
     story.append(
         kpi_row(
             [
@@ -277,7 +282,7 @@ def append_executive_summary(
     email_k = kpis.get("email") or {}
     email_enabled = bool(email_k.get("routing_enabled"))
     email_row_items: list[tuple[str, str] | tuple[str, str, str]] = [
-        ("DMARC Policy", str(email_k.get("dns_dmarc_policy") or "unavailable")),
+        ("DMARC Policy", str(email_k.get("dns_dmarc_policy") or UNAVAILABLE)),
         (
             "DMARC Pass Rate",
             format_percent_compact(email_k.get("dmarc_pass_rate_pct")),

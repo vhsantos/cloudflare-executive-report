@@ -8,7 +8,7 @@ from typing import Any
 
 from reportlab.platypus import Spacer
 
-from cloudflare_executive_report.common.constants import PDF_SPACE_MEDIUM_PT
+from cloudflare_executive_report.common.constants import PDF_SPACE_MEDIUM_PT, UNAVAILABLE
 from cloudflare_executive_report.pdf.charts import prepare_triple_line_daily_series
 from cloudflare_executive_report.pdf.layout_spec import EmailStreamLayout
 from cloudflare_executive_report.pdf.primitives import (
@@ -34,7 +34,7 @@ def collect_email_appendix_notes(email: dict[str, Any], *, profile: str) -> list
             "Email routing metrics are derived from Adaptive Groups and may be subject to "
             "eventual consistency or slight sampling in some views."
         )
-    if email.get("dns_dmarc_policy") == "unavailable":
+    if email.get("dns_dmarc_policy") == UNAVAILABLE:
         notes.append(
             "DMARC/SPF/DKIM status is checked via live DNS TXT records for the zone apex; "
             "results may vary if records were changed during the reporting period."
