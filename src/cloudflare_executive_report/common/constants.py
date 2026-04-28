@@ -140,3 +140,18 @@ MITIGATING_SECURITY_ACTIONS: frozenset[str] = frozenset(
         "interactive_challenge",
     }
 )
+
+
+# ============================================================================
+# ANALYTICS STREAMS
+# ============================================================================
+
+# Streams that have a dedicated PDF detail section implemented.
+# Order here defines the visual order in the PDF report.
+PDF_RENDERABLE_STREAMS: tuple[str, ...] = (
+    "dns",
+    "http",
+    "security",
+    "cache",
+    "email",
+)

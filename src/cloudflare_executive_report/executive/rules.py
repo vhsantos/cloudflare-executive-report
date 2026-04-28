@@ -260,13 +260,6 @@ def evaluate_comparison_gate(
     if not prev_zone:
         return _comparison_gate_blocked("comparison_first_report", filt)
 
-    # TODO: that should return a quick check if comparison is possible or not.
-    # We should put this as constante and evaluate this check to be much more efficient
-    # Core streams required for comparison
-    needed = ("http", "dns")
-    if any(as_dict(prev_zone).get(k) in (None, {}) for k in needed):
-        return _comparison_gate_blocked("comparison_missing_streams", filt)
-
     return ComparisonGate(allowed=True, blocked_takeaway=None)
 
 

@@ -602,4 +602,13 @@ def build_executive_summary(
         "nist_reference": nist_reference,
         "kpi_indicators": kpi_indicators,
         "warnings_count": len(warn) + len(categorized_takeaways.get(SECT_RISKS, [])),
+        "available_streams": {
+            "http": http is not None,
+            "security": security is not None,
+            "dns": dns is not None,
+            "email": email is not None,
+            "cache": cache is not None,
+            "audit": audit is not None,
+            "certificates": certificates is not None,
+        },
     }

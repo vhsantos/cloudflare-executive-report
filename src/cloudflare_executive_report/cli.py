@@ -25,7 +25,7 @@ from cloudflare_executive_report.cli_common import (
     zone_ids_for_report,
     zones_matching_filter,
 )
-from cloudflare_executive_report.common.constants import PROJECT_NAME
+from cloudflare_executive_report.common.constants import PDF_RENDERABLE_STREAMS, PROJECT_NAME
 from cloudflare_executive_report.common.logging_config import (
     effective_debug_enabled,
     setup_logging,
@@ -82,10 +82,18 @@ def _parse_sync_types(raw: str) -> frozenset[str]:
 def _resolve_types(cli_types: str | None, config_types: list[str]) -> frozenset[str]:
     """Determine active streams. CLI overrides Config. Empty or None means ALL."""
     if cli_types:
-        return _parse_sync_types(cli_types)
-    if config_types:
-        return frozenset(config_types)
-    return _parse_sync_types(default_types_csv())
+        found = set(_parse_sync_types(cli_types))
+    elif config_types:
+        found = set(config_types)
+    else:
+        found = set(_parse_sync_types(default_types_csv()))
+
+    if "dns" in found:
+        found.add("dns_records")
+    if "http" in found:
+        found.add("http_adaptive")
+
+    return frozenset(found)
 
 
 def _config_log_level(cfg: AppConfig) -> str:
@@ -94,10 +102,10 @@ def _config_log_level(cfg: AppConfig) -> str:
 
 
 def _pdf_streams_from_types(type_set: frozenset[str]) -> tuple[str, ...]:
-    """Order follows registry; only streams with PDF sections."""
+    """Order follows master list; return only streams requested in type_set."""
     out: list[str] = []
-    for sid in registered_stream_ids():
-        if sid in type_set and sid in ("dns", "http", "security", "cache", "email"):
+    for sid in PDF_RENDERABLE_STREAMS:
+        if sid in type_set:
             out.append(sid)
     return tuple(out)
 
@@ -273,9 +281,6 @@ def cmd_report(
         raise typer.Exit(exits.GENERAL_ERROR) from None
 
     type_set = _resolve_types(types, cfg.types)
-    if "http_adaptive" in _valid_sync_types() and "http_adaptive" not in type_set:
-        # Executive summary reliability KPIs require adaptive HTTP metrics.
-        type_set = frozenset(set(type_set) | {"http_adaptive"})
     pdf_streams = _pdf_streams_from_types(type_set)
 
     if not pdf_streams:
