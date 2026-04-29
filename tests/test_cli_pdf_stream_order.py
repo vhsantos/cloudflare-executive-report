@@ -9,8 +9,8 @@ def test_pdf_streams_order_dns_http_cache_security() -> None:
     assert _pdf_streams_from_types(frozenset({"dns", "http", "cache", "security"})) == (
         "dns",
         "http",
-        "cache",
         "security",
+        "cache",
     )
 
 

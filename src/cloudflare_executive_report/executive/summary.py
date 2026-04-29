@@ -345,6 +345,17 @@ def build_executive_summary(
                 end=pe,
             )
 
+    available_streams: dict[str, bool] = {
+        "http": http is not None,
+        "http_adaptive": http_adaptive is not None,
+        "security": security is not None,
+        "dns": dns is not None,
+        "dns_records": dns_records is not None,
+        "cache": cache is not None,
+        "email": email is not None,
+        "audit": audit is not None,
+        "certificates": certificates is not None,
+    }
     rule_out = build_executive_rule_output(
         current_zone=current_zone_payload,
         previous_zone=previous_zone,
@@ -352,6 +363,7 @@ def build_executive_summary(
         message_filter=msg_filt,
         gate_warning=gate.blocked_takeaway,
         comparison_baseline=comparison_baseline,
+        available_streams=available_streams,
     )
     augmented_takeaways = list(rule_out.takeaways)
     if len(warn) > VERDICT_WARN_THRESHOLD:
@@ -602,13 +614,5 @@ def build_executive_summary(
         "nist_reference": nist_reference,
         "kpi_indicators": kpi_indicators,
         "warnings_count": len(warn) + len(categorized_takeaways.get(SECT_RISKS, [])),
-        "available_streams": {
-            "http": http is not None,
-            "security": security is not None,
-            "dns": dns is not None,
-            "email": email is not None,
-            "cache": cache is not None,
-            "audit": audit is not None,
-            "certificates": certificates is not None,
-        },
+        "available_streams": available_streams,
     }

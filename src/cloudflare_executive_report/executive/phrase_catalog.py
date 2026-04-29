@@ -130,6 +130,14 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "win": {"text": "DNSSEC now active - spoofing protection enabled"},
         "action": {"text": "Enable DNSSEC - prevents DNS spoofing and domain hijacking."},
     },
+    "dns_only_with_proxied_records": {
+        "id": "DNS-002",
+        "service": "DNS",
+        "nist": [],
+        "observation": {
+            "text": "DNS-only report shows HTTP warnings because your zone has proxied DNS records that route traffic through Cloudflare's edge."
+        },
+    },
     "cert_expire_14": {
         "id": "CERT-001",
         "service": "Certificates",
