@@ -56,6 +56,19 @@ def evaluate(ctx: RuleContext) -> None:
     http = as_dict(ctx.current_zone.get("http"))
     dr = as_dict(ctx.current_zone.get("dns_records"))
 
+    zone_status = _str(zh, "zone_status")
+    # Check if zone is active
+    if zone_status != "active":
+        add_takeaway(ctx, SECT_RISKS, "critical", "zone_inactive", state="risk", status=zone_status)
+
+    # Proxied DNS but no traffic check (replaces hardcoded summary logic)
+    if (
+        as_int(dr.get("proxied_records")) > 0
+        and ctx.available_streams.get("http", False)
+        and as_int(http.get("total_requests")) == 0
+    ):
+        add_takeaway(ctx, SECT_RISKS, "warning", "proxied_no_traffic", state="risk")
+
     ssl_mode = _str(zh, "ssl_mode")
     security_level = _str(zh, "security_level")
     dnssec = _str(zh, "dnssec_status")

@@ -25,6 +25,7 @@ def _zone(*, zone_health: dict | None = None, **streams: dict | None) -> dict:
     base: dict = {
         "zone_health": zone_health
         or {
+            "zone_status": "active",
             "ssl_mode": "strict",
             "always_https": "on",
             "dnssec_status": "active",
@@ -204,7 +205,11 @@ class TestCertificateStreamGating:
     def test_cert_expiry_present_when_certificates_requested(self) -> None:
         out = build_executive_rule_output(
             current_zone=_zone(
-                certificates={"total_certificate_packs": 1, "expiring_in_30_days": 5}
+                certificates={
+                    "total_certificate_packs": 1,
+                    "expiring_in_30_days": 5,
+                    "soonest_expiry": "2026-05-15T00:00:00Z",
+                }
             ),
             previous_zone=None,
             comparison_allowed=False,

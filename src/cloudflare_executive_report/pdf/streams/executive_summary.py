@@ -116,8 +116,7 @@ def append_executive_summary(
 ) -> None:
     styles = get_render_context().styles
 
-    verdict_raw = str(summary.get("verdict") or "warning").lower()
-    verdict = "Active" if verdict_raw == "healthy" else verdict_raw.upper()
+    verdict = str(summary.get("verdict") or "warning").lower()
     story.append(
         _executive_header_block(
             zone_name=zone_name,

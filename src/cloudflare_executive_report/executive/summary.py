@@ -218,33 +218,38 @@ def _threats_mitigated(security: dict[str, Any]) -> int:
 
 
 def _verdict(
-    zone_health: dict[str, Any],
-    warnings: list[str],
-    http: dict[str, Any],
-    dns_records: dict[str, Any],
+    rule_out: ExecutiveRuleOutput,
+    warnings: list[str] | None = None,
 ) -> tuple[str, list[str]]:
-    """Classify zone rollup health for the executive verdict KPI."""
-    reasons: list[str] = []
-    critical = False
+    """Aggregate verdict severity from all generated takeaways.
 
-    zone_status = _as_str(zone_health.get("zone_status"))
-    if zone_status.lower() != "active":
-        reasons.append(f"zone_status={zone_status}")
-        critical = True
+    Returns (verdict, reasons) where verdict is one of:
+        "critical" - at least one critical severity rule
+        "warning" - at least one warning severity rule (no critical)
+        "active" - no critical or warning rules
+    """
+    critical_reasons = []
+    warning_reasons = []
 
-    has_proxied = as_int(dns_records.get("proxied_records")) > 0
-    has_http_traffic = as_int(http.get("total_requests")) > 0
-    if has_proxied and not has_http_traffic:
-        reasons.append("no_http_traffic")
+    for line in rule_out.takeaways:
+        phrase_data = get_phrase(line.phrase_key, line.state)
+        severity = phrase_data.get("severity", "none")
 
-    if len(warnings) > VERDICT_WARN_THRESHOLD:
-        reasons.append("warnings_present")
+        if severity == "critical":
+            critical_reasons.append(line.body)
+        elif severity == "warning":
+            warning_reasons.append(line.body)
 
-    if critical:
-        return "critical", reasons
-    if reasons:
-        return "warning", reasons
-    return "healthy", reasons
+    # Data quality warnings (cache misses, API errors)
+    if warnings and len(warnings) > VERDICT_WARN_THRESHOLD:
+        warning_reasons.append(f"Missing data for {len(warnings)} metrics")
+
+    if critical_reasons:
+        return "critical", critical_reasons
+    if warning_reasons:
+        return "warning", warning_reasons
+
+    return "active", []
 
 
 def _get_float(d: dict[str, Any], key: str) -> float | None:
@@ -300,7 +305,6 @@ def build_executive_summary(
     mitigated = _threats_mitigated(s)
     sampled_requests = as_int(s.get("http_requests_sampled"))
     not_mitigated = as_int(s.get("not_mitigated_sampled"))
-    verdict, reasons = _verdict(zh, warn, h, dr)
 
     ssl_mode = _as_str(zh.get("ssl_mode"))
     always_https = _as_str(zh.get("always_https"))
@@ -365,6 +369,7 @@ def build_executive_summary(
         comparison_baseline=comparison_baseline,
         available_streams=available_streams,
     )
+    verdict, reasons = _verdict(rule_out, warn)
     augmented_takeaways = list(rule_out.takeaways)
     if len(warn) > VERDICT_WARN_THRESHOLD:
         missing_data_line = exec_msg(

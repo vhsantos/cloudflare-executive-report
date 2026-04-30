@@ -24,16 +24,30 @@ def evaluate(ctx: RuleContext) -> None:
         return
 
     ce = as_dict(ctx.current_zone.get("certificates"))
-    exp_days = as_int(ce.get("expiring_in_30_days"))
     cert_packs = as_int(ce.get("total_certificate_packs"))
 
     if cert_packs == 0:
         add_takeaway(ctx, SECT_RISKS, "warning", "cert_presence", state="risk")
 
-    if 0 < exp_days <= CERT_EXPIRY_CRITICAL_DAYS:
-        add_takeaway(ctx, SECT_RISKS, "critical", "cert_expire_14", state="risk", days=exp_days)
-    elif CERT_EXPIRY_CRITICAL_DAYS < exp_days <= CERT_EXPIRY_WARNING_DAYS:
-        add_takeaway(ctx, SECT_RISKS, "warning", "cert_expire_30", state="risk", days=exp_days)
+    soonest = ce.get("soonest_expiry")
+    if not soonest:
+        return
 
-    if ce.get("unavailable") is not True and exp_days > 0:
+    from cloudflare_executive_report.common.dates import parse_ymd, utc_today
+
+    # soonest_expiry is ISO 8601 (YYYY-MM-DDTHH:MM:SSZ)
+    try:
+        expiry_date = parse_ymd(soonest[:10])
+        days_left = (expiry_date - utc_today()).days
+    except (ValueError, TypeError):
+        return
+
+    if days_left <= 0:
+        add_takeaway(ctx, SECT_RISKS, "critical", "cert_expired", state="risk")
+    elif days_left <= CERT_EXPIRY_CRITICAL_DAYS:
+        add_takeaway(ctx, SECT_RISKS, "critical", "cert_expire_14", state="risk", days=days_left)
+    elif days_left <= CERT_EXPIRY_WARNING_DAYS:
+        add_takeaway(ctx, SECT_RISKS, "warning", "cert_expire_30", state="risk", days=days_left)
+
+    if ce.get("unavailable") is not True and days_left <= CERT_EXPIRY_WARNING_DAYS:
         add_action(ctx, "info", "cert_expire_30", state="action")
