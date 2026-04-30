@@ -103,12 +103,12 @@ def _as_str(v: Any, *, default: str = UNAVAILABLE) -> str:
 
 def _kpi_indicator(
     *,
-    current: float,
+    current: float | None,
     previous: float | None,
-    mode: str,
+    mode: str = "pct",
     better_when_lower: bool = False,
 ) -> str:
-    if previous is None:
+    if previous is None or current is None:
         return ""
 
     def _prefix(improved: bool) -> str:

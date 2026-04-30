@@ -66,7 +66,11 @@ def test_optional_timing_short_circuits_on_unknown_field():
 def test_optional_origin_response_ms_parser():
     class FakeClient:
         def graphql(self, _q: str, _v: dict[str, str]) -> dict:
-            return {"viewer": {"zones": [{"tm": [{"avg": {"originResponseDurationMs": 264.18}}]}]}}
+            return {
+                "viewer": {
+                    "zones": [{"tm": [{"count": 1, "sum": {"originResponseDurationMs": 264.18}}]}]
+                }
+            }
 
     v = ha._fetch_optional_origin_response_ms(
         FakeClient(),
