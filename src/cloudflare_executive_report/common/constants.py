@@ -116,6 +116,14 @@ AUDIT_EVENTS_THRESHOLD: int = 50
 
 
 # ============================================================================
+# SENTINELS / PLACEHOLDERS
+# ============================================================================
+
+SKIPPED: str = "skipped"
+UNAVAILABLE: str = "N/A"
+
+
+# ============================================================================
 # SECURITY ACTIONS (shared between fetcher and executive summary)
 # ============================================================================
 
@@ -131,4 +139,19 @@ MITIGATING_SECURITY_ACTIONS: frozenset[str] = frozenset(
         "managed_challenge",
         "interactive_challenge",
     }
+)
+
+
+# ============================================================================
+# ANALYTICS STREAMS
+# ============================================================================
+
+# Streams that have a dedicated PDF detail section implemented.
+# Order here defines the visual order in the PDF report.
+PDF_RENDERABLE_STREAMS: tuple[str, ...] = (
+    "dns",
+    "http",
+    "security",
+    "cache",
+    "email",
 )

@@ -307,46 +307,11 @@ def write_report_pdf(
 
             snapshot_zone = _find_zone_snapshot(report_snapshot, zone_id)
 
+            # Supplemental streams for executive summary and appendix
             if need_executive_build:
-                loaded_http_adaptive = load_http_adaptive_for_range(
-                    cache_root,
-                    zone_id,
-                    zone_name,
-                    spec.start,
-                    spec.end,
-                    top=spec.top,
-                )
-                zone_warnings.extend(loaded_http_adaptive.warnings)
-                loaded_dns_records = load_dns_records_for_range(
-                    cache_root,
-                    zone_id,
-                    zone_name,
-                    spec.start,
-                    spec.end,
-                    top=spec.top,
-                )
-                zone_warnings.extend(loaded_dns_records.warnings)
-                loaded_audit = load_audit_for_range(
-                    cache_root,
-                    zone_id,
-                    zone_name,
-                    spec.start,
-                    spec.end,
-                    top=spec.top,
-                )
-                zone_warnings.extend(loaded_audit.warnings)
-                loaded_certificates = load_certificates_for_range(
-                    cache_root,
-                    zone_id,
-                    zone_name,
-                    spec.start,
-                    spec.end,
-                    top=spec.top,
-                )
-                zone_warnings.extend(loaded_certificates.warnings)
-
-                if loaded_email is None:
-                    loaded_email = load_email_for_range(
+                # http_adaptive is a dependency for the http summary
+                if "http" in spec.streams:
+                    loaded_http_adaptive = load_http_adaptive_for_range(
                         cache_root,
                         zone_id,
                         zone_name,
@@ -354,7 +319,41 @@ def write_report_pdf(
                         spec.end,
                         top=spec.top,
                     )
-                zone_warnings.extend(loaded_email.warnings)
+                    zone_warnings.extend(loaded_http_adaptive.warnings)
+
+                # dns_records is a dependency for the dns summary
+                if "dns" in spec.streams:
+                    loaded_dns_records = load_dns_records_for_range(
+                        cache_root,
+                        zone_id,
+                        zone_name,
+                        spec.start,
+                        spec.end,
+                        top=spec.top,
+                    )
+                    zone_warnings.extend(loaded_dns_records.warnings)
+
+                if "audit" in spec.streams:
+                    loaded_audit = load_audit_for_range(
+                        cache_root,
+                        zone_id,
+                        zone_name,
+                        spec.start,
+                        spec.end,
+                        top=spec.top,
+                    )
+                    zone_warnings.extend(loaded_audit.warnings)
+
+                if "certificates" in spec.streams:
+                    loaded_certificates = load_certificates_for_range(
+                        cache_root,
+                        zone_id,
+                        zone_name,
+                        spec.start,
+                        spec.end,
+                        top=spec.top,
+                    )
+                    zone_warnings.extend(loaded_certificates.warnings)
 
                 if snapshot_zone and isinstance(snapshot_zone.get("executive_summary"), dict):
                     executive_summary = dict(snapshot_zone.get("executive_summary") or {})

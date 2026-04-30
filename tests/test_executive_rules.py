@@ -225,6 +225,7 @@ def test_action_rules_migrated_from_summary_logic():
     current_zone = {
         "zone_name": "example.com",
         "zone_health": {
+            "zone_status": "active",
             "always_https": "off",
             "dnssec_status": "disabled",
             "ssl_mode": "full",
@@ -236,7 +237,7 @@ def test_action_rules_migrated_from_summary_logic():
         "http_adaptive": {},
         "dns_records": {"apex_unproxied_a_aaaa": 1},
         "audit": {"total_events": 51},
-        "certificates": {"expiring_in_30_days": 5},
+        "certificates": {"expiring_in_30_days": 5, "soonest_expiry": "2026-05-15T00:00:00Z"},
     }
     out = build_executive_rule_output(
         current_zone=current_zone,
@@ -270,6 +271,7 @@ def test_all_action_phrase_keys_are_reachable_by_rules():
     flex_zone = {
         "zone_name": "example.com",
         "zone_health": {
+            "zone_status": "active",
             "always_https": "off",
             "dnssec_status": "disabled",
             "ssl_mode": "flexible",
@@ -287,11 +289,12 @@ def test_all_action_phrase_keys_are_reachable_by_rules():
         "http_adaptive": {},
         "dns_records": {"apex_unproxied_a_aaaa": 1},
         "audit": {"total_events": 51},
-        "certificates": {"expiring_in_30_days": 5},
+        "certificates": {"expiring_in_30_days": 5, "soonest_expiry": "2026-05-15T00:00:00Z"},
     }
     full_zone = {
         "zone_name": "example.com",
         "zone_health": {
+            "zone_status": "active",
             "always_https": "off",
             "dnssec_status": "disabled",
             "ssl_mode": "full",
@@ -303,7 +306,7 @@ def test_all_action_phrase_keys_are_reachable_by_rules():
         "http_adaptive": {},
         "dns_records": {"apex_unproxied_a_aaaa": 1},
         "audit": {"total_events": 51},
-        "certificates": {"expiring_in_30_days": 5},
+        "certificates": {"expiring_in_30_days": 5, "soonest_expiry": "2026-05-15T00:00:00Z"},
     }
     keys_flex = {
         m.phrase_key
@@ -517,7 +520,7 @@ def test_min_tls_version_weak_takeaway() -> None:
 
 
 def test_phrases_include_metadata_fields() -> None:
-    """Every phrase entry must carry id/service/nist and at least one state dict."""
+    """Every phrase entry must carry id/service/nist and at least one state dict with severity."""
     from cloudflare_executive_report.executive.phrase_catalog import RULE_CATALOG
 
     for key, entry in RULE_CATALOG.items():
@@ -526,11 +529,17 @@ def test_phrases_include_metadata_fields() -> None:
         assert "service" in entry, key
         assert "nist" in entry, key
         assert isinstance(entry["nist"], list), key
-        has_state = any(
-            isinstance(entry.get(state), dict)
-            for state in ("risk", "win", "action", "comparison", "observation")
-        )
-        assert has_state, key
+
+        found_states = 0
+        for state in ("risk", "win", "action", "comparison", "observation"):
+            s_dict = entry.get(state)
+            if isinstance(s_dict, dict):
+                found_states += 1
+                # If severity is present, it must be valid
+                if "severity" in s_dict:
+                    assert s_dict["severity"] in ("critical", "warning", "none"), f"{key}.{state}"
+
+        assert found_states > 0, key
 
 
 def test_executive_message_filter_regex() -> None:

@@ -98,9 +98,10 @@ query HttpAdaptiveOriginTimingAvg($zoneTag: String!, $datetime_geq: Time!, $date
           requestSource: "eyeball"
         }
       ) {
-        avg {
+        sum {
           originResponseDurationMs
         }
+        count
       }
     }
   }
@@ -214,11 +215,14 @@ def _fetch_optional_origin_response_ms(
         rows = adaptive_groups_rows(data, "tm")
         if not rows:
             return None
-        avg = rows[0].get("avg") or {}
-        if not isinstance(avg, dict):
+        count = int(rows[0].get("count") or 0)
+        s = rows[0].get("sum") or {}
+        if not isinstance(s, dict):
             return None
-        v = avg.get("originResponseDurationMs")
-        return float(v) if v is not None else None
+        v = s.get("originResponseDurationMs")
+        if v is not None and count > 0:
+            return float(v) / count
+        return None
     except (CloudflareAPIError, CloudflareAuthError):
         return None
 

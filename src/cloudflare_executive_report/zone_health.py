@@ -8,11 +8,9 @@ from typing import Any
 from cloudflare import APIStatusError, PermissionDeniedError
 
 from cloudflare_executive_report.cf_client import CloudflareClient
+from cloudflare_executive_report.common.constants import SKIPPED, UNAVAILABLE
 
 log = logging.getLogger(__name__)
-
-SKIPPED = "skipped"
-UNAVAILABLE = "unavailable"
 
 
 def _warn(warnings: list[str], msg: str) -> None:

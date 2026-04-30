@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from cloudflare_executive_report.common.constants import PDF_RENDERABLE_STREAMS
+
 
 @dataclass(frozen=True)
 class DnsStreamLayout:
@@ -72,8 +74,7 @@ class ReportSpec:
     zone_ids: list[str]
     start: str
     end: str
-    # TODO: Why we need theses ?? What happen with the others streams ??
-    streams: tuple[str, ...] = ("dns", "http", "email")
+    streams: tuple[str, ...] = PDF_RENDERABLE_STREAMS
     include_executive_summary: bool = True
     top: int = 10
     dns_layout: DnsStreamLayout = field(default_factory=DnsStreamLayout)

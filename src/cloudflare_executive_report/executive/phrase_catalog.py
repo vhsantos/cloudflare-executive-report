@@ -9,11 +9,16 @@ the rendered body using :func:`format_line_with_severity_prefix`.
 
 Each entry holds the display template plus check id, service label, and optional NIST
 SP 800-53 controls (single source of truth for new rules).
+
+Verdict severity is defined per state using the optional ``severity`` field:
+    - "critical" - causes Operational Status to become Critical
+    - "warning" - causes Operational Status to become Warning
+    - "none" - does not affect Operational Status (default if missing)
 """
 
 from __future__ import annotations
 
-from typing import Any, TypedDict, cast
+from typing import Any, Literal, TypedDict, cast
 
 
 class PhraseStateEntry(TypedDict, total=False):
@@ -21,6 +26,7 @@ class PhraseStateEntry(TypedDict, total=False):
 
     text: str
     weight: int
+    severity: Literal["critical", "warning", "none"]
 
 
 class PhraseEntry(TypedDict, total=False):
@@ -117,7 +123,11 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "id": "APEX-001",
         "service": "DNS",
         "nist": ["SC-7", "SC-20"],
-        "risk": {"text": "Apex record not proxied - origin IP exposed to attackers", "weight": 7},
+        "risk": {
+            "text": "Apex record not proxied - origin IP exposed to attackers",
+            "weight": 7,
+            "severity": "warning",
+        },
         "win": {"text": "Apex record now proxied - origin IP protected"},
         "action": {"text": "Enable proxy on apex A/AAAA record - hides origin IP."},
         "comparison": {"text": "Security regression: apex changed from {previous} to {current}"},
@@ -126,35 +136,83 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "id": "DNS-001",
         "service": "DNS",
         "nist": ["SC-20"],
-        "risk": {"text": "DNSSEC disabled - domain spoofing risk", "weight": 7},
+        "risk": {
+            "text": "DNSSEC disabled - domain spoofing risk",
+            "weight": 7,
+            "severity": "warning",
+        },
         "win": {"text": "DNSSEC now active - spoofing protection enabled"},
         "action": {"text": "Enable DNSSEC - prevents DNS spoofing and domain hijacking."},
+    },
+    "dns_only_with_proxied_records": {
+        "id": "DNS-002",
+        "service": "DNS",
+        "nist": [],
+        "observation": {
+            "text": "DNS-only report shows HTTP warnings because your zone has proxied DNS records that route traffic through Cloudflare's edge."
+        },
+    },
+    "proxied_no_traffic": {
+        "id": "DNS-003",
+        "service": "DNS",
+        "nist": ["SI-4"],
+        "risk": {
+            "text": "Proxied DNS records but no HTTP traffic detected - check configuration.",
+            "weight": 5,
+            "severity": "warning",
+        },
     },
     "cert_expire_14": {
         "id": "CERT-001",
         "service": "Certificates",
         "nist": ["SC-12", "SC-13"],
-        "risk": {"text": "Certificate expires in {days} days - renew immediately", "weight": 10},
+        "risk": {
+            "text": "Certificate expires in {days} days - renew immediately",
+            "weight": 10,
+            "severity": "warning",
+        },
         "action": {"text": "Renew TLS certificate before expiry - prevents outages."},
     },
     "cert_expire_30": {
         "id": "CERT-002",
         "service": "Certificates",
         "nist": ["SC-12", "SC-13"],
-        "risk": {"text": "Certificate expires in {days} days - schedule renewal", "weight": 7},
+        "risk": {
+            "text": "Certificate expires in {days} days - schedule renewal",
+            "weight": 7,
+            "severity": "warning",
+        },
         "action": {"text": "Renew TLS certificate before expiry - prevents outages."},
     },
     "cert_presence": {
         "id": "CERT-003",
         "service": "Certificates",
         "nist": ["SC-8", "SC-12"],
-        "risk": {"text": "No SSL certificate deployed - traffic not encrypted", "weight": 6},
+        "risk": {
+            "text": "No SSL certificate deployed - traffic not encrypted",
+            "weight": 6,
+            "severity": "warning",
+        },
+    },
+    "cert_expired": {
+        "id": "CERT-004",
+        "service": "Certificates",
+        "nist": ["SC-12", "SC-13"],
+        "risk": {
+            "text": "Certificate has expired - HTTPS is broken!",
+            "weight": 10,
+            "severity": "critical",
+        },
     },
     "ssl_mode_off": {
         "id": "TLS-001",
         "service": "SSL/TLS",
         "nist": ["SC-8", "SC-13"],
-        "risk": {"text": "TLS/SSL mode Off - enable HTTPS immediately.", "weight": 10},
+        "risk": {
+            "text": "TLS/SSL mode Off - enable HTTPS immediately.",
+            "weight": 10,
+            "severity": "warning",
+        },
         "action": {
             "text": "Change SSL/TLS mode to Full (Strict) for end-to-end encryption with certificate validation."
         },
@@ -166,6 +224,7 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "risk": {
             "text": "TLS/SSL mode Flexible (HTTP may reach origin) - move to Full (Strict) now.",
             "weight": 10,
+            "severity": "warning",
         },
         "action": {
             "text": "Change SSL/TLS mode to Full (Strict) for end-to-end encryption with certificate validation."
@@ -181,6 +240,7 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "risk": {
             "text": "TLS/SSL mode Full without CA-validated origin certificate - upgrade to Full (Strict).",
             "weight": 8,
+            "severity": "warning",
         },
         "action": {
             "text": "Upgrade TLS/SSL mode from Full to Full (Strict) - enables CA certificate validation."
@@ -194,6 +254,7 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "risk": {
             "text": "Minimum TLS version is {version} at edge - raise to at least 1.2 immediately.",
             "weight": 9,
+            "severity": "warning",
         },
         "observation": {
             "text": "Minimum TLS version is 1.2. Evaluate TLS 1.3 adoption when client compatibility allows."
@@ -206,6 +267,7 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "risk": {
             "text": "TLS 1.3 is not enabled at edge - enable for stronger defaults.",
             "weight": 5,
+            "severity": "warning",
         },
     },
     "hsts": {
@@ -215,6 +277,7 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "risk": {
             "text": "HSTS disabled - HTTPS not enforced. Visitors may connect over insecure HTTP.",
             "weight": 8,
+            "severity": "warning",
         },
         "observation": {"text": "HSTS enabled but configuration is suboptimal: {issues}."},
     },
@@ -244,14 +307,22 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "id": "WAF-001",
         "service": "WAF",
         "nist": ["SI-3", "SI-4"],
-        "risk": {"text": "Web Application Firewall disabled - no attack protection", "weight": 9},
+        "risk": {
+            "text": "Web Application Firewall disabled - no attack protection",
+            "weight": 9,
+            "severity": "warning",
+        },
         "action": {"text": "Review Web Application Firewall (WAF) and rate-limiting baseline."},
     },
     "ddos_protection": {
         "id": "SEC-001",
         "service": "Security",
         "nist": ["SC-7", "SI-4"],
-        "risk": {"text": "DDoS protection disabled - availability at risk", "weight": 9},
+        "risk": {
+            "text": "DDoS protection disabled - availability at risk",
+            "weight": 9,
+            "severity": "warning",
+        },
     },
     "security_level_off": {
         "id": "SEC-002",
@@ -260,6 +331,7 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "risk": {
             "text": "Cloudflare Security Level is off or essentially off - known threats are barely challenged.",
             "weight": 10,
+            "severity": "warning",
         },
         "action": {
             "text": "Enable Cloudflare automatic Security Level (Security app) - avoid off or essentially off."
@@ -286,7 +358,8 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "service": "Security Level",
         "nist": ["SI-4"],
         "observation": {
-            "text": "Cloudflare Under Attack mode is on - confirm this is intentional and temporary."
+            "text": "Cloudflare Under Attack mode is on - confirm this is intentional and temporary.",
+            "severity": "warning",
         },
     },
     "browser_integrity": {
@@ -296,6 +369,7 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "risk": {
             "text": "Browser Integrity Check is off - consider enabling to reduce automated abuse.",
             "weight": 6,
+            "severity": "warning",
         },
     },
     "email_obfuscation": {
@@ -311,7 +385,8 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "service": "Reliability",
         "nist": ["SI-4"],
         "observation": {
-            "text": "Origin overloaded: high error rate ({err_pct}%) with slow response ({latency_ms}ms)"
+            "text": "Origin overloaded: high error rate ({err_pct}%) with slow response ({latency_ms}ms)",
+            "severity": "warning",
         },
     },
     "cache_efficiency": {
@@ -319,7 +394,8 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "service": "Performance",
         "nist": ["CM-6"],
         "observation": {
-            "text": "Caching inefficient: {cache_hit}% hit rate with {bandwidth_gb}GB bandwidth - cost impact"
+            "text": "Caching inefficient: {cache_hit}% hit rate with {bandwidth_gb}GB bandwidth - cost impact",
+            "severity": "warning",
         },
         "comparison": {"text": "Cache efficiency dropped: {pp}% decrease - review caching rules"},
     },
@@ -328,7 +404,8 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "service": "DNS",
         "nist": ["SC-7", "SI-4"],
         "observation": {
-            "text": "Origin exposed: apex not proxied, but DDoS protection requires proxy"
+            "text": "Origin exposed: apex not proxied, but DDoS protection requires proxy",
+            "severity": "warning",
         },
     },
     "threat_activity": {
@@ -344,7 +421,8 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "service": "Audit",
         "nist": ["AU-2", "SI-4"],
         "observation": {
-            "text": "Unusual activity: {events} audit events in period - review if expected"
+            "text": "Unusual activity: {events} audit events in period - review if expected",
+            "severity": "warning",
         },
         "action": {"text": "Review audit log - check for unauthorized changes."},
     },
@@ -352,7 +430,10 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "id": "COR-006",
         "service": "Reliability",
         "nist": ["SI-4"],
-        "observation": {"text": "5xx error rate is {err_pct}% - investigate immediately."},
+        "observation": {
+            "text": "5xx error rate is {err_pct}% - investigate immediately.",
+            "severity": "warning",
+        },
     },
     "email_dmarc_none": {
         "id": "EMAIL-001",
@@ -361,6 +442,7 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "risk": {
             "text": "DMARC policy is None. Attackers can send email as your domain.",
             "weight": 10,
+            "severity": "warning",
         },
         "action": {"text": "Set DMARC policy to quarantine, monitor reports, then move to reject."},
     },
@@ -371,6 +453,7 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "risk": {
             "text": "DMARC policy is Quarantine. Suspicious emails go to spam but are not fully blocked.",
             "weight": 3,
+            "severity": "warning",
         },
         "action": {"text": "Upgrade DMARC policy to reject after verifying legitimate senders."},
     },
@@ -387,6 +470,7 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "risk": {
             "text": "SPF record missing. Unauthorized senders can spoof domain",
             "weight": 8,
+            "severity": "warning",
         },
         "action": {
             "text": "Add an SPF TXT record. Start with ~all, then move to -all after verification."
@@ -396,7 +480,10 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "id": "EMAIL-005",
         "service": "Email",
         "nist": ["SI-7", "SC-7"],
-        "observation": {"text": "SPF is Soft Fail (~all). Unauthorized senders not fully blocked"},
+        "observation": {
+            "text": "SPF is Soft Fail (~all). Unauthorized senders not fully blocked",
+            "severity": "warning",
+        },
         "action": {"text": "Move to hard fail (-all) after verifying all legitimate senders."},
     },
     "email_spf_hardfail": {
@@ -414,6 +501,7 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "risk": {
             "text": "DKIM missing. Outbound email authenticity cannot be verified.",
             "weight": 8,
+            "severity": "warning",
         },
         "action": {"text": "Enable DKIM signing to ensure message integrity."},
     },
@@ -439,13 +527,25 @@ RULE_CATALOG: dict[str, PhraseEntry] = {
         "id": "EMAIL-010",
         "service": "Email",
         "nist": ["AU-6", "SI-4"],
-        "observation": {"text": "High DMARC fail rate: {fail_pct}%. Review unauthorized senders"},
+        "observation": {
+            "text": "High DMARC fail rate: {fail_pct}%. Review unauthorized senders",
+            "severity": "warning",
+        },
     },
     "email_routing_drops": {
         "id": "EMAIL-011",
         "service": "Email",
         "nist": ["SI-4"],
-        "observation": {"text": "Email routing dropped {dropped} messages. Review routing rules"},
+        "observation": {
+            "text": "Email routing dropped {dropped} messages. Review routing rules",
+            "severity": "warning",
+        },
+    },
+    "zone_inactive": {
+        "id": "ZONE-001",
+        "service": "Platform",
+        "nist": [],
+        "risk": {"text": "Zone status is {status}", "weight": 10, "severity": "critical"},
     },
 }
 
@@ -458,7 +558,16 @@ PREFIXES: dict[str, str] = {
 
 
 def get_phrase(phrase_key: str, state: str) -> dict[str, Any]:
-    """Return phrase payload for one phrase key and explicit state."""
+    """Return phrase payload for one phrase key and explicit state.
+
+    The returned dict includes:
+        - text: formatted message string
+        - weight: integer 1-10 (only for risk state, otherwise 0)
+        - id: check ID (e.g., "TLS-001")
+        - service: service name (e.g., "SSL/TLS")
+        - nist: list of NIST control IDs
+        - severity: verdict severity ("critical", "warning", or "none")
+    """
     entry = RULE_CATALOG[phrase_key]
     state_entry = cast(dict[str, Any], entry).get(state)
     if not isinstance(state_entry, dict):
@@ -468,6 +577,8 @@ def get_phrase(phrase_key: str, state: str) -> dict[str, Any]:
         raise ValueError(f"Missing text for phrase key {phrase_key!r} state {state!r}")
     if state not in ("risk", "win", "action", "comparison", "observation"):
         raise ValueError(f"Invalid phrase state {state!r}")
+
+    # Weight is only meaningful for risk state (used in security posture score)
     if state != "risk":
         weight = 0
     else:
@@ -475,12 +586,19 @@ def get_phrase(phrase_key: str, state: str) -> dict[str, Any]:
         if not isinstance(raw_weight, int) or not (1 <= raw_weight <= 10):
             raise ValueError(f"RULE_CATALOG[{phrase_key!r}].{state}.weight must be integer 1..10")
         weight = raw_weight
+
+    # Severity comes directly from the state entry, defaulting to "none"
+    severity = state_entry.get("severity", "none")
+    if severity not in ("critical", "warning"):
+        severity = "none"
+
     return {
         "text": text,
         "weight": weight,
         "id": entry["id"],
         "service": entry["service"],
         "nist": entry["nist"],
+        "severity": severity,
     }
 
 
