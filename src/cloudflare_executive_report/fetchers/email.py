@@ -76,10 +76,11 @@ query EmailRoutingDay($zoneTag: String!, $since: String!, $until: String!) {{
 def _parse_dns_policies(
     client: CloudflareClient, zone_id: str, zone_name: str
 ) -> tuple[str, str, bool]:
-    """Parse DMARC, SPF, and DKIM policies from DNS TXT records.
+    """Parse DMARC, SPF, and DKIM policies from DNS records.
 
-    Returns:
-        (dmarc_policy, spf_policy, dkim_configured)
+    DKIM can be configured via:
+    - TXT records (self-hosted DKIM)
+    - CNAME records (Microsoft 365, Google Workspace, etc.)
     """
     dmarc_policy = "none"
     spf_policy = "none"
@@ -90,16 +91,25 @@ def _parse_dns_policies(
         return UNAVAILABLE, UNAVAILABLE, False
 
     try:
+        # Fetch BOTH TXT and CNAME records
         txt_records = client.list_dns_records(zone_id, per_page=500, record_type="TXT")
+        cname_records = client.list_dns_records(zone_id, per_page=500, record_type="CNAME")
+        all_records = txt_records + cname_records
     except Exception as e:
-        log.debug("Failed to list TXT records for email policies: %s", e)
+        log.debug("Failed to list DNS records for email policies: %s", e)
         return UNAVAILABLE, UNAVAILABLE, False
 
-    for rec in txt_records:
+    for rec in all_records:
         name = str(rec.get("name") or "").strip().lower()
         content = str(rec.get("content") or "").strip().lower().strip('"')
+        record_type = str(rec.get("type") or "").upper()
 
-        if name == f"_dmarc.{zone_name}" and content.startswith("v=dmarc1"):
+        # DMARC (always TXT)
+        if (
+            record_type == "TXT"
+            and name == f"_dmarc.{zone_name}"
+            and content.startswith("v=dmarc1")
+        ):
             # e.g., "v=DMARC1; p=reject; ..."
             parts = content.split(";")
             for part in parts:
@@ -108,7 +118,8 @@ def _parse_dns_policies(
                     dmarc_policy = part[2:].strip()
                     break
 
-        elif name == zone_name and content.startswith("v=spf1"):
+        # SPF (always TXT)
+        elif record_type == "TXT" and name == zone_name and content.startswith("v=spf1"):
             # e.g., "v=spf1 include:_spf.mx.cloudflare.net ~all"
             if "-all" in content:
                 spf_policy = "hardfail"
@@ -121,8 +132,15 @@ def _parse_dns_policies(
             else:
                 spf_policy = "custom"
 
-        elif name.endswith(f"._domainkey.{zone_name}") and content.startswith("v=dkim1"):
-            dkim_configured = True
+        # DKIM - Check both TXT and CNAME
+        elif name.endswith(f"._domainkey.{zone_name}"):
+            if record_type == "TXT" and content.startswith("v=dkim1"):
+                # Self-hosted DKIM (TXT record with public key)
+                dkim_configured = True
+            elif record_type == "CNAME":
+                # Provider-managed DKIM (Microsoft 365, Google Workspace, etc.)
+                # CNAME points to provider's DKIM key
+                dkim_configured = True
 
     return dmarc_policy, spf_policy, dkim_configured
 
