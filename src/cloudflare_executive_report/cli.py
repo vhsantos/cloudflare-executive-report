@@ -9,6 +9,7 @@ from pathlib import Path
 import typer
 
 from cloudflare_executive_report import exits
+from cloudflare_executive_report.ai.formatter import print_ai_summary
 from cloudflare_executive_report.cf_client import (
     CloudflareAPIError,
     CloudflareAuthError,
@@ -258,6 +259,14 @@ def cmd_report(
         None, "--history-dir", help="Override JSON/history output root directory for this run."
     ),
     config: Path | None = typer.Option(None, "--config", help="Override config path."),
+    ai_summary: bool | None = typer.Option(
+        None,
+        "--ai-summary",
+        help=(
+            "Generate an AI-powered plain-text executive summary from the multi-zone "
+            "portfolio. Printed to terminal, or appended to email body when --email is used."
+        ),
+    ),
 ) -> None:
     """Sync cache (unless --cache-only) then build a PDF.
 
@@ -276,6 +285,10 @@ def cmd_report(
     try:
         cfg = load_app_config(config)
         validate_api_token(cfg)
+
+        # Resolve AI summary setting (CLI overrides config)
+        if ai_summary is not None:
+            cfg.ai_summary.enabled = ai_summary
     except CliConfigError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.GENERAL_ERROR) from None
@@ -318,9 +331,6 @@ def cmd_report(
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.INVALID_PARAMS) from None
 
-    if history_dir is not None:
-        cfg.history_dir = str(history_dir)
-
     setup_logging(
         verbose_count=verbose, quiet=quiet, log_level=_config_log_level(cfg), log_file=log_file
     )
@@ -361,11 +371,16 @@ def cmd_report(
         cache_only=cache_only,
         refresh_health=refresh_health,
         send_email=email,
+        ai_summary_enabled=cfg.ai_summary.enabled,
     )
     if outcome.stderr:
         typer.echo(outcome.stderr, err=True)
     if outcome.email_sent_line:
         typer.echo(outcome.email_sent_line)
+    if outcome.ai_summary and not email:
+        print_ai_summary(outcome.ai_summary)
+    elif cfg.ai_summary.enabled and not outcome.ai_summary and not outcome.stderr:
+        typer.echo("Warning: AI summary generation failed. Run with -v for details.", err=True)
     raise typer.Exit(outcome.exit_code)
 
 

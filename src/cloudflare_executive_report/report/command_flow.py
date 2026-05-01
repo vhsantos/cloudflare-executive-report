@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from cloudflare_executive_report import exits
+from cloudflare_executive_report.ai import generate_ai_summary
 from cloudflare_executive_report.common.period_resolver import build_data_fingerprint
 from cloudflare_executive_report.common.report_cache import report_period_streams_cache_complete
 from cloudflare_executive_report.config import AppConfig
@@ -36,6 +37,7 @@ class ReportPdfOutcome:
     exit_code: int
     stderr: str | None = None
     email_sent_line: str | None = None
+    ai_summary: str | None = None
 
 
 def _finalize_pdf_and_optional_email(
@@ -46,16 +48,19 @@ def _finalize_pdf_and_optional_email(
     period_end: str,
     zone_keys: list[str],
     send_email: bool,
+    ai_summary: str | None = None,
 ) -> ReportPdfOutcome:
     """Return success outcome, optionally sending the PDF via SMTP."""
     if not send_email:
         return ReportPdfOutcome(
             exit_code=exits.SUCCESS,
+            ai_summary=ai_summary,
         )
     if not cfg.email.enabled:
         return ReportPdfOutcome(
             exit_code=exits.INVALID_PARAMS,
             stderr="Error: --email requires email.enabled: true in config.",
+            ai_summary=ai_summary,
         )
     from cloudflare_executive_report.email.smtp import send_pdf_report_email
 
@@ -66,13 +71,17 @@ def _finalize_pdf_and_optional_email(
             period_start=period_start,
             period_end=period_end,
             zone_count=len(zone_keys),
+            ai_summary=ai_summary,
         )
     except ValueError as e:
-        return ReportPdfOutcome(exit_code=exits.INVALID_PARAMS, stderr=str(e))
+        return ReportPdfOutcome(
+            exit_code=exits.INVALID_PARAMS, stderr=str(e), ai_summary=ai_summary
+        )
     except (OSError, smtplib.SMTPException, ssl.SSLError) as e:
         return ReportPdfOutcome(
             exit_code=exits.GENERAL_ERROR,
             stderr=f"Email send failed: {e}",
+            ai_summary=ai_summary,
         )
     shown = ", ".join(r.strip() for r in cfg.email.recipients if str(r).strip())
     if len(shown) > 200:
@@ -80,6 +89,7 @@ def _finalize_pdf_and_optional_email(
     return ReportPdfOutcome(
         exit_code=exits.SUCCESS,
         email_sent_line=f"Sent report by email to {shown}",
+        ai_summary=ai_summary,
     )
 
 
@@ -98,6 +108,7 @@ def run_report_pdf_command(
     cache_only: bool,
     refresh_health: bool,
     send_email: bool = False,
+    ai_summary_enabled: bool = False,
 ) -> ReportPdfOutcome:
     """Execute report flow: optional sync/health refresh, then write PDF."""
     try:
@@ -137,8 +148,9 @@ def run_report_pdf_command(
             streams=pdf_streams,
             top=top,
         )
+        ai_summary: str | None = None
         try:
-            write_report_pdf(
+            portfolio = write_report_pdf(
                 output.resolve(),
                 cfg,
                 spec,
@@ -146,6 +158,9 @@ def run_report_pdf_command(
                 report_snapshot=snapshot,
                 allow_live_health_fetch=allow_live_health,
             )
+            # AI generation is best-effort: failure must never prevent PDF delivery.
+            if ai_summary_enabled and portfolio is not None:
+                ai_summary = generate_ai_summary(portfolio, cfg.ai_summary)
         except ValueError as e:
             return ReportPdfOutcome(exit_code=exits.INVALID_PARAMS, stderr=str(e))
         except Exception as e:
@@ -159,6 +174,7 @@ def run_report_pdf_command(
             period_end=pe,
             zone_keys=zone_keys,
             send_email=send_email,
+            ai_summary=ai_summary,
         )
 
     initial_span = (period_start, period_end)

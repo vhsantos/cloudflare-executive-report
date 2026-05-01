@@ -55,6 +55,10 @@ svg = [
     "svglib>=1.5",
 ]
 
+# Optional AI summary support
+ai = [
+    "litellm>=1.83",
+]
 
 # =========================
 # CLI entry point

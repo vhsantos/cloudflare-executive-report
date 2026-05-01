@@ -164,6 +164,10 @@ email:
   smtp_host: "smtp.example.com"
   recipients:
     - "security@example.com"
+
+ai-summary:
+  enabled: true
+  model: "openrouter/google/gemma-2-9b-it:free"
 ```
 
 ---
@@ -186,6 +190,9 @@ cf-report zones add --id abc123 --name example.com
 
 # Clean cache
 cf-report clean --older-than 90
+
+# Generate report with AI summary and send it by email
+cf-report report -o report.pdf --email --ai-summary
 ```
 
 ---
@@ -195,6 +202,7 @@ cf-report clean --older-than 90
 | Guide                                                         | What it covers                  |
 | ------------------------------------------------------------- | ------------------------------- |
 | [User guide](docs/USAGE.md)                                   | Full CLI reference and config   |
+| [AI Summary: Powered by LLMs (Optional)](docs/AI.md)          | AI summary and email generation |
 | [Dashboard verification](docs/verify-report-vs-cloudflare.md) | Compare report vs Cloudflare UI |
 | [Reliability metrics](docs/reliability-metrics.md)            | Understanding approximations    |
 | [Developer docs](docs/developers/)                            | Architecture and internals      |
