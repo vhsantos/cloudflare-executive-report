@@ -21,7 +21,10 @@ from cloudflare_executive_report.common.constants import (
 from cloudflare_executive_report.common.dates import parse_ymd
 from cloudflare_executive_report.common.period_resolver import report_type_for_options
 from cloudflare_executive_report.config import AppConfig
-from cloudflare_executive_report.executive.portfolio import build_portfolio_summary
+from cloudflare_executive_report.executive.portfolio import (
+    PortfolioSummary,
+    build_portfolio_summary,
+)
 from cloudflare_executive_report.pdf.cover import append_cover_page
 from cloudflare_executive_report.pdf.document import build_simple_doc, footer_canvas_factory
 from cloudflare_executive_report.pdf.figure_quality import (
@@ -159,7 +162,7 @@ def write_report_pdf(
     report_snapshot: dict[str, Any] | None = None,
     allow_live_health_fetch: bool = True,
     theme: Theme | None = None,
-) -> None:
+) -> PortfolioSummary | None:
     """
     Generate a PDF report from a JSON snapshot or by fetching data from the cache/API.
 
@@ -193,6 +196,7 @@ def write_report_pdf(
             styles=styles,
             theme=th,
         )
+        portfolio_summary_obj = None
         after_cover_insert_index = len(story)
         include_stream_details = cfg.pdf.profile == "detailed"
         include_zone_summary = spec.include_executive_summary and cfg.pdf.profile in (
@@ -565,6 +569,7 @@ def write_report_pdf(
                 portfolio_zone_blocks,
                 sort_by=cfg.portfolio.sort_by,
             )
+            portfolio_summary_obj = portfolio_summary
             portfolio_story: list[Any] = []
             if cover_appended:
                 portfolio_story.append(PageBreak())
@@ -636,5 +641,6 @@ def write_report_pdf(
         )
         doc.build(story, onFirstPage=first_page_canvas, onLaterPages=footer)
         log.info("Wrote PDF %s", output_path.resolve())
+        return portfolio_summary_obj
     finally:
         clear_render_context()

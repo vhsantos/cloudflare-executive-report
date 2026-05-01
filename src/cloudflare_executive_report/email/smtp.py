@@ -100,6 +100,7 @@ def send_pdf_report_email(
     period_end: str,
     zone_count: int,
     recipients: list[str] | None = None,
+    ai_summary: str | None = None,
 ) -> None:
     """Connect to SMTP, build message from templates, attach PDF, send to recipients.
 
@@ -138,6 +139,14 @@ def send_pdf_report_email(
     body = apply_email_placeholders(
         cfg.body, date_str=date_str, period=period, zone_count=zone_count
     )
+
+    if ai_summary:
+        body += "\n\n" + "=" * 80 + "\n"
+        body += "AI-GENERATED EXECUTIVE SUMMARY\n"
+        body += "=" * 80 + "\n\n"
+        body += ai_summary + "\n\n"
+        body += "=" * 80 + "\n"
+
     msg = EmailMessage()
     msg["From"] = from_header
     msg["To"] = ", ".join(to_list)

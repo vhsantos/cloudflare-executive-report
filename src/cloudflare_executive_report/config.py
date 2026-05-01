@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from dataclasses import dataclass, field
@@ -12,6 +13,8 @@ import yaml
 
 from cloudflare_executive_report.common.constants import PROJECT_NAME
 from cloudflare_executive_report.pdf.figure_quality import parse_pdf_image_quality
+
+log = logging.getLogger(__name__)
 
 CONFIG_DIR_NAME = ".cf-report"
 CONFIG_FILE_NAME = "config.yaml"
@@ -147,6 +150,35 @@ class EmailConfig:
 
 
 @dataclass
+class AiSummaryConfig:
+    """Optional AI-generated executive summary settings (requires the 'ai' extra).
+
+    The API key is resolved in priority order:
+      1. ``api_key`` field in config.yaml
+      2. ``OPENROUTER_API_KEY`` environment variable
+      3. ``OPENAI_API_KEY`` environment variable (for direct OpenAI usage)
+
+    When using OpenRouter free models the key is still required (free tier
+    requires an account). Get one at https://openrouter.ai/keys.
+    """
+
+    enabled: bool = False
+    model: str = "openrouter/google/gemma-4-31b-it:free"  # Specific non-reasoning model
+    api_key: str = ""
+    max_tokens: int = 1500  # Increased from 300
+    temperature: float = 0.3
+    timeout_seconds: int = 30
+    fallback_models: list[str] = field(
+        default_factory=lambda: [
+            "openrouter/meta-llama/llama-3.3-70b-instruct:free",
+            "openrouter/nvidia/nemotron-3-super-120b-a12b:free",
+            "openrouter/openai/gpt-oss-120b:free",
+            "openrouter/openrouter/free",  # Keep as last resort
+        ]
+    )
+
+
+@dataclass
 class PortfolioConfig:
     """Multi-zone portfolio summary options."""
 
@@ -170,6 +202,7 @@ class AppConfig:
     email: EmailConfig = field(default_factory=EmailConfig)
     portfolio: PortfolioConfig = field(default_factory=PortfolioConfig)
     cover: CoverConfig = field(default_factory=CoverConfig)
+    ai_summary: AiSummaryConfig = field(default_factory=AiSummaryConfig)
 
     def cache_path(self) -> Path:
         return expand_path(self.cache_dir)
@@ -232,6 +265,17 @@ class AppConfig:
                 "prepared_for": self.cover.prepared_for,
                 "classification": self.cover.classification,
                 "date_format": self.cover.date_format,
+            },
+            "ai_summary": {
+                "enabled": self.ai_summary.enabled,
+                "model": self.ai_summary.model,
+                "max_tokens": self.ai_summary.max_tokens,
+                "temperature": self.ai_summary.temperature,
+                "timeout_seconds": self.ai_summary.timeout_seconds,
+                "fallback_models": list(self.ai_summary.fallback_models),
+                # api_key is intentionally omitted from serialisation —
+                # it must only come from env vars or explicit config entry,
+                # never be round-tripped back to a template.
             },
         }
 
@@ -353,6 +397,32 @@ class AppConfig:
             date_format=str(cover_raw.get("date_format") or "%d/%b/%Y"),
         )
 
+        ai_summary_raw = data.get("ai_summary") or {}
+        if not isinstance(ai_summary_raw, dict):
+            raise ValueError("ai_summary must be a mapping")
+
+        # Resolve API key: config file → env vars (in that priority order).
+        env_ai_api_key = (os.environ.get("OPENROUTER_API_KEY") or "").strip() or (
+            os.environ.get("OPENAI_API_KEY") or ""
+        ).strip()
+        raw_ai_api_key = str(ai_summary_raw.get("api_key") or "").strip()
+        ai_api_key = raw_ai_api_key or env_ai_api_key
+
+        ai_summary_cfg = AiSummaryConfig(
+            enabled=bool(ai_summary_raw.get("enabled", False)),
+            api_key=ai_api_key,
+        )
+
+        # If user provides a model, it overrides both the default model AND all fallbacks.
+        # Otherwise, we use the defaults defined in AiSummaryConfig dataclass.
+        user_model = ai_summary_raw.get("model")
+        if user_model and str(user_model).strip():
+            ai_summary_cfg.model = str(user_model).strip()
+            ai_summary_cfg.fallback_models = []
+            logging.debug(
+                "User specified model '%s', clearing fallback models", ai_summary_cfg.model
+            )
+
         raw_types = data.get("types")
         if raw_types is None:
             types = []
@@ -402,6 +472,7 @@ class AppConfig:
             ),
             portfolio=PortfolioConfig(sort_by=cast(Literal["score", "zone_name"], sort_by_raw)),
             cover=cover,
+            ai_summary=ai_summary_cfg,
         )
 
 

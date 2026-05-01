@@ -55,6 +55,11 @@ def setup_logging(
     logging.getLogger("svglib").setLevel(logging.ERROR)
     logging.getLogger("reportlab").setLevel(logging.ERROR)
 
+    # Suppress litellm's verbose logging
+    litellm_level = TRACE if level <= TRACE else logging.ERROR
+    logging.getLogger("LiteLLM").setLevel(litellm_level)
+    logging.getLogger("litellm").setLevel(litellm_level)
+
     # HTTP trace only at TRACE level
     httpx_level = TRACE if level <= TRACE else logging.WARNING
     logging.getLogger("httpx").setLevel(httpx_level)

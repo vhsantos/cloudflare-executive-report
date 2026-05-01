@@ -155,3 +155,13 @@ PDF_RENDERABLE_STREAMS: tuple[str, ...] = (
     "cache",
     "email",
 )
+# ============================================================================
+# CLI / AI SUMMARY
+# ============================================================================
+
+# Default width for terminal line wrapping and separators.
+CLI_TERMINAL_WIDTH: int = 80
+
+# Visual separators for CLI output and prompt debugging.
+CLI_SEP_HEAVY: str = "=" * CLI_TERMINAL_WIDTH
+CLI_SEP_LIGHT: str = "-" * CLI_TERMINAL_WIDTH
