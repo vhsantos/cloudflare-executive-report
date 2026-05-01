@@ -76,10 +76,26 @@ def test_email_aggregator_top_sources():
 def test_parse_dns_policies():
     mock_client = MagicMock()
     # Test DMARC p=reject, SPF ~all, DKIM exists
-    mock_client.list_dns_records.return_value = [
-        {"name": "_dmarc.example.com", "content": '"v=DMARC1; p=reject; rua=mailto:..."'},
-        {"name": "example.com", "content": "v=spf1 include:_spf.google.com ~all"},
-        {"name": "google._domainkey.example.com", "content": "v=DKIM1; k=rsa; p=..."},
+    # list_dns_records is called twice: first for TXT, then for CNAME
+    mock_client.list_dns_records.side_effect = [
+        [
+            {
+                "name": "_dmarc.example.com",
+                "content": '"v=DMARC1; p=reject; rua=mailto:..."',
+                "type": "TXT",
+            },
+            {
+                "name": "example.com",
+                "content": "v=spf1 include:_spf.google.com ~all",
+                "type": "TXT",
+            },
+            {
+                "name": "google._domainkey.example.com",
+                "content": "v=DKIM1; k=rsa; p=...",
+                "type": "TXT",
+            },
+        ],
+        [],  # No CNAME records
     ]
 
     dmarc, spf, dkim = _parse_dns_policies(mock_client, "zone123", "example.com")
@@ -91,13 +107,38 @@ def test_parse_dns_policies():
 def test_parse_dns_policies_variants():
     mock_client = MagicMock()
     # Test SPF hardfail and missing DMARC
-    mock_client.list_dns_records.return_value = [
-        {"name": "example.com", "content": "v=spf1 -all"},
+    mock_client.list_dns_records.side_effect = [
+        [{"name": "example.com", "content": "v=spf1 -all", "type": "TXT"}],
+        [],
     ]
 
     dmarc, spf, dkim = _parse_dns_policies(mock_client, "zone123", "example.com")
     assert dmarc == "none"
     assert spf == "hardfail"
+    assert dkim is False
+
+
+def test_parse_dns_policies_dkim_cname():
+    mock_client = MagicMock()
+    # Test DKIM via CNAME (TXT returns nothing, CNAME returns record)
+    mock_client.list_dns_records.side_effect = [
+        [],  # No TXT
+        [{"name": "selector1._domainkey.example.com", "content": "dkim.m365.com", "type": "CNAME"}],
+    ]
+
+    dmarc, spf, dkim = _parse_dns_policies(mock_client, "zone123", "example.com")
+    assert dmarc == "none"
+    assert spf == "none"
+    assert dkim is True
+
+
+def test_parse_dns_policies_empty():
+    mock_client = MagicMock()
+    # TXT then CNAME
+    mock_client.list_dns_records.side_effect = [[], []]
+    dmarc, spf, dkim = _parse_dns_policies(mock_client, "zone1", "ex.com")
+    assert dmarc == "none"
+    assert spf == "none"
     assert dkim is False
 
 
@@ -113,8 +154,10 @@ def test_fetch_email_for_bounds_logic():
     mock_client = MagicMock()
 
     # 1. Mock DNS Policies
-    mock_client.list_dns_records.return_value = [
-        {"name": "_dmarc.example.com", "content": "v=DMARC1; p=quarantine"},
+    # DNS Policies (TXT then CNAME)
+    mock_client.list_dns_records.side_effect = [
+        [{"name": "_dmarc.example.com", "content": "v=DMARC1; p=quarantine", "type": "TXT"}],
+        [],
     ]
 
     # 2. Mock Email Routing Settings (Corrected method name)

@@ -2,8 +2,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from cloudflare_executive_report.ai.client import call_llm
-from cloudflare_executive_report.ai.formatter import format_portfolio_as_text
+from cloudflare_executive_report.ai.client import _extract_content, call_llm
+from cloudflare_executive_report.ai.formatter import format_portfolio_as_text, print_ai_summary
 from cloudflare_executive_report.ai.summary import generate_ai_summary
 from cloudflare_executive_report.config import AiSummaryConfig
 from cloudflare_executive_report.executive.portfolio import (
@@ -65,6 +65,13 @@ def test_format_portfolio_as_text(mock_portfolio: PortfolioSummary) -> None:
     assert "example.com" not in text
 
 
+def test_print_ai_summary(capsys):
+    print_ai_summary("Test summary content")
+    captured = capsys.readouterr()
+    assert "AI-Generated Executive Summary" in captured.out
+    assert "Test summary content" in captured.out
+
+
 @patch("cloudflare_executive_report.ai.client._get_litellm")
 def test_call_llm_success(mock_get_litellm: MagicMock) -> None:
     mock_litellm = MagicMock()
@@ -112,3 +119,34 @@ def test_generate_ai_summary_disabled(
 ) -> None:
     mock_config.enabled = False
     assert generate_ai_summary(mock_portfolio, mock_config) is None
+
+
+def test_extract_content_reasoning():
+    # Test extraction from reasoning_content field
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    msg = mock_response.choices[0].message
+    del msg.content  # No standard content
+    msg.reasoning_content = "Reasoning result"
+
+    assert _extract_content(mock_response) == "Reasoning result"
+
+
+@patch("cloudflare_executive_report.ai.client._get_litellm")
+def test_call_llm_failure(mock_get_litellm: MagicMock) -> None:
+    mock_litellm = MagicMock()
+    mock_get_litellm.return_value = mock_litellm
+
+    # Simulate an exception that is handled in call_llm
+    mock_litellm.completion.side_effect = Exception("API Error")
+
+    messages = [{"role": "user", "content": "test"}]
+    result = call_llm(messages, model="m", max_tokens=10, temperature=0, timeout=1)
+    assert result is None
+
+
+@patch("cloudflare_executive_report.ai.client._LITELLM_MODULE", False)
+def test_call_llm_no_litellm():
+    # Test behavior when litellm is not installed
+    result = call_llm([], model="m", max_tokens=10, temperature=0, timeout=1)
+    assert result is None
