@@ -36,6 +36,7 @@ from cloudflare_executive_report.config import (
     ZoneEntry,
     default_config_path,
     load_config,
+    parse_pdf_profile,
     save_config,
     save_config_template,
     template_config,
@@ -293,6 +294,11 @@ def cmd_report(
         "--exclude-types",
         help="Comma-separated stream ids to exclude from active streams.",
     ),
+    profile: str | None = typer.Option(
+        None,
+        "--profile",
+        help="PDF styling profile (minimal | executive | detailed) to override config.",
+    ),
 ) -> None:
     """Sync cache (unless --cache-only) then build a PDF.
 
@@ -315,6 +321,14 @@ def cmd_report(
         # Resolve AI summary setting (CLI overrides config)
         if ai_summary is not None:
             cfg.ai_summary.enabled = ai_summary
+
+        # Resolve PDF profile setting (CLI overrides config)
+        if profile is not None:
+            try:
+                cfg.pdf.profile = parse_pdf_profile(profile, field_name="--profile")
+            except ValueError as e:
+                typer.echo(f"Error: {e}", err=True)
+                raise typer.Exit(exits.INVALID_PARAMS) from None
     except CliConfigError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.GENERAL_ERROR) from None
