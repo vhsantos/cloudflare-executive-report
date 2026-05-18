@@ -41,6 +41,12 @@ cf-report report -o exec.pdf --last 30
 # Detailed profile and SVG charts
 cf-report report -o detailed.pdf --last 14 --types dns,http,security,cache,http_adaptive,dns_records,audit,certificates
 
+# Override config styling profile to minimal
+cf-report report -o quick.pdf --profile minimal
+
+# Exclude security and cache streams from the report
+cf-report report -o no-sec-cache.pdf --exclude-types security,cache
+
 # Cache-only reproducible report
 cf-report report -o offline.pdf --cache-only --start 2026-04-01 --end 2026-04-14
 
@@ -66,6 +72,8 @@ types:
   - dns_records
   - audit
   - certificates
+exclude_types:
+  - email
 
 zones:
   - id: "023e105f4ecef8ad9ca31a8372d0c353"
@@ -149,6 +157,7 @@ config value > environment variable > empty string
 - `log_level` (`str`) - typical values: `debug`, `info`, `warning`, `error`.
 - `default_period` (`str`) - default period preset used when no period flags are provided. Supported values: `incremental`, `yesterday`, `last_week`, `this_week`, `last_month`, `this_month`, `last_year`, `this_year`, or `last_N` (example: `last_30`).
 - `types` (`list[str]`) - default stream list for sync/report.
+- `exclude_types` (`list[str]`) - streams to exclude from active streams.
 - `zones` (`list`) - each item requires `id` and `name`.
 
 ### `pdf`

@@ -92,6 +92,7 @@ def test_save_config_template_includes_comments_and_sections(tmp_path) -> None:
     assert "executive:" in text
     assert "email:" in text
     assert "portfolio:" in text
+    assert "exclude_types:" in text
 
 
 def test_portfolio_sort_by_yaml_round_trip() -> None:
