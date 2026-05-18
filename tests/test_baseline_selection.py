@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import date
+from unittest.mock import patch
 
 from cloudflare_executive_report.config import AppConfig, ZoneEntry
 from cloudflare_executive_report.report.baseline_selection import select_previous_report_for_period
@@ -58,7 +59,9 @@ def test_select_previous_range_prefers_nearest_valid_prior(tmp_path):
     assert prev["report_period"]["end"] == "2026-04-02"
 
 
-def test_select_previous_last_week_uses_expected_week_window(tmp_path):
+@patch("cloudflare_executive_report.report.baseline_selection.utc_today")
+def test_select_previous_last_week_uses_expected_week_window(mock_utc_today, tmp_path):
+    mock_utc_today.return_value = date(2026, 4, 8)
     cfg = _cfg(tmp_path)
     _write_report(
         cfg.history_path() / "cf_report_2026-04-08_100000.json",
@@ -84,7 +87,9 @@ def test_select_previous_last_week_uses_expected_week_window(tmp_path):
     assert prev["report_period"]["end"] == "2026-03-29"
 
 
-def test_select_previous_semantic_ignores_mismatched_candidate_type(tmp_path):
+@patch("cloudflare_executive_report.report.baseline_selection.utc_today")
+def test_select_previous_semantic_ignores_mismatched_candidate_type(mock_utc_today, tmp_path):
+    mock_utc_today.return_value = date(2026, 5, 2)
     cfg = _cfg(tmp_path)
     _write_report(
         cfg.history_path() / "cf_report_2026-04-08_100000.json",

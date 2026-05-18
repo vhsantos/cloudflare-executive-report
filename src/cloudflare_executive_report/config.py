@@ -196,6 +196,7 @@ class AppConfig:
     log_level: str = "info"
     default_period: str = "last_month"
     types: list[str] = field(default_factory=list)
+    exclude_types: list[str] = field(default_factory=list)
     zones: list[ZoneEntry] = field(default_factory=list)
     pdf: PdfConfig = field(default_factory=PdfConfig)
     executive: ExecutiveConfig = field(default_factory=ExecutiveConfig)
@@ -222,6 +223,7 @@ class AppConfig:
             "log_level": self.log_level,
             "default_period": self.default_period,
             "types": list(self.types),
+            "exclude_types": list(self.exclude_types),
             "zones": [{"id": z.id, "name": z.name} for z in self.zones],
             "pdf": {
                 "image_quality": self.pdf.image_quality,
@@ -434,6 +436,17 @@ class AppConfig:
                 f"'types' must be a list (or null). Got {type(raw_types).__name__}: {raw_types}"
             )
 
+        raw_exclude_types = data.get("exclude_types")
+        if raw_exclude_types is None:
+            exclude_types = []
+        elif isinstance(raw_exclude_types, list):
+            exclude_types = [str(value) for value in raw_exclude_types]
+        else:
+            raise TypeError(
+                f"'exclude_types' must be a list (or null). "
+                f"Got {type(raw_exclude_types).__name__}: {raw_exclude_types}"
+            )
+
         return cls(
             api_token=api_token,
             cache_dir=str(data.get("cache_dir") or cls.cache_dir),
@@ -442,6 +455,7 @@ class AppConfig:
             log_level=str(data.get("log_level") or cls.log_level),
             default_period=str(data.get("default_period") or cls.default_period),
             types=types,
+            exclude_types=exclude_types,
             zones=zones,
             pdf=PdfConfig(
                 image_quality=pdf_image_quality,

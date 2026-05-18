@@ -146,6 +146,8 @@ api_token: "cfat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 cache_dir: "~/.cf-report/cache"
 history_dir: "~/.cf-report/history"
 log_level: "info"
+exclude_types:
+  - email
 
 zones:
   - id: "abc123..."
@@ -182,6 +184,8 @@ cf-report sync --zone example.com --last 7  # Single zone
 # Generate report
 cf-report report -o report.pdf              # Basic PDF
 cf-report report -o report.pdf --email      # PDF + email
+cf-report report -o report.pdf --profile minimal  # Override PDF profile
+cf-report report --exclude-types email,cache # Exclude specific streams
 cf-report report --skip-zone-health         # Skip health checks
 
 # Manage zones

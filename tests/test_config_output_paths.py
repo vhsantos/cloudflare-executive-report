@@ -92,6 +92,7 @@ def test_save_config_template_includes_comments_and_sections(tmp_path) -> None:
     assert "executive:" in text
     assert "email:" in text
     assert "portfolio:" in text
+    assert "exclude_types:" in text
 
 
 def test_portfolio_sort_by_yaml_round_trip() -> None:
@@ -172,3 +173,14 @@ def test_email_yaml_round_trip() -> None:
     assert back.email.smtp_from.startswith("Reports")
     assert back.email.subject == "S {{date}}"
     assert back.email.body == "B {{period}}"
+
+
+def test_exclude_types_yaml_round_trip() -> None:
+    cfg = AppConfig(exclude_types=["email", "cache"])
+    back = AppConfig.from_yaml_dict(cfg.to_yaml_dict())
+    assert back.exclude_types == ["email", "cache"]
+
+
+def test_exclude_types_rejects_non_list() -> None:
+    with pytest.raises(TypeError, match="exclude_types"):
+        AppConfig.from_yaml_dict({"zones": [], "exclude_types": "email"})

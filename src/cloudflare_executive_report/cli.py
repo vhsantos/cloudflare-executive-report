@@ -36,6 +36,7 @@ from cloudflare_executive_report.config import (
     ZoneEntry,
     default_config_path,
     load_config,
+    parse_pdf_profile,
     save_config,
     save_config_template,
     template_config,
@@ -80,7 +81,12 @@ def _parse_sync_types(raw: str) -> frozenset[str]:
     return frozenset(found)
 
 
-def _resolve_types(cli_types: str | None, config_types: list[str]) -> frozenset[str]:
+def _resolve_types(
+    cli_types: str | None,
+    config_types: list[str],
+    config_exclude_types: list[str],
+    cli_exclude_types: str | None = None,
+) -> frozenset[str]:
     """Determine active streams. CLI overrides Config. Empty or None means ALL."""
     if cli_types:
         found = set(_parse_sync_types(cli_types))
@@ -88,6 +94,22 @@ def _resolve_types(cli_types: str | None, config_types: list[str]) -> frozenset[
         found = set(config_types)
     else:
         found = set(_parse_sync_types(default_types_csv()))
+
+    if cli_exclude_types:
+        excluded = set(_parse_sync_types(cli_exclude_types))
+    elif config_exclude_types:
+        excluded = set(config_exclude_types)
+    else:
+        excluded = set()
+
+    found = found - excluded
+
+    if not found:
+        typer.echo(
+            "Error: All streams have been excluded. No active streams remaining to process.",
+            err=True,
+        )
+        raise typer.Exit(exits.INVALID_PARAMS)
 
     if "dns" in found:
         found.add("dns_records")
@@ -267,6 +289,16 @@ def cmd_report(
             "portfolio. Printed to terminal, or appended to email body when --email is used."
         ),
     ),
+    exclude_types: str | None = typer.Option(
+        None,
+        "--exclude-types",
+        help="Comma-separated stream ids to exclude from active streams.",
+    ),
+    profile: str | None = typer.Option(
+        None,
+        "--profile",
+        help="PDF styling profile (minimal | executive | detailed) to override config.",
+    ),
 ) -> None:
     """Sync cache (unless --cache-only) then build a PDF.
 
@@ -289,11 +321,19 @@ def cmd_report(
         # Resolve AI summary setting (CLI overrides config)
         if ai_summary is not None:
             cfg.ai_summary.enabled = ai_summary
+
+        # Resolve PDF profile setting (CLI overrides config)
+        if profile is not None:
+            try:
+                cfg.pdf.profile = parse_pdf_profile(profile, field_name="--profile")
+            except ValueError as e:
+                typer.echo(f"Error: {e}", err=True)
+                raise typer.Exit(exits.INVALID_PARAMS) from None
     except CliConfigError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.GENERAL_ERROR) from None
 
-    type_set = _resolve_types(types, cfg.types)
+    type_set = _resolve_types(types, cfg.types, cfg.exclude_types, exclude_types)
     pdf_streams = _pdf_streams_from_types(type_set)
 
     if not pdf_streams:
@@ -555,6 +595,11 @@ def cmd_sync(
         None, "--history-dir", help="Override JSON/history output root directory for this run."
     ),
     config: Path | None = typer.Option(None, "--config", help="Override config path."),
+    exclude_types: str | None = typer.Option(
+        None,
+        "--exclude-types",
+        help="Comma-separated stream ids to exclude from active streams.",
+    ),
 ) -> None:
     """Incremental sync by default; use --last N or --start/--end for explicit windows."""
     verbose = ctx.obj.get("verbose", 0)
@@ -568,7 +613,7 @@ def cmd_sync(
         typer.echo(str(e), err=True)
         raise typer.Exit(exits.GENERAL_ERROR) from None
 
-    type_set = _resolve_types(types, cfg.types)
+    type_set = _resolve_types(types, cfg.types, cfg.exclude_types, exclude_types)
 
     try:
         opts = validate_and_build_sync_options(
@@ -724,7 +769,7 @@ def cmd_validate(
             results = validate_token_permissions(
                 client,
                 test_zone_id,
-                enabled_streams=cfg.types,
+                enabled_streams=list(_resolve_types(None, cfg.types, cfg.exclude_types, None)),
             )
     except CloudflareAuthError as e:
         typer.echo(f"Authentication failed: {e}", err=True)
