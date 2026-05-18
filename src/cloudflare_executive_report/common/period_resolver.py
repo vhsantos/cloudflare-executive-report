@@ -81,14 +81,14 @@ def semantic_current_bounds(
     if report_type == "yesterday":
         return y, y
     if report_type == "last_week":
-        this_week_start, _ = week_bounds(y)
+        this_week_start, _ = week_bounds(today)
         prev_week_end = this_week_start - timedelta(days=1)
         return week_bounds(prev_week_end)
     if report_type == "this_week":
         start, _ = week_bounds(today)
         return start, today
     if report_type == "last_month":
-        this_month_start, _ = month_bounds(y)
+        this_month_start, _ = month_bounds(today)
         prev_month_day = this_month_start - timedelta(days=1)
         return month_bounds(prev_month_day)
     if report_type == "this_month":
@@ -113,7 +113,7 @@ def semantic_baseline_bounds(
         d = y - timedelta(days=1)
         return d, d
     if report_type == "last_week":
-        this_week_start, _ = week_bounds(y)
+        this_week_start, _ = week_bounds(today)
         prev_week_end = this_week_start - timedelta(days=1)
         prev_week_start, _ = week_bounds(prev_week_end)
         return prev_week_start - timedelta(days=7), prev_week_start - timedelta(days=1)
@@ -122,7 +122,7 @@ def semantic_baseline_bounds(
         prev_week_end = this_week_start - timedelta(days=1)
         return week_bounds(prev_week_end)
     if report_type == "last_month":
-        this_month_start, _ = month_bounds(y)
+        this_month_start, _ = month_bounds(today)
         prev_month_day = this_month_start - timedelta(days=1)
         prev_month_start, _ = month_bounds(prev_month_day)
         month_before_prev = prev_month_start - timedelta(days=1)
@@ -136,7 +136,7 @@ def semantic_baseline_bounds(
         end_day = min(prev_start.day + current_span - 1, prev_end.day)
         return prev_start, date(prev_start.year, prev_start.month, end_day)
     if report_type == "last_year":
-        return date(y.year - 2, 1, 1), date(y.year - 2, 12, 31)
+        return date(today.year - 2, 1, 1), date(today.year - 2, 12, 31)
     if report_type == "this_year":
         current_start, _ = year_bounds(today)
         return date(current_start.year - 1, 1, 1), date(current_start.year - 1, 12, 31)
