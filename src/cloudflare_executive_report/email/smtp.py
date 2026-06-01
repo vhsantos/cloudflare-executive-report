@@ -24,10 +24,19 @@ def apply_email_placeholders(
     period: str,
     zone_count: int,
 ) -> str:
-    """Replace ``{{date}}``, ``{{period}}``, and ``{{zone_count}}`` in a template string."""
-    text = template.replace("{{date}}", date_str)
+    """Replace placeholder variables in an email template.
+
+    Supports both {{placeholder}} and {placeholder} syntax.
+    """
+    text = template
+    # Replace double curly braces
+    text = text.replace("{{date}}", date_str)
     text = text.replace("{{period}}", period)
-    return text.replace("{{zone_count}}", str(zone_count))
+    text = text.replace("{{zone_count}}", str(zone_count))
+    # Replace single curly braces
+    text = text.replace("{date}", date_str)
+    text = text.replace("{period}", period)
+    return text.replace("{zone_count}", str(zone_count))
 
 
 def _resolved_from_header(cfg: EmailConfig) -> str:
