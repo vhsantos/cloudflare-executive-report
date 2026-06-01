@@ -25,6 +25,15 @@ def test_apply_email_placeholders() -> None:
     )
     assert out == "D=2026-04-13 P=2026-04-01 to 2026-04-10 Z=3"
 
+    # Single curly braces
+    out_single = apply_email_placeholders(
+        "D={date} P={period} Z={zone_count}",
+        date_str="2026-04-13",
+        period="2026-04-01 to 2026-04-10",
+        zone_count=3,
+    )
+    assert out_single == "D=2026-04-13 P=2026-04-01 to 2026-04-10 Z=3"
+
 
 def test_validate_email_config_rejects_ssl_and_starttls() -> None:
     cfg = EmailConfig(

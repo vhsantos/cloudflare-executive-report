@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -126,6 +127,29 @@ def build_portfolio_summary(
     ):
         phrase_data = get_phrase(phrase_key, "risk")
         phrase_text = str(phrase_data["text"])
+
+        # Since this table aggregates risks across multiple zones, we do not format
+        # with zone-specific values (e.g. Zone A has 28 days left, Zone B has 15 days left).
+        # We replace template placeholders (like {days}) with generic/aggregated values instead.
+        class GenericFormatter(dict[str, str]):
+            """Fallback formatter returning generic bounds for key placeholders."""
+
+            def __init__(self, phrase_key_val: str) -> None:
+                super().__init__()
+                self.phrase_key_val = phrase_key_val
+
+            def __missing__(self, key: str) -> str:
+                if key == "days":
+                    return "<30" if self.phrase_key_val == "cert_expire_30" else "<14"
+                if key == "version":
+                    return "<1.2"
+                if key == "status":
+                    return "inactive"
+                return f"{{{key}}}"
+
+        with contextlib.suppress(Exception):
+            phrase_text = phrase_text.format_map(GenericFormatter(phrase_key))
+
         check_id = str(phrase_data["id"])
         common_risks.append(
             PortfolioRiskRow(

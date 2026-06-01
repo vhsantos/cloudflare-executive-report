@@ -45,6 +45,9 @@ def fetch_certificates_snapshot(
         status = str(pack.get("status") or "unknown").strip() or "unknown"
         status_counts[status] = status_counts.get(status, 0) + 1
 
+        if status == "backup_issued":
+            continue
+
         certificates = pack.get("certificates") or []
         if not certificates:
             continue

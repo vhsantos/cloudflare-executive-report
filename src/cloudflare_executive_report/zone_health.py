@@ -239,6 +239,8 @@ def fetch_zone_health(
     sdk = client.sdk
     out: dict[str, Any] = {}
 
+    log.info("  %s fetching zone_health...", zone_name)
+
     if zone_meta is not None:
         st = zone_meta.get("status")
         out["zone_status"] = str(st) if st is not None else UNAVAILABLE
@@ -294,4 +296,5 @@ def fetch_zone_health(
 
     out["hsts"] = _hsts_security_header_snapshot(sdk, zone_id, warnings)
 
+    log.info("  %s zone_health ok", zone_name)
     return out, warnings

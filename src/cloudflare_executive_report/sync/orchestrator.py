@@ -276,6 +276,7 @@ def _run_sync_locked(
         zones_out: list[dict[str, Any]] = []
         all_warnings: list[str] = []
 
+        log.info("Fetching zone health...")
         for z in zones:
             zmeta = zmeta_by_zone_id[z.id]
             plan = (zmeta.get("plan") or {}).get("legacy_id")

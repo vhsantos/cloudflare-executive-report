@@ -67,3 +67,35 @@ def test_fetch_certificates_snapshot_parses_expiry():
     assert out["total_certificate_packs"] == 1
     assert out["expiring_in_30_days"] == 1
     assert out["soonest_expiry"] == "2026-04-20T00:00:00Z"
+
+
+def test_fetch_certificates_snapshot_ignores_backup_issued():
+    class FakeClient:
+        def list_zone_certificate_packs(self, _zone_id: str):
+            return [
+                {
+                    "status": "active",
+                    "certificates": [
+                        {"expires_on": "2026-08-20T00:00:00Z"},
+                    ],
+                },
+                {
+                    "status": "backup_issued",
+                    "certificates": [
+                        {"expires_on": "2026-04-20T00:00:00Z"},
+                    ],
+                },
+            ]
+
+    out = fetch_certificates_snapshot(FakeClient(), "z", date(2026, 4, 1))
+    # Both packs are counted in total_certificate_packs
+    assert out["total_certificate_packs"] == 2
+    # The backup_issued pack expiring soon (2026-04-20 is 19 days from 2026-04-01) is ignored,
+    # so expiring_in_30_days is 0 (as 2026-08-20 is far away)
+    assert out["expiring_in_30_days"] == 0
+    # soonest_expiry should reflect the active pack since the backup_issued one is ignored
+    assert out["soonest_expiry"] == "2026-08-20T00:00:00Z"
+    # Status breakdown should still record both
+    status_values = {item["value"]: item["count"] for item in out["status_breakdown"]}
+    assert status_values["active"] == 1
+    assert status_values["backup_issued"] == 1

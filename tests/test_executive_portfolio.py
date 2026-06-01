@@ -58,3 +58,25 @@ def test_build_portfolio_summary_sorts_by_zone_name() -> None:
     out = build_portfolio_summary(zones, sort_by="zone_name")
     assert out.zones_sort_caption.startswith("zone name")
     assert [row.zone_name for row in out.zones] == ["a.example", "z.example"]
+
+
+def test_build_portfolio_summary_formats_placeholders() -> None:
+    zones = [
+        _zone(
+            zone_name="a.example",
+            score=70.0,
+            grade="C+",
+            risks=[
+                {"phrase_key": "cert_expire_30", "severity": "warning"},
+                {"phrase_key": "min_tls_version", "severity": "warning"},
+            ],
+        ),
+    ]
+    out = build_portfolio_summary(zones, sort_by="zone_name")
+    risk_texts = {row.phrase_key: row.phrase_text for row in out.common_risks}
+    # Check that {days} and {version} are formatted to <30 and <1.2 respectively
+    assert risk_texts["cert_expire_30"] == "Certificate expires in <30 days - schedule renewal"
+    assert (
+        risk_texts["min_tls_version"]
+        == "Minimum TLS version is <1.2 at edge - raise to at least 1.2 immediately."
+    )
