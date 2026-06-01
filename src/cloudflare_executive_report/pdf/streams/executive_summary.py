@@ -271,14 +271,11 @@ def append_executive_summary(
         ce_un = bool(certificates_k.get("unavailable"))
 
         cert_human = str(certificates_k.get("cert_expires_human") or "-")
-        cert_exp30 = int(certificates_k.get("expiring_in_30_days") or 0)
         if cert_human != "-" and "(" in cert_human and ")" in cert_human:
             cert_days = cert_human.split("(", 1)[1].split(")", 1)[0].strip()
         else:
             cert_days = cert_human
         cert_label = UNAVAILABLE if ce_un else cert_days
-        if not ce_un and cert_exp30 > 0 and cert_label != "-":
-            cert_label = f"expiring soon: {cert_label}"
         cert_packs_v = (
             UNAVAILABLE if ce_un else str(certificates_k.get("total_certificate_packs") or "0")
         )
