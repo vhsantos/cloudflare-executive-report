@@ -131,7 +131,7 @@ def build_portfolio_summary(
         # Since this table aggregates risks across multiple zones, we do not format
         # with zone-specific values (e.g. Zone A has 28 days left, Zone B has 15 days left).
         # We replace template placeholders (like {days}) with generic/aggregated values instead.
-        class GenericFormatter(dict):
+        class GenericFormatter(dict[str, str]):
             """Fallback formatter returning generic bounds for key placeholders."""
 
             def __init__(self, phrase_key_val: str) -> None:
