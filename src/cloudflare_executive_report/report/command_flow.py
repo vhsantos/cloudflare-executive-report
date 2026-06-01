@@ -18,7 +18,10 @@ from cloudflare_executive_report.report.health_refresh import (
     refresh_snapshot_zone_health,
 )
 from cloudflare_executive_report.report.period import pdf_report_period_for_options
-from cloudflare_executive_report.report.snapshot import find_and_extract_reusable_snapshot
+from cloudflare_executive_report.report.snapshot import (
+    find_and_extract_reusable_snapshot,
+    load_report_json,
+)
 from cloudflare_executive_report.sync.options import SyncOptions
 from cloudflare_executive_report.sync.orchestrator import run_sync
 
@@ -235,4 +238,10 @@ def run_report_pdf_command(
         )
     except ValueError as e:
         return ReportPdfOutcome(exit_code=exits.INVALID_PARAMS, stderr=str(e))
-    return write_pdf(None, allow_live_health=True, span=(period_start, period_end))
+    # Load the snapshot that run_sync just wrote. Using load_report_json directly
+    # avoids a fingerprint comparison: the fingerprint computed before sync and
+    # the one embedded in the JSON by sync can differ (dates resolved at different
+    # moments), which would make find_and_extract_reusable_snapshot return None
+    # and force a second live zone-health fetch inside the PDF orchestrator.
+    snapshot = load_report_json(cfg.report_current_path())
+    return write_pdf(snapshot, allow_live_health=True, span=(period_start, period_end))
