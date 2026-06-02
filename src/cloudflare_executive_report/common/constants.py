@@ -154,8 +154,6 @@ PDF_RENDERABLE_STREAMS: tuple[str, ...] = (
     "security",
     "cache",
     "email",
-    "audit",
-    "certificates",
 )
 # ============================================================================
 # CLI / AI SUMMARY

@@ -222,12 +222,16 @@ class CloudflareClient:
             raise
 
     def list_zone_certificate_packs(self, zone_id: str) -> list[dict[str, Any]]:
-        """List zone certificate packs via SDK."""
+        """List zone certificate packs via SDK (v5+).
+
+        Requires cloudflare>=5.2. Items are Pydantic models serialized via
+        model_dump() to ensure downstream code always receives plain dicts.
+        """
         if self._verbose:
             log.debug("SDK ssl.certificate_packs.list zone_id=%s", zone_id)
         try:
             page = self._sdk.ssl.certificate_packs.list(zone_id=zone_id, status="all")
-            return cast(list[dict[str, Any]], page.result)  # Already a list
+            return [item.model_dump() for item in page]
         except Exception as e:
             _map_sdk_exception(e)
             raise
