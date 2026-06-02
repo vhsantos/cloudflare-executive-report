@@ -560,6 +560,7 @@ def write_report_pdf(
                 else:
                     log.warning("Unknown stream %r - skipped", stream)
 
+        portfolio_inserted = False
         if want_portfolio_page and len(portfolio_zone_blocks) >= 2:
             log.debug(
                 "Inserting multi-zone portfolio summary for %d zones",
@@ -583,6 +584,10 @@ def write_report_pdf(
             if include_zone_summary or include_stream_details:
                 portfolio_story.append(PageBreak())
             story[after_cover_insert_index:after_cover_insert_index] = portfolio_story
+            portfolio_inserted = True
+
+        if cover_appended and not portfolio_inserted:
+            story.insert(after_cover_insert_index, PageBreak())
 
         if cfg.executive.include_appendix and appendix_zone_summaries:
             metric_notes = sorted({note.strip() for note in appendix_metric_notes if note.strip()})
