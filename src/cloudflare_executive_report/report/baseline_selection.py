@@ -54,13 +54,21 @@ def _iter_baseline_candidates(cfg: AppConfig) -> Iterator[dict[str, Any]]:
     seen: set[Path] = set()
     hist = cfg.history_path()
     if hist.is_dir():
-        current = cfg.report_current_path().resolve()
-        # Sort by mtime descending to ensure most recent reports are prioritized
-        files = sorted(hist.glob("cf_report_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        # Sort by mtime descending to ensure most recent reports are prioritized.
+        # NOTE: cf_report.json (the unsuffixed sentinel) is intentionally included here.
+        # During a sync run, rotation of cf_report.json to a timestamped file happens
+        # AFTER the zone loop where baseline selection runs. This means the previous
+        # week's data still lives in cf_report.json and has not yet been moved to a
+        # timestamped file. Excluding it (the old behaviour) caused CMP-002 every week.
+        # The period and overlap filters in select_previous_report_for_period already
+        # prevent the current-period file from being used as its own baseline.
+        candidate_files: list[Path] = list(hist.glob("cf_report_*.json"))
+        main_rep = cfg.report_current_path()
+        if main_rep.is_file():
+            candidate_files.append(main_rep)
+        files = sorted(candidate_files, key=lambda p: p.stat().st_mtime, reverse=True)
         for f in files:
             rf = f.resolve()
-            if rf == current:
-                continue
             if rf in seen:
                 continue
             seen.add(rf)
