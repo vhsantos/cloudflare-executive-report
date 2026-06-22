@@ -4,7 +4,7 @@ from unittest import mock
 
 import pytest
 import typer
-from click.exceptions import Exit
+from typer import Exit
 
 from cloudflare_executive_report import exits
 from cloudflare_executive_report.cli import _check_last_argv, _resolve_types
