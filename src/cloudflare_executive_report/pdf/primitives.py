@@ -178,7 +178,7 @@ def figure_from_svg_bytes(svg: bytes, *, width_in: float, height_in: float) -> D
         )
         raise RuntimeError(msg) from e
 
-    drawing = svg2rlg(io.BytesIO(svg))  # type: ignore[arg-type]
+    drawing = svg2rlg(io.BytesIO(svg))
     if drawing is None:
         raise ValueError("Could not parse SVG chart bytes.")
     target_w = width_in * inch

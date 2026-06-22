@@ -154,16 +154,15 @@ warn_unreachable = true
 # Limit checking to your source
 files = ["src"]
 
-# Ignore missing type hints from external libs
 [[tool.mypy.overrides]]
 module = [
     "cartopy",
     "cartopy.*",
+    "litellm",
     "pycountry",
     "pycountry.*",
     "reportlab",
     "reportlab.*",
-    "svglib",
     "svglib.*",
 ]
 ignore_missing_imports = true

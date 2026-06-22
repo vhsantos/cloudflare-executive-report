@@ -25,7 +25,7 @@ def _get_litellm() -> types.ModuleType | None:
     if _LITELLM_MODULE is False:
         return None
     if _LITELLM_MODULE is not None:
-        return _LITELLM_MODULE  # type: ignore[return-value]
+        return cast(types.ModuleType, _LITELLM_MODULE)
     try:
         import litellm
 
@@ -37,7 +37,7 @@ def _get_litellm() -> types.ModuleType | None:
         }
 
         _LITELLM_MODULE = litellm
-        return _LITELLM_MODULE  # This is definitely a ModuleType
+        return cast(types.ModuleType, _LITELLM_MODULE)  # type: ignore[redundant-cast]
     except ImportError:
         _LITELLM_MODULE = False
         log.warning(
