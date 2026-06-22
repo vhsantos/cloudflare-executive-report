@@ -31,7 +31,7 @@ dependencies = [
     "matplotlib>=3.8,<4.0",
     "pycountry>=23,<27",
     "pyyaml>=6,<7",
-    "reportlab>=4.2,<5.0",
+    "reportlab>=4.2,<6.0",
     "typer>=0.12,<1.0",
 ]
 
