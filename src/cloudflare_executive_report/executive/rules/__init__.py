@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Literal
 
 from cloudflare_executive_report.common.safe_types import as_dict
@@ -196,6 +196,35 @@ def _comparison_gate_blocked(
     return ComparisonGate(allowed=False, blocked_takeaway=line)
 
 
+def _is_full_calendar_month(start: date, end: date) -> bool:
+    """Check if the given bounds represent a complete calendar month.
+
+    A complete calendar month starts on the first of a month and ends on the
+    last day of the same month.
+    """
+    return (
+        start.year == end.year
+        and start.month == end.month
+        and start.day == 1
+        and (end + timedelta(days=1)).day == 1
+    )
+
+
+def _is_full_calendar_year(start: date, end: date) -> bool:
+    """Check if the given bounds represent a complete calendar year.
+
+    A complete calendar year starts on January 1 and ends on December 31
+    of the same year.
+    """
+    return (
+        start.year == end.year
+        and start.month == 1
+        and start.day == 1
+        and end.month == 12
+        and end.day == 31
+    )
+
+
 def evaluate_comparison_gate(
     *,
     current_zone_id: str,
@@ -218,6 +247,16 @@ def evaluate_comparison_gate(
     )
 
     days_bad = current_days <= 0 or previous_days <= 0 or current_days != previous_days
+    if days_bad and previous_bounds is not None and current_bounds is not None:
+        prev_start, prev_end = previous_bounds
+        curr_start, curr_end = current_bounds
+        prev_is_month = _is_full_calendar_month(prev_start, prev_end)
+        curr_is_month = _is_full_calendar_month(curr_start, curr_end)
+        prev_is_year = _is_full_calendar_year(prev_start, prev_end)
+        curr_is_year = _is_full_calendar_year(curr_start, curr_end)
+        if (prev_is_month and curr_is_month) or (prev_is_year and curr_is_year):
+            days_bad = False
+
     if bounds_bad or days_bad:
         return _comparison_gate_blocked(
             "comparison_period_mismatch",

@@ -60,6 +60,42 @@ def test_comparison_gate_period_mismatch_phrase():
     assert gate.blocked_takeaway.section == SECT_DELTAS
 
 
+def test_comparison_gate_allows_calendar_month_length_difference() -> None:
+    """Test that full calendar months are allowed to differ in day count."""
+    prev = _report_with_zone("z1", start="2026-04-01", end="2026-04-30")
+    gate = evaluate_comparison_gate(
+        current_zone_id="z1",
+        previous_report=prev,
+        current_period={"start": "2026-05-01", "end": "2026-05-31"},
+    )
+    assert gate.allowed is True
+    assert gate.blocked_takeaway is None
+
+
+def test_comparison_gate_allows_calendar_year_length_difference() -> None:
+    """Test that full calendar years (leap vs non-leap) are allowed to differ in day count."""
+    prev = _report_with_zone("z1", start="2024-01-01", end="2024-12-31")
+    gate = evaluate_comparison_gate(
+        current_zone_id="z1",
+        previous_report=prev,
+        current_period={"start": "2025-01-01", "end": "2025-12-31"},
+    )
+    assert gate.allowed is True
+    assert gate.blocked_takeaway is None
+
+
+def test_comparison_gate_rejects_partial_month_length_difference() -> None:
+    """Test that partial months with differing day counts are rejected."""
+    prev = _report_with_zone("z1", start="2026-04-01", end="2026-04-16")
+    gate = evaluate_comparison_gate(
+        current_zone_id="z1",
+        previous_report=prev,
+        current_period={"start": "2026-05-01", "end": "2026-05-15"},
+    )
+    assert gate.allowed is False
+    assert "Comparison skipped: previous period" in gate.blocked_takeaway.body
+
+
 def test_comparison_gate_rejects_overlapping_periods():
     prev = _report_with_zone("z1", start="2026-04-01", end="2026-04-07")
     gate = evaluate_comparison_gate(
