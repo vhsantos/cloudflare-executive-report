@@ -53,6 +53,12 @@ def process_day(
     name = fetcher.stream_id
 
     if fetcher.outside_retention(day, plan_legacy_id=plan_legacy_id):
+        existing = read_day_file(path)
+        if existing is not None:
+            logging.debug(
+                "  %s %s %s outside retention (keeping existing data)", zone_name, ds, name
+            )
+            return False
         write_day_file(path, source="null", data=None)
         logging.debug("  %s %s %s outside retention (cached null)", zone_name, ds, name)
         return False

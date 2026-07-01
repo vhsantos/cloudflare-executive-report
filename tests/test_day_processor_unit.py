@@ -58,7 +58,7 @@ def test_process_day_success(
 @patch("cloudflare_executive_report.sync.day_processor.read_day_file")
 @patch("cloudflare_executive_report.sync.day_processor.write_day_file")
 @patch("cloudflare_executive_report.sync.day_processor.day_cache_path")
-def test_process_day_outside_retention(
+def test_process_day_outside_retention_no_existing_cache(
     mock_path: MagicMock,
     mock_write: MagicMock,
     mock_read: MagicMock,
@@ -68,6 +68,7 @@ def test_process_day_outside_retention(
     fetcher.stream_id = "http"
     fetcher.outside_retention.return_value = True
 
+    mock_read.return_value = None
     mock_path.return_value = tmp_path / "day.json"
 
     client = MagicMock()
@@ -87,3 +88,59 @@ def test_process_day_outside_retention(
 
     assert res is False
     mock_write.assert_called_with(mock_path.return_value, source="null", data=None)
+
+
+@patch("cloudflare_executive_report.sync.day_processor.read_day_file")
+@patch("cloudflare_executive_report.sync.day_processor.write_day_file")
+@patch("cloudflare_executive_report.sync.day_processor.day_cache_path")
+def test_process_day_outside_retention_preserves_existing_data(
+    mock_path: MagicMock,
+    mock_write: MagicMock,
+    mock_read: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """Any existing cache data (api, error, etc.) from a previous sync must be preserved."""
+    fetcher = MagicMock()
+    fetcher.stream_id = "dns"
+    fetcher.outside_retention.return_value = True
+
+    # Test api source preservation
+    mock_read.return_value = {"_source": "api", "data": {"total_queries": 100}}
+    mock_path.return_value = tmp_path / "day.json"
+
+    client = MagicMock()
+
+    res = process_day(
+        fetcher,
+        client,
+        tmp_path,
+        "z1",
+        "example.com",
+        date(2020, 1, 1),
+        plan_legacy_id="free",
+        zone_meta={},
+        force_fetch=False,
+        refresh=False,
+    )
+
+    assert res is False
+    mock_write.assert_not_called()
+    fetcher.fetch.assert_not_called()
+
+    # Test error source preservation
+    mock_read.return_value = {"_source": "error", "error": "rate limit"}
+    res = process_day(
+        fetcher,
+        client,
+        tmp_path,
+        "z1",
+        "example.com",
+        date(2020, 1, 1),
+        plan_legacy_id="free",
+        zone_meta={},
+        force_fetch=False,
+        refresh=False,
+    )
+    assert res is False
+    mock_write.assert_not_called()
+    fetcher.fetch.assert_not_called()
